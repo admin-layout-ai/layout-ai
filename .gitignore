@@ -1,0 +1,16 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+venv/
+.env
+# Node
+node_modules/
+.next/
+out/
+.env.local
+# Azure
+.azure/
+local.settings.json
+# IDE
+.vscode/
+.vs/
