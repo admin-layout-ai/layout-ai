@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { CheckCircle, Loader2, Home, FileText } from 'lucide-react';
+import { CheckCircle, Loader2, Home, FileText, X } from 'lucide-react';
 
 export default function PaymentSuccessPage() {
   const params = useParams();
