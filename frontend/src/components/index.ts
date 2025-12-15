@@ -1,0 +1,1 @@
+import { ErrorBoundary } from '@/components';
