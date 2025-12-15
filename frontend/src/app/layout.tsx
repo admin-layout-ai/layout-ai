@@ -1,4 +1,3 @@
-import { ErrorBoundary } from '../../components/ErrorBoundary';
 import type { ReactNode } from 'react';
 import './globals.css';
 
