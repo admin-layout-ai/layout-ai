@@ -4,6 +4,10 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { CheckCircle, Loader2, Home, FileText, X } from 'lucide-react';
 
+// This tells Next.js to generate this page dynamically at request time
+export const dynamic = 'force-dynamic';
+export const dynamicParams = true;
+
 export default function PaymentSuccessPage() {
   const params = useParams();
   const searchParams = useSearchParams();

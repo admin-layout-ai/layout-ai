@@ -4,6 +4,10 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, CreditCard, FileText } from 'lucide-react';
 
+// This tells Next.js to generate this page dynamically at request time
+export const dynamic = 'force-dynamic';
+export const dynamicParams = true;
+
 export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
