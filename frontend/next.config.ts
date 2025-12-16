@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
 
   // Silence the Turbopack warning by adding empty config
-  turbopack: {},
+  // turbopack: {}, // Disabled for production build
 
   // Image optimization - must be disabled for static export
   images: {
