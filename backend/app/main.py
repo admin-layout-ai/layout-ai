@@ -7,6 +7,7 @@ from .database import engine, Base
 import os
 import logging
 from dotenv import load_dotenv
+from datetime import datetime
 
 load_dotenv()
 
@@ -31,6 +32,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "https://layout-ai.com.au",
+	"https://red-rock-0a6966100.3.azurestaticapps.net",
         "https://*.azurestaticapps.net"
     ],
     allow_credentials=True,
