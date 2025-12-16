@@ -30,9 +30,12 @@ const LandingPage = () => {
               <a href="#features" className="text-gray-700 hover:text-blue-600 transition">Features</a>
               <a href="#how-it-works" className="text-gray-700 hover:text-blue-600 transition">How It Works</a>
               <a href="#pricing" className="text-gray-700 hover:text-blue-600 transition">Pricing</a>
-              <button className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition">
+              <a 
+                href="/dashboard"
+                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
+              >
                 Get Started
-              </button>
+              </a>
             </div>
 
             {/* Mobile Menu Button */}
@@ -50,9 +53,12 @@ const LandingPage = () => {
               <a href="#features" className="block py-2 text-gray-700">Features</a>
               <a href="#how-it-works" className="block py-2 text-gray-700">How It Works</a>
               <a href="#pricing" className="block py-2 text-gray-700">Pricing</a>
-              <button className="w-full bg-blue-600 text-white px-6 py-2 rounded-lg">
+              <a 
+                href="/dashboard"
+                className="block w-full bg-blue-600 text-white px-6 py-2 rounded-lg text-center"
+              >
                 Get Started
-              </button>
+              </a>
             </div>
           )}
         </nav>
@@ -229,9 +235,12 @@ const LandingPage = () => {
                   <span className="text-gray-700">Basic compliance check</span>
                 </li>
               </ul>
-              <button className="w-full bg-gray-900 text-white py-3 rounded-lg hover:bg-gray-800 transition">
+              <a 
+                href="/dashboard"
+                className="block w-full bg-gray-900 text-white py-3 rounded-lg hover:bg-gray-800 transition text-center"
+              >
                 Get Started
-              </button>
+              </a>
             </div>
 
             <div className="bg-blue-600 text-white rounded-xl p-8 border-2 border-blue-600 relative transform md:scale-105 shadow-xl">
@@ -265,9 +274,12 @@ const LandingPage = () => {
                   <span>Full compliance report</span>
                 </li>
               </ul>
-              <button className="w-full bg-white text-blue-600 py-3 rounded-lg hover:bg-gray-100 transition font-semibold">
+              <a 
+                href="/dashboard"
+                className="block w-full bg-white text-blue-600 py-3 rounded-lg hover:bg-gray-100 transition font-semibold text-center"
+              >
                 Get Started
-              </button>
+              </a>
             </div>
 
             <div className="bg-white rounded-xl p-8 border-2 border-gray-200 hover:border-blue-500 transition">
@@ -298,7 +310,10 @@ const LandingPage = () => {
                   <span className="text-gray-700">API access</span>
                 </li>
               </ul>
-              <button className="w-full bg-gray-900 text-white py-3 rounded-lg hover:bg-gray-800 transition">
+              <button 
+                onClick={() => alert('Please contact sales@layoutai.com for enterprise pricing')}
+                className="w-full bg-gray-900 text-white py-3 rounded-lg hover:bg-gray-800 transition"
+              >
                 Contact Sales
               </button>
             </div>
@@ -314,10 +329,16 @@ const LandingPage = () => {
             Join hundreds of Australian builders already using AI to win more projects
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button className="bg-white text-blue-600 px-8 py-3 rounded-lg hover:bg-gray-100 transition font-semibold">
+            <a 
+              href="/dashboard"
+              className="bg-white text-blue-600 px-8 py-3 rounded-lg hover:bg-gray-100 transition font-semibold"
+            >
               Start Free Trial
-            </button>
-            <button className="border-2 border-white text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition font-semibold">
+            </a>
+            <button 
+              onClick={() => alert('Book a demo at demo@layoutai.com')}
+              className="border-2 border-white text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition font-semibold"
+            >
               Book a Demo
             </button>
           </div>
@@ -338,9 +359,9 @@ const LandingPage = () => {
             <div>
               <h4 className="text-white font-semibold mb-4">Product</h4>
               <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-white transition">Features</a></li>
-                <li><a href="#" className="hover:text-white transition">Pricing</a></li>
-                <li><a href="#" className="hover:text-white transition">API</a></li>
+                <li><a href="#features" className="hover:text-white transition">Features</a></li>
+                <li><a href="#pricing" className="hover:text-white transition">Pricing</a></li>
+                <li><a href="/dashboard" className="hover:text-white transition">Dashboard</a></li>
               </ul>
             </div>
             <div>
