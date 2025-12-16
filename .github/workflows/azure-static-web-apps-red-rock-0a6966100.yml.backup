@@ -20,12 +20,6 @@ jobs:
           submodules: true
           lfs: false
       
-      # Add cache clearing step
-      - name: Clear build cache
-        run: |
-          cd frontend
-          rm -rf .next out node_modules/.cache
-          
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
@@ -38,8 +32,7 @@ jobs:
           output_location: "out"
         env:
           NODE_VERSION: '20'
-          NEXT_PUBLIC_API_URL: 'https://layoutai-api-dev.azurewebsites.net'
-          
+
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
