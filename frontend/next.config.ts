@@ -1,18 +1,15 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  // Enable static export for Azure Static Web Apps
-  output: 'export',
-
+  // REMOVED: output: 'export' - This prevents dynamic routes from working
+  // For Azure deployment, use Azure App Service or Azure Static Web Apps with SSR
+  
   // Enable React strict mode
   reactStrictMode: true,
 
-  // Silence the Turbopack warning by adding empty config
-  //// Disabled for production build
-
-  // Image optimization - must be disabled for static export
+  // Image optimization configuration
   images: {
-    unoptimized: true, // Required for static export
+    unoptimized: false, // Changed to false for dynamic rendering
     formats: ['image/avif', 'image/webp'],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
@@ -29,8 +26,8 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 60 * 60 * 24 * 60,
   },
 
-  // Add trailing slash for better static hosting compatibility
-  trailingSlash: true,
+  // Changed to false for better dynamic routing
+  trailingSlash: false,
 
   // Security headers
   poweredByHeader: false,
@@ -38,4 +35,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-

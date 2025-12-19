@@ -31,7 +31,7 @@ const LandingPage = () => {
               <a href="#how-it-works" className="text-gray-700 hover:text-blue-600 transition">How It Works</a>
               <a href="#pricing" className="text-gray-700 hover:text-blue-600 transition">Pricing</a>
               <a 
-                href="/dashboard"
+                href="/auth/signin"
                 className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
               >
                 Get Started
@@ -54,7 +54,7 @@ const LandingPage = () => {
               <a href="#how-it-works" className="block py-2 text-gray-700">How It Works</a>
               <a href="#pricing" className="block py-2 text-gray-700">Pricing</a>
               <a 
-                href="/dashboard"
+                href="/auth/signin"
                 className="block w-full bg-blue-600 text-white px-6 py-2 rounded-lg text-center"
               >
                 Get Started
@@ -236,7 +236,7 @@ const LandingPage = () => {
                 </li>
               </ul>
               <a 
-                href="/dashboard"
+                href="/auth/signin"
                 className="block w-full bg-gray-900 text-white py-3 rounded-lg hover:bg-gray-800 transition text-center"
               >
                 Get Started
@@ -275,7 +275,7 @@ const LandingPage = () => {
                 </li>
               </ul>
               <a 
-                href="/dashboard"
+                href="/auth/signin"
                 className="block w-full bg-white text-blue-600 py-3 rounded-lg hover:bg-gray-100 transition font-semibold text-center"
               >
                 Get Started
@@ -330,7 +330,7 @@ const LandingPage = () => {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a 
-              href="/dashboard"
+              href="/auth/signin"
               className="bg-white text-blue-600 px-8 py-3 rounded-lg hover:bg-gray-100 transition font-semibold"
             >
               Start Free Trial
@@ -361,7 +361,7 @@ const LandingPage = () => {
               <ul className="space-y-2 text-sm">
                 <li><a href="#features" className="hover:text-white transition">Features</a></li>
                 <li><a href="#pricing" className="hover:text-white transition">Pricing</a></li>
-                <li><a href="/dashboard" className="hover:text-white transition">Dashboard</a></li>
+                <li><a href="/auth/signin" className="hover:text-white transition">Dashboard</a></li>
               </ul>
             </div>
             <div>
