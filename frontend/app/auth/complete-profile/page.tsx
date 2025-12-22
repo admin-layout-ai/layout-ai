@@ -1,3 +1,6 @@
+// frontend/app/auth/complete-profile/page.tsx
+// Complete profile page - redirects to signin after completion
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -19,9 +22,9 @@ export default function CompleteProfilePage() {
       setUserName(user.givenName || user.name || 'there');
       setUserId(user.id);
       
-      // If user already has email, redirect to dashboard
+      // If user already has email, redirect to signin
       if (user.email) {
-        router.push('/dashboard');
+        router.push('/auth/signin');
       }
     } else {
       router.push('/auth/signin');
@@ -62,7 +65,11 @@ export default function CompleteProfilePage() {
         localStorage.setItem('user_emails', JSON.stringify(existingUsers));
       }
 
-      router.push('/dashboard');
+      // Clear auth token so user needs to sign in again
+      localStorage.removeItem('auth_token');
+
+      // Redirect to sign in page
+      router.push('/auth/signin');
     } catch (err) {
       setError('Something went wrong. Please try again.');
       setLoading(false);
@@ -134,7 +141,7 @@ export default function CompleteProfilePage() {
                   </>
                 ) : (
                   <>
-                    <span>Continue to Dashboard</span>
+                    <span>Continue to Sign In</span>
                     <ArrowRight className="w-5 h-5" />
                   </>
                 )}
