@@ -23,13 +23,13 @@ export default function SignUpPage() {
 
   // Build auth URL using environment variables
   const getAuthUrl = (domainHint?: string) => {
-    const clientId = process.env.NEXT_PUBLIC_B2C_CLIENT_ID || 'b25e167b-e52c-4cb0-b5c8-5ed9feab3b38';
-    const redirectUri = process.env.NEXT_PUBLIC_B2C_REDIRECT_URI || 'http://localhost:3000/auth/callback';
-    const tenantName = process.env.NEXT_PUBLIC_B2C_TENANT_NAME || 'layoutaib2c';
+    const clientId = process.env.NEXT_PUBLIC_B2C_CLIENT_ID;
+    const redirectUri = process.env.NEXT_PUBLIC_B2C_REDIRECT_URI;
+    const tenantName = process.env.NEXT_PUBLIC_B2C_TENANT_NAME;
     
     let url = `https://${tenantName}.ciamlogin.com/${tenantName}.onmicrosoft.com/oauth2/v2.0/authorize?` +
       `client_id=${clientId}` +
-      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri || '')}` +
       `&response_type=id_token` +
       `&scope=${encodeURIComponent('openid profile email')}` +
       `&nonce=${Date.now()}` +

@@ -1,6 +1,3 @@
-// frontend/app/auth/signin/page.tsx
-// Sign In page - FIXED: Uses environment variables for all URLs
-
 'use client';
 
 import { useEffect } from 'react';
@@ -10,28 +7,25 @@ import { Home } from 'lucide-react';
 export default function SignInPage() {
   const router = useRouter();
 
-  // Check if user is already logged in
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
     const userInfo = localStorage.getItem('user_info');
     
     if (token && userInfo) {
-      console.log('User already logged in, redirecting to dashboard');
       router.push('/dashboard');
     }
   }, [router]);
 
-  // Build auth URL using environment variables
   const getAuthUrl = (domainHint?: string) => {
-    const clientId = process.env.NEXT_PUBLIC_B2C_CLIENT_ID || 'b25e167b-e52c-4cb0-b5c8-5ed9feab3b38';
-    const redirectUri = process.env.NEXT_PUBLIC_B2C_REDIRECT_URI || 'http://localhost:3000/auth/callback';
-    const tenantName = process.env.NEXT_PUBLIC_B2C_TENANT_NAME || 'layoutaib2c';
+    const clientId = process.env.NEXT_PUBLIC_B2C_CLIENT_ID;
+    const redirectUri = process.env.NEXT_PUBLIC_B2C_REDIRECT_URI;
+    const tenantName = process.env.NEXT_PUBLIC_B2C_TENANT_NAME;
     
     let url = `https://${tenantName}.ciamlogin.com/${tenantName}.onmicrosoft.com/oauth2/v2.0/authorize?` +
       `client_id=${clientId}` +
-      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri || '')}` +
       `&response_type=id_token%20token` +
-      `&scope=${encodeURIComponent('openid profile email User.Read')}` +
+      `&scope=${encodeURIComponent('openid profile email')}` +
       `&response_mode=fragment` +
       `&nonce=${Date.now()}` +
       `&prompt=login`;
@@ -44,20 +38,15 @@ export default function SignInPage() {
   };
 
   const handleGoogleSignIn = () => {
-    const url = getAuthUrl('google.com');
-    console.log('Auth URL:', url);
-    window.location.href = url;
+    window.location.href = getAuthUrl('google.com');
   };
 
   const handleEmailSignIn = () => {
-    const url = getAuthUrl();
-    console.log('Auth URL:', url);
-    window.location.href = url;
+    window.location.href = getAuthUrl();
   };
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Dark Header Ribbon */}
       <header className="bg-gradient-to-r from-slate-800 via-slate-900 to-blue-900">
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-14">
@@ -74,21 +63,15 @@ export default function SignInPage() {
         </nav>
       </header>
 
-      {/* Main Content - White Background */}
       <div className="pt-16 pb-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-sm mx-auto">
-          
-          {/* Header */}
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome back</h1>
             <p className="text-sm text-gray-600">Sign in to continue to LayoutAI</p>
           </div>
 
-          {/* Sign-in Card */}
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-lg">
             <div className="space-y-3">
-              
-              {/* Google Button */}
               <button
                 onClick={handleGoogleSignIn}
                 className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 hover:border-blue-500 transition-all duration-200"
@@ -102,7 +85,6 @@ export default function SignInPage() {
                 <span className="font-medium text-sm">Continue with Google</span>
               </button>
 
-              {/* Divider */}
               <div className="relative my-4">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gray-200"></div>
@@ -112,7 +94,6 @@ export default function SignInPage() {
                 </div>
               </div>
 
-              {/* Email Button */}
               <button
                 onClick={handleEmailSignIn}
                 className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 hover:border-blue-500 transition-all duration-200"
@@ -124,7 +105,6 @@ export default function SignInPage() {
               </button>
             </div>
 
-            {/* Sign Up Link */}
             <div className="mt-6 pt-4 border-t border-gray-200 text-center">
               <p className="text-sm text-gray-600">
                 Don&apos;t have an account?{' '}
