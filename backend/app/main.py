@@ -2,6 +2,8 @@ from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from .routers import projects, plans, payments, users
+from .database import engine, Base
 import os
 import logging
 from dotenv import load_dotenv
@@ -16,7 +18,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-logger.info("=== Starting Layout AI API ===")
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Layout AI API",
@@ -30,7 +32,6 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "https://layout-ai.com.au",
-        "https://red-rock-0a6966100.3.azurestaticapps.net",
         "https://*.azurestaticapps.net"
     ],
     allow_credentials=True,
@@ -61,40 +62,11 @@ async def global_exception_handler(request: Request, exc: Exception):
         }
     )
 
-# Try to initialize database and include routers
-try:
-    logger.info("Attempting to initialize database...")
-    from .database import engine, Base
-    Base.metadata.create_all(bind=engine)
-    logger.info("✓ Database initialized")
-    
-    logger.info("Loading routers...")
-    from .routers import users, projects, plans, payments
-    
-    app.include_router(users.router)
-    logger.info("✓ Users router loaded")
-    
-    app.include_router(projects.router)
-    logger.info("✓ Projects router loaded")
-    
-    app.include_router(plans.router)
-    logger.info("✓ Plans router loaded")
-    
-    app.include_router(payments.router)
-    logger.info("✓ Payments router loaded")
-    
-    logger.info("All routers loaded successfully")
-    
-except Exception as e:
-    logger.warning(f"Could not load all components: {str(e)}")
-    logger.warning("API will start in limited mode with basic endpoints only")
-    logger.warning("This is normal if database is not configured yet")
-
-@app.on_event("startup")
-async def startup_event():
-    logger.info("=== Layout AI API Started Successfully ===")
-    logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'development')}")
-    logger.info(f"Listening on port 8000")
+# Include routers
+app.include_router(users.router)
+app.include_router(projects.router)
+app.include_router(plans.router)
+app.include_router(payments.router)
 
 @app.get("/")
 async def root():
@@ -102,50 +74,9 @@ async def root():
         "message": "Layout AI API",
         "version": "1.0.0",
         "status": "running",
-        "environment": os.getenv("ENVIRONMENT", "development"),
-        "timestamp": datetime.utcnow().isoformat()
+        "environment": os.getenv("ENVIRONMENT", "development")
     }
 
 @app.get("/health")
 async def health():
-    return {
-        "status": "healthy",
-        "service": "layoutai-api",
-        "timestamp": datetime.utcnow().isoformat()
-    }
-
-@app.get("/api/status")
-async def api_status():
-    """Detailed status endpoint"""
-    status_info = {
-        "api": "online",
-        "version": "1.0.0",
-        "environment": os.getenv("ENVIRONMENT", "development"),
-        "endpoints": {
-            "health": "/health",
-            "status": "/api/status",
-            "docs": "/docs",
-            "root": "/"
-        }
-    }
-    
-    # Check if database is available
-    try:
-        from .database import engine
-        with engine.connect() as conn:
-            conn.execute("SELECT 1")
-        status_info["database"] = "connected"
-    except:
-        status_info["database"] = "not configured"
-    
-    # Check which routers are loaded
-    routes = [route.path for route in app.routes]
-    status_info["loaded_routes"] = len(routes)
-    status_info["has_api_routes"] = any("/api/" in route for route in routes)
-    
-    return status_info
-
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
