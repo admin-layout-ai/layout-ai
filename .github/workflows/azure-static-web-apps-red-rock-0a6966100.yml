@@ -39,6 +39,13 @@ jobs:
         env:
           NODE_VERSION: '20'
           NEXT_PUBLIC_API_URL: 'https://layoutai-api-dev.azurewebsites.net'
+          NEXT_PUBLIC_B2C_TENANT_NAME: 'layoutaib2c'
+          NEXT_PUBLIC_B2C_TENANT_DOMAIN: 'layoutaib2c.onmicrosoft.com'
+          NEXT_PUBLIC_B2C_CLIENT_ID: 'b25e167b-e52c-4cb0-b5c8-5ed9feab3b38'
+          NEXT_PUBLIC_B2C_AUTHORITY: 'https://layoutaib2c.ciamlogin.com/layoutaib2c.onmicrosoft.com'
+          NEXT_PUBLIC_B2C_REDIRECT_URI: 'https://layout-ai.com.au/auth/callback'
+          NEXT_PUBLIC_B2C_POST_LOGOUT_REDIRECT_URI: 'https://layout-ai.com.au'
+          NEXT_PUBLIC_B2C_SCOPES: 'openid profile email'
           
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
