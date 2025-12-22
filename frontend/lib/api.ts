@@ -1,60 +1,54 @@
 // frontend/lib/api.ts
-// API Client with user sync and authentication
+// API Client - FIXED: Better error handling, proper typing, and auth integration
+
+import type { 
+  Project, 
+  ProjectCreateRequest,
+  UserProfile, 
+  DashboardData, 
+  QuestionnaireData,
+  PaymentSession,
+  ApiError 
+} from './types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-export interface Project {
-  id: number;
-  name: string;
-  status: string;
-  bedrooms?: number;
-  bathrooms?: number;
-  created_at: string;
+// Custom error class for API errors
+export class APIError extends Error {
+  constructor(
+    message: string,
+    public statusCode: number,
+    public detail?: string
+  ) {
+    super(message);
+    this.name = 'APIError';
+  }
 }
 
-export interface QuestionnaireData {
-  bedrooms: number;
-  bathrooms: number;
-  living_areas: number;
-  garage_spaces: number;
-  storeys: number;
-  style: string;
-  open_plan: boolean;
-  outdoor_entertainment: boolean;
-  home_office: boolean;
-  budget_min?: number;
-  budget_max?: number;
-}
+// Helper to handle API responses
+async function handleResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    let errorMessage = `Request failed with status ${response.status}`;
+    let detail: string | undefined;
 
-export interface UserProfile {
-  id: number;
-  b2c_id: string;
-  email?: string;
-  name?: string;
-  given_name?: string;
-  family_name?: string;
-  phone_number?: string;
-  identity_provider?: string;
-  company_name?: string;
-  company_abn?: string;
-  address?: string;
-  created_at?: string;
-  last_login?: string;
-}
+    try {
+      const errorData: ApiError = await response.json();
+      errorMessage = errorData.detail || errorMessage;
+      detail = errorData.detail;
+    } catch {
+      // If we can't parse the error, use the status text
+      errorMessage = response.statusText || errorMessage;
+    }
 
-export interface DashboardData {
-  user: {
-    id: string;
-    email?: string;
-    name?: string;
-  };
-  stats: {
-    total_projects: number;
-    completed_projects: number;
-    plans_generated: number;
-    total_spent: number;
-  };
-  recent_projects: Project[];
+    throw new APIError(errorMessage, response.status, detail);
+  }
+
+  // Handle empty responses (e.g., 204 No Content)
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return response.json();
 }
 
 class APIClient {
@@ -65,7 +59,7 @@ class APIClient {
   }
   
   // Helper method to get auth headers
-  private async getAuthHeaders(token?: string): Promise<HeadersInit> {
+  private getAuthHeaders(token?: string): HeadersInit {
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
     };
@@ -77,9 +71,9 @@ class APIClient {
     return headers;
   }
 
-  // ==========================================================================
+  // ============================================================================
   // USER ENDPOINTS
-  // ==========================================================================
+  // ============================================================================
 
   /**
    * Get or create user profile
@@ -88,15 +82,10 @@ class APIClient {
   async syncUser(token: string): Promise<UserProfile> {
     const response = await fetch(`${this.baseUrl}/api/v1/users/me`, {
       method: 'GET',
-      headers: await this.getAuthHeaders(token),
+      headers: this.getAuthHeaders(token),
     });
     
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to sync user: ${error}`);
-    }
-    
-    return response.json();
+    return handleResponse<UserProfile>(response);
   }
 
   /**
@@ -105,16 +94,11 @@ class APIClient {
   async updateUserProfile(token: string, data: Partial<UserProfile>): Promise<UserProfile> {
     const response = await fetch(`${this.baseUrl}/api/v1/users/me`, {
       method: 'PUT',
-      headers: await this.getAuthHeaders(token),
+      headers: this.getAuthHeaders(token),
       body: JSON.stringify(data),
     });
     
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to update user: ${error}`);
-    }
-    
-    return response.json();
+    return handleResponse<UserProfile>(response);
   }
 
   /**
@@ -123,154 +107,232 @@ class APIClient {
   async getDashboardData(token: string): Promise<DashboardData> {
     const response = await fetch(`${this.baseUrl}/api/v1/users/me/dashboard`, {
       method: 'GET',
-      headers: await this.getAuthHeaders(token),
+      headers: this.getAuthHeaders(token),
     });
     
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to get dashboard data: ${error}`);
-    }
-    
-    return response.json();
+    return handleResponse<DashboardData>(response);
   }
 
   /**
    * Get user preferences
    */
-  async getUserPreferences(token: string): Promise<any> {
+  async getUserPreferences(token: string): Promise<Record<string, unknown>> {
     const response = await fetch(`${this.baseUrl}/api/v1/users/me/preferences`, {
       method: 'GET',
-      headers: await this.getAuthHeaders(token),
+      headers: this.getAuthHeaders(token),
     });
     
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to get preferences: ${error}`);
-    }
-    
-    return response.json();
+    return handleResponse<Record<string, unknown>>(response);
   }
 
   /**
    * Update user preferences
    */
-  async updateUserPreferences(token: string, preferences: any): Promise<any> {
+  async updateUserPreferences(token: string, preferences: Record<string, unknown>): Promise<Record<string, unknown>> {
     const response = await fetch(`${this.baseUrl}/api/v1/users/me/preferences`, {
       method: 'PUT',
-      headers: await this.getAuthHeaders(token),
+      headers: this.getAuthHeaders(token),
       body: JSON.stringify(preferences),
     });
     
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to update preferences: ${error}`);
-    }
-    
-    return response.json();
+    return handleResponse<Record<string, unknown>>(response);
   }
 
-  // ==========================================================================
+  // ============================================================================
   // PROJECT ENDPOINTS
-  // ==========================================================================
+  // ============================================================================
   
-  async createProject(name: string, userId: number, token?: string): Promise<Project> {
-    const response = await fetch(`${this.baseUrl}/api/v1/projects/?user_id=${userId}`, {
+  /**
+   * Create a new project
+   */
+  async createProject(token: string, data: ProjectCreateRequest): Promise<Project> {
+    const response = await fetch(`${this.baseUrl}/api/v1/projects/`, {
       method: 'POST',
-      headers: await this.getAuthHeaders(token),
-      body: JSON.stringify({ name })
+      headers: this.getAuthHeaders(token),
+      body: JSON.stringify(data),
     });
     
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to create project: ${error}`);
-    }
-    return response.json();
+    return handleResponse<Project>(response);
   }
   
-  async listProjects(userId: number, token?: string): Promise<Project[]> {
-    const response = await fetch(
-      `${this.baseUrl}/api/v1/projects/?user_id=${userId}`,
-      {
-        headers: await this.getAuthHeaders(token),
-      }
-    );
+  /**
+   * List all projects for the authenticated user
+   */
+  async listProjects(token: string): Promise<Project[]> {
+    const response = await fetch(`${this.baseUrl}/api/v1/projects/`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(token),
+    });
     
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to fetch projects: ${error}`);
-    }
-    return response.json();
+    return handleResponse<Project[]>(response);
+  }
+  
+  /**
+   * Get a single project by ID
+   */
+  async getProject(token: string, projectId: number): Promise<Project> {
+    const response = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(token),
+    });
+    
+    return handleResponse<Project>(response);
   }
 
   /**
-   * List projects for authenticated user (uses token to identify user)
+   * Update a project
    */
-  async listMyProjects(token: string): Promise<Project[]> {
-    const response = await fetch(
-      `${this.baseUrl}/api/v1/projects/`,
-      {
-        headers: await this.getAuthHeaders(token),
-      }
-    );
+  async updateProject(token: string, projectId: number, data: Partial<Project>): Promise<Project> {
+    const response = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}`, {
+      method: 'PUT',
+      headers: this.getAuthHeaders(token),
+      body: JSON.stringify(data),
+    });
     
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to fetch projects: ${error}`);
-    }
-    return response.json();
+    return handleResponse<Project>(response);
   }
   
-  async getProject(projectId: number, userId: number, token?: string): Promise<Project> {
-    const response = await fetch(
-      `${this.baseUrl}/api/v1/projects/${projectId}?user_id=${userId}`,
-      {
-        headers: await this.getAuthHeaders(token),
-      }
-    );
-    
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to fetch project: ${error}`);
-    }
-    return response.json();
-  }
-  
+  /**
+   * Submit questionnaire data for a project
+   */
   async submitQuestionnaire(
+    token: string,
     projectId: number,
-    userId: number,
-    data: QuestionnaireData,
-    token?: string
+    data: QuestionnaireData
   ): Promise<Project> {
-    const response = await fetch(
-      `${this.baseUrl}/api/v1/projects/${projectId}/questionnaire?user_id=${userId}`,
-      {
-        method: 'POST',
-        headers: await this.getAuthHeaders(token),
-        body: JSON.stringify(data)
-      }
-    );
+    const response = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}/questionnaire`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(token),
+      body: JSON.stringify(data),
+    });
     
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to submit questionnaire: ${error}`);
-    }
-    return response.json();
+    return handleResponse<Project>(response);
   }
 
-  async deleteProject(projectId: number, token: string): Promise<void> {
+  /**
+   * Delete a project
+   */
+  async deleteProject(token: string, projectId: number): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}`, {
+      method: 'DELETE',
+      headers: this.getAuthHeaders(token),
+    });
+    
+    return handleResponse<void>(response);
+  }
+
+  // ============================================================================
+  // PAYMENT ENDPOINTS
+  // ============================================================================
+
+  /**
+   * Create a Stripe checkout session
+   */
+  async createCheckoutSession(
+    token: string,
+    projectId: number,
+    planType: string
+  ): Promise<PaymentSession> {
+    const response = await fetch(`${this.baseUrl}/api/v1/payments/create-checkout`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(token),
+      body: JSON.stringify({
+        project_id: projectId,
+        plan_type: planType,
+      }),
+    });
+    
+    return handleResponse<PaymentSession>(response);
+  }
+
+  /**
+   * Verify payment status
+   */
+  async verifyPayment(token: string, sessionId: string): Promise<{ status: string; project_id: number }> {
+    const response = await fetch(`${this.baseUrl}/api/v1/payments/verify/${sessionId}`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(token),
+    });
+    
+    return handleResponse<{ status: string; project_id: number }>(response);
+  }
+
+  // ============================================================================
+  // FLOOR PLAN ENDPOINTS
+  // ============================================================================
+
+  /**
+   * Get floor plan options for a project
+   */
+  async getFloorPlanOptions(token: string, projectId: number): Promise<unknown[]> {
+    const response = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}/floor-plans`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(token),
+    });
+    
+    return handleResponse<unknown[]>(response);
+  }
+
+  /**
+   * Select a floor plan option
+   */
+  async selectFloorPlan(token: string, projectId: number, floorPlanId: number): Promise<Project> {
+    const response = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}/floor-plans/${floorPlanId}/select`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(token),
+    });
+    
+    return handleResponse<Project>(response);
+  }
+
+  /**
+   * Download floor plan in specified format
+   */
+  async downloadFloorPlan(
+    token: string,
+    projectId: number,
+    format: 'pdf' | 'dxf' | 'png'
+  ): Promise<Blob> {
     const response = await fetch(
-      `${this.baseUrl}/api/v1/projects/${projectId}`,
+      `${this.baseUrl}/api/v1/projects/${projectId}/download?format=${format}`,
       {
-        method: 'DELETE',
-        headers: await this.getAuthHeaders(token),
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       }
     );
     
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to delete project: ${error}`);
+      throw new APIError('Failed to download file', response.status);
     }
+    
+    return response.blob();
+  }
+
+  // ============================================================================
+  // FEEDBACK ENDPOINTS
+  // ============================================================================
+
+  /**
+   * Submit user feedback
+   */
+  async submitFeedback(
+    token: string,
+    data: { type: string; message: string; rating?: number }
+  ): Promise<{ success: boolean }> {
+    const response = await fetch(`${this.baseUrl}/api/v1/feedback`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(token),
+      body: JSON.stringify(data),
+    });
+    
+    return handleResponse<{ success: boolean }>(response);
   }
 }
 
+// Export singleton instance
 export const api = new APIClient(API_URL);
+
+// Export the class for testing or custom instances
+export { APIClient };

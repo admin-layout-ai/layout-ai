@@ -1,5 +1,5 @@
 // frontend/app/auth/signin/page.tsx
-// Sign In page - checks for existing session first
+// Sign In page - FIXED: Uses environment variables for all URLs
 
 'use client';
 
@@ -16,37 +16,41 @@ export default function SignInPage() {
     const userInfo = localStorage.getItem('user_info');
     
     if (token && userInfo) {
-      // User is already logged in, redirect to dashboard
       console.log('User already logged in, redirecting to dashboard');
       router.push('/dashboard');
     }
   }, [router]);
 
-  const handleGoogleSignIn = () => {
-    const url = 'https://layoutaib2c.ciamlogin.com/layoutaib2c.onmicrosoft.com/oauth2/v2.0/authorize?' +
-      'client_id=b25e167b-e52c-4cb0-b5c8-5ed9feab3b38' +
-      '&redirect_uri=' + encodeURIComponent('http://localhost:3000/auth/callback') +
-      '&response_type=id_token%20token' +
-      '&scope=' + encodeURIComponent('openid profile email User.Read') +
-      '&response_mode=fragment' +
-      '&nonce=' + Date.now() +
-      '&prompt=login' +
-      '&domain_hint=google.com';
+  // Build auth URL using environment variables
+  const getAuthUrl = (domainHint?: string) => {
+    const clientId = process.env.NEXT_PUBLIC_B2C_CLIENT_ID || 'b25e167b-e52c-4cb0-b5c8-5ed9feab3b38';
+    const redirectUri = process.env.NEXT_PUBLIC_B2C_REDIRECT_URI || 'http://localhost:3000/auth/callback';
+    const tenantName = process.env.NEXT_PUBLIC_B2C_TENANT_NAME || 'layoutaib2c';
     
+    let url = `https://${tenantName}.ciamlogin.com/${tenantName}.onmicrosoft.com/oauth2/v2.0/authorize?` +
+      `client_id=${clientId}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&response_type=id_token%20token` +
+      `&scope=${encodeURIComponent('openid profile email User.Read')}` +
+      `&response_mode=fragment` +
+      `&nonce=${Date.now()}` +
+      `&prompt=login`;
+    
+    if (domainHint) {
+      url += `&domain_hint=${domainHint}`;
+    }
+    
+    return url;
+  };
+
+  const handleGoogleSignIn = () => {
+    const url = getAuthUrl('google.com');
     console.log('Auth URL:', url);
     window.location.href = url;
   };
 
   const handleEmailSignIn = () => {
-    const url = 'https://layoutaib2c.ciamlogin.com/layoutaib2c.onmicrosoft.com/oauth2/v2.0/authorize?' +
-      'client_id=b25e167b-e52c-4cb0-b5c8-5ed9feab3b38' +
-      '&redirect_uri=' + encodeURIComponent('http://localhost:3000/auth/callback') +
-      '&response_type=id_token%20token' +
-      '&scope=' + encodeURIComponent('openid profile email User.Read') +
-      '&response_mode=fragment' +
-      '&nonce=' + Date.now() +
-      '&prompt=login';
-    
+    const url = getAuthUrl();
     console.log('Auth URL:', url);
     window.location.href = url;
   };

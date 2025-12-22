@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json.schemastore.org/staticwebapp.config.json",
+  "routes": [
+    {
+      "route": "/auth/*",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/dashboard/*",
+      "allowedRoles": ["authenticated", "anonymous"]
+    },
+    {
+      "route": "/api/*",
+      "allowedRoles": ["anonymous"]
+    }
+  ],
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": [
+      "/_next/*",
+      "/images/*",
+      "/favicon.ico",
+      "/*.png",
+      "/*.jpg",
+      "/*.svg",
+      "/*.css",
+      "/*.js"
+    ]
+  },
+  "responseOverrides": {
+    "401": {
+      "redirect": "/auth/signin",
+      "statusCode": 302
+    },
+    "404": {
+      "rewrite": "/404.html"
+    }
+  },
+  "globalHeaders": {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "X-XSS-Protection": "1; mode=block",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
+  },
+  "mimeTypes": {
+    ".json": "application/json",
+    ".woff2": "font/woff2",
+    ".woff": "font/woff"
+  }
+}
