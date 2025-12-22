@@ -1,10 +1,10 @@
 // frontend/components/ErrorBoundary.tsx
-// Error Boundary component for catching and handling React errors gracefully
+// Improved Error Boundary with better UI and error reporting
 
 'use client';
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Home, Bug } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -28,12 +28,10 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): Partial<State> {
-    // Update state so the next render will show the fallback UI
     return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    // Log the error to an error reporting service
     console.error('ErrorBoundary caught an error:', error, errorInfo);
     
     this.setState({
@@ -41,7 +39,7 @@ export class ErrorBoundary extends Component<Props, State> {
       errorInfo,
     });
 
-    // You can also log to an external service here
+    // You can log to an external service here
     // Example: logErrorToService(error, errorInfo);
   }
 
@@ -87,6 +85,10 @@ export class ErrorBoundary extends Component<Props, State> {
             {/* Error Details (Development only) */}
             {process.env.NODE_ENV === 'development' && this.state.error && (
               <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6 text-left">
+                <div className="flex items-center gap-2 mb-2">
+                  <Bug className="w-4 h-4 text-red-400" />
+                  <span className="text-red-400 text-sm font-medium">Error Details</span>
+                </div>
                 <p className="text-red-400 text-sm font-mono break-all">
                   {this.state.error.toString()}
                 </p>
@@ -95,7 +97,7 @@ export class ErrorBoundary extends Component<Props, State> {
                     <summary className="text-gray-500 text-xs cursor-pointer hover:text-gray-400">
                       Stack trace
                     </summary>
-                    <pre className="text-gray-500 text-xs mt-2 overflow-auto max-h-40">
+                    <pre className="text-gray-500 text-xs mt-2 overflow-auto max-h-40 whitespace-pre-wrap">
                       {this.state.errorInfo.componentStack}
                     </pre>
                   </details>
@@ -146,7 +148,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-// Also export a hook-based wrapper for functional components
+// Higher-order component version
 export function withErrorBoundary<P extends object>(
   WrappedComponent: React.ComponentType<P>,
   fallback?: ReactNode
@@ -159,3 +161,5 @@ export function withErrorBoundary<P extends object>(
     );
   };
 }
+
+export default ErrorBoundary;

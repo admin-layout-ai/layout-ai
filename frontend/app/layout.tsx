@@ -1,5 +1,5 @@
 // frontend/app/layout.tsx
-// Root layout - FIXED: Added ErrorBoundary and improved metadata
+// Root layout with ErrorBoundary and improved SEO metadata
 
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
-// Improved metadata for SEO and social sharing
+// Improved metadata for SEO
 export const metadata: Metadata = {
   metadataBase: new URL('https://layout-ai.com.au'),
   title: {
@@ -71,7 +71,6 @@ export const metadata: Metadata = {
     shortcut: "/favicon-16x16.png",
     apple: "/apple-touch-icon.png",
   },
-  manifest: "/site.webmanifest",
 };
 
 export const viewport: Viewport = {
@@ -92,7 +91,6 @@ export default function RootLayout({
   return (
     <html lang="en" className="scroll-smooth">
       <head>
-        {/* Preconnect to external domains for performance */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>

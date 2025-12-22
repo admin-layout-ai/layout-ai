@@ -1,11 +1,22 @@
 // frontend/components/Questionnaire.tsx
-// FIXED: Correct checkbox field mappings and improved validation
+// FIXED: Correct checkbox field mappings and added more features
 
 'use client';
 
 import { useState } from 'react';
 import { Home, Bath, Sofa, Car, Building2, ArrowLeft, ArrowRight, Check } from 'lucide-react';
-import type { QuestionnaireData } from '@/lib/types';
+
+interface QuestionnaireData {
+  bedrooms: number;
+  bathrooms: number;
+  living_areas: number;
+  garage_spaces: number;
+  storeys: number;
+  style: string;
+  open_plan: boolean;
+  outdoor_entertainment: boolean;
+  home_office: boolean;
+}
 
 interface QuestionnaireProps {
   onComplete: (data: QuestionnaireData) => void;
@@ -44,7 +55,7 @@ export default function Questionnaire({ onComplete, onCancel }: QuestionnairePro
     onComplete(formData);
   };
 
-  // Selection button component for consistent styling
+  // Selection button component
   const SelectButton = ({ 
     selected, 
     onClick, 
@@ -287,7 +298,7 @@ export default function Questionnaire({ onComplete, onCancel }: QuestionnairePro
               Additional Features
             </label>
             
-            {/* Open Plan Living - FIXED: Now correctly maps to open_plan */}
+            {/* FIXED: Open Plan Living - correctly maps to open_plan */}
             <ToggleSwitch
               label="Open plan living"
               description="Combined kitchen, dining and living area"
@@ -295,7 +306,7 @@ export default function Questionnaire({ onComplete, onCancel }: QuestionnairePro
               onChange={(checked) => setFormData({ ...formData, open_plan: checked })}
             />
 
-            {/* Home Office - FIXED: Now correctly maps to home_office */}
+            {/* FIXED: Home Office - correctly maps to home_office */}
             <ToggleSwitch
               label="Home office"
               description="Dedicated workspace or study"
@@ -303,7 +314,7 @@ export default function Questionnaire({ onComplete, onCancel }: QuestionnairePro
               onChange={(checked) => setFormData({ ...formData, home_office: checked })}
             />
 
-            {/* Outdoor Entertainment - FIXED: Now correctly maps to outdoor_entertainment */}
+            {/* FIXED: Outdoor Entertainment - correctly maps to outdoor_entertainment */}
             <ToggleSwitch
               label="Outdoor entertainment"
               description="Alfresco, patio or deck area"

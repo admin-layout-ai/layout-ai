@@ -1,6 +1,5 @@
 // frontend/lib/types.ts
 // Shared TypeScript interfaces for Layout AI
-// This file provides type safety across the application
 
 // ============================================================================
 // USER TYPES
@@ -94,8 +93,6 @@ export interface QuestionnaireData {
   open_plan: boolean;
   outdoor_entertainment: boolean;
   home_office: boolean;
-  budget_min?: number;
-  budget_max?: number;
 }
 
 // ============================================================================
@@ -133,7 +130,7 @@ export type RoomType =
   | 'entry'
   | 'hallway'
   | 'ensuite'
-  | 'wir'; // Walk-in robe
+  | 'wir';
 
 export interface Room {
   type: RoomType;
@@ -194,7 +191,7 @@ export interface PaymentRecord {
 }
 
 // ============================================================================
-// API RESPONSE TYPES
+// API TYPES
 // ============================================================================
 
 export interface ApiError {
@@ -211,7 +208,7 @@ export interface PaginatedResponse<T> {
 }
 
 // ============================================================================
-// AUTH CONTEXT TYPES
+// AUTH TYPES
 // ============================================================================
 
 export interface AuthContextType {
@@ -234,16 +231,9 @@ export interface QuestionnaireProps {
   initialData?: Partial<QuestionnaireData>;
 }
 
-export interface FloorPlanCanvasProps {
-  data: FloorPlanData;
-  onRoomClick?: (room: Room) => void;
-  interactive?: boolean;
-}
-
-export interface PricingModalProps {
-  projectId: number;
-  onClose: () => void;
-  onSuccess?: (sessionId: string) => void;
+export interface ProjectDetailProps {
+  projectId: string;
+  onBack: () => void;
 }
 
 export interface ProjectCardProps {
@@ -256,10 +246,8 @@ export interface ProjectCardProps {
 // UTILITY TYPES
 // ============================================================================
 
-// Make all properties optional recursively
 export type DeepPartial<T> = {
   [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
 };
 
-// Extract the resolved type from a Promise
 export type Awaited<T> = T extends Promise<infer U> ? U : T;
