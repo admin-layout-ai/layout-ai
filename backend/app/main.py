@@ -26,14 +26,26 @@ app = FastAPI(
     description="AI-powered floor plan generation for Australian builders"
 )
 
-# CORS
+# CORS - List all allowed origins explicitly (wildcards don't work!)
+origins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "https://layout-ai.com.au",
+    "https://www.layout-ai.com.au",
+    # Add your Azure Static Web Apps default domain here
+    "https://red-rock-0a6966100.azurestaticapps.net",
+]
+
+# Also allow origins from environment variable for flexibility
+extra_origins = os.getenv("ALLOWED_ORIGINS", "")
+if extra_origins:
+    origins.extend([o.strip() for o in extra_origins.split(",") if o.strip()])
+
+logger.info(f"CORS allowed origins: {origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://layout-ai.com.au",
-        "https://*.azurestaticapps.net"
-    ],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

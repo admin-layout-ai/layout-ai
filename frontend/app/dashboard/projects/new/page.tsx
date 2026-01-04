@@ -81,15 +81,6 @@ export default function NewProjectPage() {
            parseFloat(projectData.land_depth) > 0;
   };
 
-  // Build features array from questionnaire boolean values
-  const getFeatures = (data: QuestionnaireData): string[] => {
-    const features: string[] = [];
-    if (data.open_plan) features.push('Open Plan');
-    if (data.home_office) features.push('Home Office');
-    if (data.outdoor_entertainment) features.push('Outdoor Entertainment');
-    return features;
-  };
-
   // Called when questionnaire is completed (user clicks "Generate Floor Plans")
   const handleQuestionnaireComplete = async (questionnaireData: QuestionnaireData) => {
     setIsSubmitting(true);
@@ -98,41 +89,31 @@ export default function NewProjectPage() {
     try {
       const landWidth = parseFloat(projectData.land_width);
       const landDepth = parseFloat(projectData.land_depth);
-      const landSize = landWidth * landDepth;
-      const buildingType = questionnaireData.storeys === 2 ? 'double_storey' : 'single_storey';
-      const features = getFeatures(questionnaireData);
       
-      // Create project with all data
+      // Create project with field names matching the DATABASE columns
       const project = await api.createProject({
         name: projectData.name,
-        description: projectData.address ? `Project at ${projectData.address}` : undefined,
-        land_size: landSize,
-        land_dimensions: { width: landWidth, depth: landDepth },
-        building_type: buildingType,
-        num_bedrooms: questionnaireData.bedrooms,
-        num_bathrooms: questionnaireData.bathrooms,
-        num_living_areas: questionnaireData.living_areas,
-        num_garages: questionnaireData.garage_spaces,
+        
+        // Land details - matches database columns exactly
+        land_width: landWidth,
+        land_depth: landDepth,
+        land_area: landWidth * landDepth,
+        
+        // Building requirements - matches database columns exactly
+        bedrooms: questionnaireData.bedrooms,
+        bathrooms: questionnaireData.bathrooms,
+        living_areas: questionnaireData.living_areas,
+        garage_spaces: questionnaireData.garage_spaces,
+        storeys: questionnaireData.storeys,
+        
+        // Style preferences - matches database columns exactly
         style: questionnaireData.style,
-        features: features,
-        questionnaire_data: {
-          land_width: landWidth,
-          land_depth: landDepth,
-          land_size: landSize,
-          address: projectData.address || null,
-          council: projectData.council || null,
-          bedrooms: questionnaireData.bedrooms,
-          bathrooms: questionnaireData.bathrooms,
-          living_areas: questionnaireData.living_areas,
-          garage_spaces: questionnaireData.garage_spaces,
-          storeys: questionnaireData.storeys,
-          building_type: buildingType,
-          style: questionnaireData.style,
-          open_plan: questionnaireData.open_plan,
-          outdoor_entertainment: questionnaireData.outdoor_entertainment,
-          home_office: questionnaireData.home_office,
-          features: features,
-        },
+        open_plan: questionnaireData.open_plan,
+        outdoor_entertainment: questionnaireData.outdoor_entertainment,
+        home_office: questionnaireData.home_office,
+        
+        // Location
+        council: projectData.council || undefined,
       });
       
       console.log('Project created:', project);

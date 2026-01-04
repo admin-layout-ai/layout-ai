@@ -4,7 +4,7 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 // =============================================================================
-// Types
+// Types - Must match database schema
 // =============================================================================
 
 export interface User {
@@ -23,40 +23,69 @@ export interface Project {
   id: number;
   user_id: number;
   name: string;
-  description?: string;
-  status: string;
-  land_size?: number;
-  land_dimensions?: { width?: number; depth?: number };
-  land_contour_url?: string;
-  building_type?: string;
-  num_bedrooms?: number;
-  num_bathrooms?: number;
-  num_living_areas?: number;
-  num_garages?: number;
-  questionnaire_data?: Record<string, any>;
-  ncc_zone?: string;
-  bushfire_level?: string;
+  status?: string;
+  
+  // Land details
+  land_width?: number;
+  land_depth?: number;
+  land_area?: number;
+  land_slope?: string;
+  orientation?: string;
+  street_frontage?: string;
+  contour_plan_url?: string;
+  
+  // Building requirements
+  bedrooms?: number;
+  bathrooms?: number;
+  living_areas?: number;
+  garage_spaces?: number;
+  storeys?: number;
+  
+  // Style preferences
+  style?: string;
+  open_plan?: boolean;
+  outdoor_entertainment?: boolean;
+  home_office?: boolean;
+  
+  // Location & Compliance
+  state?: string;
+  council?: string;
+  bal_rating?: string;
+  
+  // Timestamps
   created_at: string;
   updated_at?: string;
-  completed_at?: string;
 }
 
 export interface ProjectCreateData {
   name: string;
-  description?: string;
-  land_size?: number;
-  land_dimensions?: { width?: number; depth?: number };
-  land_contour_url?: string;
-  building_type?: string;
-  num_bedrooms?: number;
-  num_bathrooms?: number;
-  num_living_areas?: number;
-  num_garages?: number;
+  
+  // Land details
+  land_width?: number;
+  land_depth?: number;
+  land_area?: number;
+  land_slope?: string;
+  orientation?: string;
+  street_frontage?: string;
+  contour_plan_url?: string;
+  
+  // Building requirements
+  bedrooms?: number;
+  bathrooms?: number;
+  living_areas?: number;
+  garage_spaces?: number;
+  storeys?: number;
+  
+  // Style preferences
   style?: string;
-  features?: string[];
-  questionnaire_data?: Record<string, any>;
-  ncc_zone?: string;
-  bushfire_level?: string;
+  open_plan?: boolean;
+  outdoor_entertainment?: boolean;
+  home_office?: boolean;
+  
+  // Location & Compliance
+  state?: string;
+  council?: string;
+  bal_rating?: string;
 }
 
 export interface FloorPlan {
@@ -132,12 +161,10 @@ class ApiClient {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.detail || `HTTP ${response.status}: ${response.statusText}`;
+        const errorMessage = errorData.detail || errorData.message || `HTTP ${response.status}: ${response.statusText}`;
         
         if (response.status === 401) {
-          // Token expired or invalid
           console.error('Unauthorized - token may be expired');
-          // Optionally trigger logout
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('auth-error', { detail: errorMessage }));
           }

@@ -26,50 +26,58 @@ router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 class ProjectCreateRequest(BaseModel):
     """Schema for creating a new project with requirements"""
     name: str
-    description: Optional[str] = None
     
-    # Land/Site information
-    land_size: Optional[float] = None
-    land_dimensions: Optional[Dict[str, Any]] = None
-    land_contour_url: Optional[str] = None
+    # Land/Site information (matches database columns)
+    land_width: Optional[float] = None
+    land_depth: Optional[float] = None
+    land_area: Optional[float] = None
+    land_slope: Optional[str] = None
+    orientation: Optional[str] = None
+    street_frontage: Optional[str] = None
+    contour_plan_url: Optional[str] = None
     
-    # Building requirements from questionnaire
-    building_type: Optional[str] = None  # single_storey, double_storey
-    num_bedrooms: Optional[int] = None
-    num_bathrooms: Optional[float] = None  # Can be 3.5 for example
-    num_living_areas: Optional[int] = None
-    num_garages: Optional[int] = None
+    # Building requirements from questionnaire (matches database columns)
+    bedrooms: Optional[int] = None
+    bathrooms: Optional[float] = None
+    living_areas: Optional[int] = None
+    garage_spaces: Optional[int] = None
+    storeys: Optional[int] = None
     
     # Style preferences
-    style: Optional[str] = None  # Modern, Traditional, etc.
+    style: Optional[str] = None
+    open_plan: Optional[bool] = True
+    outdoor_entertainment: Optional[bool] = False
+    home_office: Optional[bool] = False
     
-    # Features (stored in questionnaire_data)
-    features: Optional[List[str]] = None  # ["Open Plan", "Home Office", etc.]
-    
-    # Full questionnaire data (JSON)
-    questionnaire_data: Optional[Dict[str, Any]] = None
-    
-    # NCC Compliance
-    ncc_zone: Optional[str] = None
-    bushfire_level: Optional[str] = None
+    # Location & Compliance
+    state: Optional[str] = None
+    council: Optional[str] = None
+    bal_rating: Optional[str] = None
 
 
 class ProjectUpdateRequest(BaseModel):
     """Schema for updating a project"""
     name: Optional[str] = None
-    description: Optional[str] = None
     status: Optional[str] = None
-    land_size: Optional[float] = None
-    land_dimensions: Optional[Dict[str, Any]] = None
-    land_contour_url: Optional[str] = None
-    building_type: Optional[str] = None
-    num_bedrooms: Optional[int] = None
-    num_bathrooms: Optional[float] = None
-    num_living_areas: Optional[int] = None
-    num_garages: Optional[int] = None
-    questionnaire_data: Optional[Dict[str, Any]] = None
-    ncc_zone: Optional[str] = None
-    bushfire_level: Optional[str] = None
+    land_width: Optional[float] = None
+    land_depth: Optional[float] = None
+    land_area: Optional[float] = None
+    land_slope: Optional[str] = None
+    orientation: Optional[str] = None
+    street_frontage: Optional[str] = None
+    contour_plan_url: Optional[str] = None
+    bedrooms: Optional[int] = None
+    bathrooms: Optional[float] = None
+    living_areas: Optional[int] = None
+    garage_spaces: Optional[int] = None
+    storeys: Optional[int] = None
+    style: Optional[str] = None
+    open_plan: Optional[bool] = None
+    outdoor_entertainment: Optional[bool] = None
+    home_office: Optional[bool] = None
+    state: Optional[str] = None
+    council: Optional[str] = None
+    bal_rating: Optional[str] = None
 
 
 class ProjectResponse(BaseModel):
@@ -77,22 +85,28 @@ class ProjectResponse(BaseModel):
     id: int
     user_id: int
     name: str
-    description: Optional[str] = None
-    status: str
-    land_size: Optional[float] = None
-    land_dimensions: Optional[Dict[str, Any]] = None
-    land_contour_url: Optional[str] = None
-    building_type: Optional[str] = None
-    num_bedrooms: Optional[int] = None
-    num_bathrooms: Optional[int] = None
-    num_living_areas: Optional[int] = None
-    num_garages: Optional[int] = None
-    questionnaire_data: Optional[Dict[str, Any]] = None
-    ncc_zone: Optional[str] = None
-    bushfire_level: Optional[str] = None
+    status: Optional[str] = None
+    land_width: Optional[float] = None
+    land_depth: Optional[float] = None
+    land_area: Optional[float] = None
+    land_slope: Optional[str] = None
+    orientation: Optional[str] = None
+    street_frontage: Optional[str] = None
+    contour_plan_url: Optional[str] = None
+    bedrooms: Optional[int] = None
+    bathrooms: Optional[float] = None
+    living_areas: Optional[int] = None
+    garage_spaces: Optional[int] = None
+    storeys: Optional[int] = None
+    style: Optional[str] = None
+    open_plan: Optional[bool] = None
+    outdoor_entertainment: Optional[bool] = None
+    home_office: Optional[bool] = None
+    state: Optional[str] = None
+    council: Optional[str] = None
+    bal_rating: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True
@@ -154,37 +168,43 @@ async def create_project(
             detail=f"Project limit reached. Your {db_user.subscription_tier} plan allows {limit} projects. Please upgrade to create more."
         )
     
-    # Build questionnaire_data JSON with all requirements
-    questionnaire_data = project_data.questionnaire_data or {}
+    # Calculate land_area if width and depth provided
+    land_area = project_data.land_area
+    if not land_area and project_data.land_width and project_data.land_depth:
+        land_area = project_data.land_width * project_data.land_depth
     
-    # Add individual fields to questionnaire_data for easy access
-    questionnaire_data.update({
-        "bedrooms": project_data.num_bedrooms,
-        "bathrooms": project_data.num_bathrooms,
-        "living_areas": project_data.num_living_areas,
-        "garages": project_data.num_garages,
-        "storeys": project_data.building_type,
-        "style": project_data.style,
-        "features": project_data.features or [],
-    })
-    
-    # Create project
+    # Create project with actual database columns
     db_project = models.Project(
         user_id=db_user.id,
         name=project_data.name,
-        description=project_data.description,
-        status="processing",  # Set to processing since we're generating floor plans
-        land_size=project_data.land_size,
-        land_dimensions=project_data.land_dimensions,
-        land_contour_url=project_data.land_contour_url,
-        building_type=project_data.building_type,
-        num_bedrooms=project_data.num_bedrooms,
-        num_bathrooms=int(project_data.num_bathrooms) if project_data.num_bathrooms else None,
-        num_living_areas=project_data.num_living_areas,
-        num_garages=project_data.num_garages,
-        questionnaire_data=questionnaire_data,
-        ncc_zone=project_data.ncc_zone,
-        bushfire_level=project_data.bushfire_level,
+        status=models.ProjectStatus.GENERATING,
+        
+        # Land details
+        land_width=project_data.land_width,
+        land_depth=project_data.land_depth,
+        land_area=land_area,
+        land_slope=project_data.land_slope,
+        orientation=project_data.orientation,
+        street_frontage=project_data.street_frontage,
+        contour_plan_url=project_data.contour_plan_url,
+        
+        # Building requirements
+        bedrooms=project_data.bedrooms,
+        bathrooms=project_data.bathrooms,
+        living_areas=project_data.living_areas,
+        garage_spaces=project_data.garage_spaces,
+        storeys=project_data.storeys or 1,
+        
+        # Style preferences
+        style=project_data.style,
+        open_plan=project_data.open_plan,
+        outdoor_entertainment=project_data.outdoor_entertainment,
+        home_office=project_data.home_office,
+        
+        # Location & Compliance
+        state=project_data.state,
+        council=project_data.council,
+        bal_rating=project_data.bal_rating,
     )
     
     db.add(db_project)
@@ -307,12 +327,8 @@ async def update_project(
     # Update fields
     update_dict = update_data.dict(exclude_unset=True)
     for field, value in update_dict.items():
-        if value is not None:
+        if hasattr(project, field):
             setattr(project, field, value)
-    
-    # If status changed to completed, set completed_at
-    if update_data.status == "completed" and not project.completed_at:
-        project.completed_at = datetime.utcnow()
     
     db.commit()
     db.refresh(project)
@@ -389,14 +405,12 @@ async def generate_floor_plans(
             detail="Project not found"
         )
     
-    # Update status to processing
-    project.status = "processing"
+    # Update status to generating
+    project.status = models.ProjectStatus.GENERATING
     db.commit()
     db.refresh(project)
     
     # TODO: Queue background job to generate floor plans using AI
-    # For now, just return the project with processing status
-    
     logger.info(f"Floor plan generation triggered for project: {project_id}")
     
     return project
