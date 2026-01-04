@@ -22,12 +22,13 @@ interface ProjectData {
   surveyFile: File | null;
 }
 
+// Must match the Questionnaire component's QuestionnaireData type exactly
 interface QuestionnaireData {
   bedrooms: number;
   bathrooms: number;
   living_areas: number;
   garage_spaces: number;
-  storeys: string;  // "single" or "double"
+  storeys: number;  // 1 or 2 (number, not string)
   style: string;
   open_plan: boolean;
   outdoor_entertainment: boolean;
@@ -109,8 +110,8 @@ export default function NewProjectPage() {
       const landDepth = parseFloat(projectData.land_depth);
       const landSize = landWidth * landDepth;
       
-      // Determine building type from storeys
-      const buildingType = questionnaireData.storeys === 'double' ? 'double_storey' : 'single_storey';
+      // Determine building type from storeys (1 = single, 2 = double)
+      const buildingType = questionnaireData.storeys === 2 ? 'double_storey' : 'single_storey';
       
       // Build features array
       const features = getFeatures(questionnaireData);
@@ -180,8 +181,8 @@ export default function NewProjectPage() {
   };
 
   // Helper to get display text for storeys
-  const getStoreysDisplay = (storeys: string) => {
-    return storeys === 'double' ? 'Double' : 'Single';
+  const getStoreysDisplay = (storeys: number) => {
+    return storeys === 2 ? 'Double' : 'Single';
   };
 
   return (
@@ -418,7 +419,7 @@ export default function NewProjectPage() {
                 </div>
                 <div className="flex justify-between pl-4">
                   <span className="text-gray-400">Style</span>
-                  <span className="text-white font-semibold">{questionnaireData.style}</span>
+                  <span className="text-white font-semibold capitalize">{questionnaireData.style}</span>
                 </div>
               </div>
               
