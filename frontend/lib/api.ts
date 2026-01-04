@@ -1,338 +1,274 @@
 // frontend/lib/api.ts
-// API Client - FIXED: Better error handling, proper typing, and auth integration
+// API client for Layout AI backend
 
-import type { 
-  Project, 
-  ProjectCreateRequest,
-  UserProfile, 
-  DashboardData, 
-  QuestionnaireData,
-  PaymentSession,
-  ApiError 
-} from './types';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// =============================================================================
+// Types
+// =============================================================================
 
-// Custom error class for API errors
-export class APIError extends Error {
-  constructor(
-    message: string,
-    public statusCode: number,
-    public detail?: string
-  ) {
-    super(message);
-    this.name = 'APIError';
-  }
+export interface User {
+  id: number;
+  azure_ad_id: string;
+  email: string;
+  full_name: string;
+  company_name?: string;
+  phone?: string;
+  is_active: boolean;
+  is_builder: boolean;
+  subscription_tier: string;
 }
 
-// Helper to handle API responses
-async function handleResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    let errorMessage = `Request failed with status ${response.status}`;
-    let detail: string | undefined;
-
-    try {
-      const errorData: ApiError = await response.json();
-      errorMessage = errorData.detail || errorMessage;
-      detail = errorData.detail;
-    } catch {
-      // If we can't parse the error, use the status text
-      errorMessage = response.statusText || errorMessage;
-    }
-
-    throw new APIError(errorMessage, response.status, detail);
-  }
-
-  // Handle empty responses (e.g., 204 No Content)
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return response.json();
+export interface Project {
+  id: number;
+  user_id: number;
+  name: string;
+  description?: string;
+  status: string;
+  land_size?: number;
+  land_dimensions?: { width?: number; depth?: number };
+  land_contour_url?: string;
+  building_type?: string;
+  num_bedrooms?: number;
+  num_bathrooms?: number;
+  num_living_areas?: number;
+  num_garages?: number;
+  questionnaire_data?: Record<string, any>;
+  ncc_zone?: string;
+  bushfire_level?: string;
+  created_at: string;
+  updated_at?: string;
+  completed_at?: string;
 }
 
-class APIClient {
+export interface ProjectCreateData {
+  name: string;
+  description?: string;
+  land_size?: number;
+  land_dimensions?: { width?: number; depth?: number };
+  land_contour_url?: string;
+  building_type?: string;
+  num_bedrooms?: number;
+  num_bathrooms?: number;
+  num_living_areas?: number;
+  num_garages?: number;
+  style?: string;
+  features?: string[];
+  questionnaire_data?: Record<string, any>;
+  ncc_zone?: string;
+  bushfire_level?: string;
+}
+
+export interface FloorPlan {
+  id: number;
+  project_id: number;
+  variant_number: number;
+  name?: string;
+  description?: string;
+  floor_plan_url?: string;
+  pdf_url?: string;
+  thumbnail_url?: string;
+  total_area?: number;
+  room_layout?: Record<string, any>;
+  is_favorite: boolean;
+  user_rating?: number;
+  user_notes?: string;
+  created_at: string;
+}
+
+export interface SubscriptionStatus {
+  tier: string;
+  project_count: number;
+  project_limit: number;
+  can_create_project: boolean;
+}
+
+export interface ProjectListResponse {
+  projects: Project[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+// =============================================================================
+// API Client Class
+// =============================================================================
+
+class ApiClient {
   private baseUrl: string;
-  
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl;
+
+  constructor() {
+    this.baseUrl = API_BASE_URL;
   }
-  
-  // Helper method to get auth headers
-  private getAuthHeaders(token?: string): HeadersInit {
+
+  private getAuthToken(): string | null {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('auth_token');
+  }
+
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const token = this.getAuthToken();
+    
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
+      ...options.headers,
     };
-    
+
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+      (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
     }
-    
-    return headers;
-  }
 
-  // ============================================================================
-  // USER ENDPOINTS
-  // ============================================================================
+    const url = `${this.baseUrl}${endpoint}`;
+    console.log(`API Request: ${options.method || 'GET'} ${url}`);
 
-  /**
-   * Get or create user profile
-   * This should be called on first dashboard load to sync user with backend
-   */
-  async syncUser(token: string): Promise<UserProfile> {
-    const response = await fetch(`${this.baseUrl}/api/v1/users/me`, {
-      method: 'GET',
-      headers: this.getAuthHeaders(token),
-    });
-    
-    return handleResponse<UserProfile>(response);
-  }
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers,
+      });
 
-  /**
-   * Update user profile
-   */
-  async updateUserProfile(token: string, data: Partial<UserProfile>): Promise<UserProfile> {
-    const response = await fetch(`${this.baseUrl}/api/v1/users/me`, {
-      method: 'PUT',
-      headers: this.getAuthHeaders(token),
-      body: JSON.stringify(data),
-    });
-    
-    return handleResponse<UserProfile>(response);
-  }
-
-  /**
-   * Get dashboard data (user info, stats, recent projects)
-   */
-  async getDashboardData(token: string): Promise<DashboardData> {
-    const response = await fetch(`${this.baseUrl}/api/v1/users/me/dashboard`, {
-      method: 'GET',
-      headers: this.getAuthHeaders(token),
-    });
-    
-    return handleResponse<DashboardData>(response);
-  }
-
-  /**
-   * Get user preferences
-   */
-  async getUserPreferences(token: string): Promise<Record<string, unknown>> {
-    const response = await fetch(`${this.baseUrl}/api/v1/users/me/preferences`, {
-      method: 'GET',
-      headers: this.getAuthHeaders(token),
-    });
-    
-    return handleResponse<Record<string, unknown>>(response);
-  }
-
-  /**
-   * Update user preferences
-   */
-  async updateUserPreferences(token: string, preferences: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const response = await fetch(`${this.baseUrl}/api/v1/users/me/preferences`, {
-      method: 'PUT',
-      headers: this.getAuthHeaders(token),
-      body: JSON.stringify(preferences),
-    });
-    
-    return handleResponse<Record<string, unknown>>(response);
-  }
-
-  // ============================================================================
-  // PROJECT ENDPOINTS
-  // ============================================================================
-  
-  /**
-   * Create a new project
-   */
-  async createProject(token: string, data: ProjectCreateRequest): Promise<Project> {
-    const response = await fetch(`${this.baseUrl}/api/v1/projects/`, {
-      method: 'POST',
-      headers: this.getAuthHeaders(token),
-      body: JSON.stringify(data),
-    });
-    
-    return handleResponse<Project>(response);
-  }
-  
-  /**
-   * List all projects for the authenticated user
-   */
-  async listProjects(token: string): Promise<Project[]> {
-    const response = await fetch(`${this.baseUrl}/api/v1/projects/`, {
-      method: 'GET',
-      headers: this.getAuthHeaders(token),
-    });
-    
-    return handleResponse<Project[]>(response);
-  }
-  
-  /**
-   * Get a single project by ID
-   */
-  async getProject(token: string, projectId: number): Promise<Project> {
-    const response = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}`, {
-      method: 'GET',
-      headers: this.getAuthHeaders(token),
-    });
-    
-    return handleResponse<Project>(response);
-  }
-
-  /**
-   * Update a project
-   */
-  async updateProject(token: string, projectId: number, data: Partial<Project>): Promise<Project> {
-    const response = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}`, {
-      method: 'PUT',
-      headers: this.getAuthHeaders(token),
-      body: JSON.stringify(data),
-    });
-    
-    return handleResponse<Project>(response);
-  }
-  
-  /**
-   * Submit questionnaire data for a project
-   */
-  async submitQuestionnaire(
-    token: string,
-    projectId: number,
-    data: QuestionnaireData
-  ): Promise<Project> {
-    const response = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}/questionnaire`, {
-      method: 'POST',
-      headers: this.getAuthHeaders(token),
-      body: JSON.stringify(data),
-    });
-    
-    return handleResponse<Project>(response);
-  }
-
-  /**
-   * Delete a project
-   */
-  async deleteProject(token: string, projectId: number): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}`, {
-      method: 'DELETE',
-      headers: this.getAuthHeaders(token),
-    });
-    
-    return handleResponse<void>(response);
-  }
-
-  // ============================================================================
-  // PAYMENT ENDPOINTS
-  // ============================================================================
-
-  /**
-   * Create a Stripe checkout session
-   */
-  async createCheckoutSession(
-    token: string,
-    projectId: number,
-    planType: string
-  ): Promise<PaymentSession> {
-    const response = await fetch(`${this.baseUrl}/api/v1/payments/create-checkout`, {
-      method: 'POST',
-      headers: this.getAuthHeaders(token),
-      body: JSON.stringify({
-        project_id: projectId,
-        plan_type: planType,
-      }),
-    });
-    
-    return handleResponse<PaymentSession>(response);
-  }
-
-  /**
-   * Verify payment status
-   */
-  async verifyPayment(token: string, sessionId: string): Promise<{ status: string; project_id: number }> {
-    const response = await fetch(`${this.baseUrl}/api/v1/payments/verify/${sessionId}`, {
-      method: 'GET',
-      headers: this.getAuthHeaders(token),
-    });
-    
-    return handleResponse<{ status: string; project_id: number }>(response);
-  }
-
-  // ============================================================================
-  // FLOOR PLAN ENDPOINTS
-  // ============================================================================
-
-  /**
-   * Get floor plan options for a project
-   */
-  async getFloorPlanOptions(token: string, projectId: number): Promise<unknown[]> {
-    const response = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}/floor-plans`, {
-      method: 'GET',
-      headers: this.getAuthHeaders(token),
-    });
-    
-    return handleResponse<unknown[]>(response);
-  }
-
-  /**
-   * Select a floor plan option
-   */
-  async selectFloorPlan(token: string, projectId: number, floorPlanId: number): Promise<Project> {
-    const response = await fetch(`${this.baseUrl}/api/v1/projects/${projectId}/floor-plans/${floorPlanId}/select`, {
-      method: 'POST',
-      headers: this.getAuthHeaders(token),
-    });
-    
-    return handleResponse<Project>(response);
-  }
-
-  /**
-   * Download floor plan in specified format
-   */
-  async downloadFloorPlan(
-    token: string,
-    projectId: number,
-    format: 'pdf' | 'dxf' | 'png'
-  ): Promise<Blob> {
-    const response = await fetch(
-      `${this.baseUrl}/api/v1/projects/${projectId}/download?format=${format}`,
-      {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.detail || `HTTP ${response.status}: ${response.statusText}`;
+        
+        if (response.status === 401) {
+          // Token expired or invalid
+          console.error('Unauthorized - token may be expired');
+          // Optionally trigger logout
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('auth-error', { detail: errorMessage }));
+          }
+        }
+        
+        throw new Error(errorMessage);
       }
-    );
-    
-    if (!response.ok) {
-      throw new APIError('Failed to download file', response.status);
+
+      // Handle 204 No Content
+      if (response.status === 204) {
+        return {} as T;
+      }
+
+      return response.json();
+    } catch (error) {
+      console.error(`API Error for ${endpoint}:`, error);
+      throw error;
     }
-    
-    return response.blob();
   }
 
-  // ============================================================================
-  // FEEDBACK ENDPOINTS
-  // ============================================================================
+  // ===========================================================================
+  // User Endpoints
+  // ===========================================================================
 
-  /**
-   * Submit user feedback
-   */
-  async submitFeedback(
-    token: string,
-    data: { type: string; message: string; rating?: number }
-  ): Promise<{ success: boolean }> {
-    const response = await fetch(`${this.baseUrl}/api/v1/feedback`, {
-      method: 'POST',
-      headers: this.getAuthHeaders(token),
+  async getCurrentUser(): Promise<User> {
+    return this.request<User>('/api/v1/users/me');
+  }
+
+  async updateUser(data: Partial<User>): Promise<User> {
+    return this.request<User>('/api/v1/users/me', {
+      method: 'PUT',
       body: JSON.stringify(data),
     });
-    
-    return handleResponse<{ success: boolean }>(response);
+  }
+
+  async getSubscriptionStatus(): Promise<SubscriptionStatus> {
+    return this.request<SubscriptionStatus>('/api/v1/users/me/subscription');
+  }
+
+  // ===========================================================================
+  // Project Endpoints
+  // ===========================================================================
+
+  async createProject(data: ProjectCreateData): Promise<Project> {
+    return this.request<Project>('/api/v1/projects', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getProjects(page = 1, pageSize = 10, status?: string): Promise<ProjectListResponse> {
+    let url = `/api/v1/projects?page=${page}&page_size=${pageSize}`;
+    if (status) {
+      url += `&status_filter=${status}`;
+    }
+    return this.request<ProjectListResponse>(url);
+  }
+
+  async getProject(projectId: number): Promise<Project> {
+    return this.request<Project>(`/api/v1/projects/${projectId}`);
+  }
+
+  async updateProject(projectId: number, data: Partial<Project>): Promise<Project> {
+    return this.request<Project>(`/api/v1/projects/${projectId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteProject(projectId: number): Promise<void> {
+    return this.request<void>(`/api/v1/projects/${projectId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async generateFloorPlans(projectId: number): Promise<Project> {
+    return this.request<Project>(`/api/v1/projects/${projectId}/generate`, {
+      method: 'POST',
+    });
+  }
+
+  // ===========================================================================
+  // Floor Plan Endpoints
+  // ===========================================================================
+
+  async getFloorPlans(projectId: number): Promise<FloorPlan[]> {
+    return this.request<FloorPlan[]>(`/api/v1/plans/project/${projectId}`);
+  }
+
+  async getFloorPlan(planId: number): Promise<FloorPlan> {
+    return this.request<FloorPlan>(`/api/v1/plans/${planId}`);
+  }
+
+  async updateFloorPlan(planId: number, data: Partial<FloorPlan>): Promise<FloorPlan> {
+    return this.request<FloorPlan>(`/api/v1/plans/${planId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async toggleFavorite(planId: number): Promise<FloorPlan> {
+    return this.request<FloorPlan>(`/api/v1/plans/${planId}/favorite`, {
+      method: 'POST',
+    });
+  }
+
+  async ratePlan(planId: number, rating: number): Promise<FloorPlan> {
+    return this.request<FloorPlan>(`/api/v1/plans/${planId}/rate`, {
+      method: 'POST',
+      body: JSON.stringify({ rating }),
+    });
+  }
+
+  // ===========================================================================
+  // Payment Endpoints
+  // ===========================================================================
+
+  async createCheckoutSession(planName: string): Promise<{ checkout_url: string }> {
+    return this.request<{ checkout_url: string }>('/api/v1/payments/create-checkout', {
+      method: 'POST',
+      body: JSON.stringify({ plan_name: planName }),
+    });
+  }
+
+  async getPaymentHistory(): Promise<any[]> {
+    return this.request<any[]>('/api/v1/payments/history');
   }
 }
 
 // Export singleton instance
-export const api = new APIClient(API_URL);
+export const api = new ApiClient();
 
-// Export the class for testing or custom instances
-export { APIClient };
+// Export default for convenience
+export default api;

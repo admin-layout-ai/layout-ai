@@ -1,166 +1,323 @@
 # backend/app/routers/projects.py
-# UPDATED: Projects router with B2C authentication
-# This replaces your current projects.py - now uses token auth instead of user_id param
-
+"""
+Project management endpoints for Layout AI
+Handles project creation with questionnaire data
+"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel
 from datetime import datetime
+import logging
 
-from .. import models, schemas
 from ..database import get_db
+from .. import models
 from ..auth import get_current_user, AuthenticatedUser
-from ..analytics import analytics
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 
 
-def get_db_user(current_user: AuthenticatedUser, db: Session) -> models.User:
-    """Helper to get database user from authenticated token user."""
+# =============================================================================
+# Schemas
+# =============================================================================
+
+class ProjectCreateRequest(BaseModel):
+    """Schema for creating a new project with requirements"""
+    name: str
+    description: Optional[str] = None
+    
+    # Land/Site information
+    land_size: Optional[float] = None
+    land_dimensions: Optional[Dict[str, Any]] = None
+    land_contour_url: Optional[str] = None
+    
+    # Building requirements from questionnaire
+    building_type: Optional[str] = None  # single_storey, double_storey
+    num_bedrooms: Optional[int] = None
+    num_bathrooms: Optional[float] = None  # Can be 3.5 for example
+    num_living_areas: Optional[int] = None
+    num_garages: Optional[int] = None
+    
+    # Style preferences
+    style: Optional[str] = None  # Modern, Traditional, etc.
+    
+    # Features (stored in questionnaire_data)
+    features: Optional[List[str]] = None  # ["Open Plan", "Home Office", etc.]
+    
+    # Full questionnaire data (JSON)
+    questionnaire_data: Optional[Dict[str, Any]] = None
+    
+    # NCC Compliance
+    ncc_zone: Optional[str] = None
+    bushfire_level: Optional[str] = None
+
+
+class ProjectUpdateRequest(BaseModel):
+    """Schema for updating a project"""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+    land_size: Optional[float] = None
+    land_dimensions: Optional[Dict[str, Any]] = None
+    land_contour_url: Optional[str] = None
+    building_type: Optional[str] = None
+    num_bedrooms: Optional[int] = None
+    num_bathrooms: Optional[float] = None
+    num_living_areas: Optional[int] = None
+    num_garages: Optional[int] = None
+    questionnaire_data: Optional[Dict[str, Any]] = None
+    ncc_zone: Optional[str] = None
+    bushfire_level: Optional[str] = None
+
+
+class ProjectResponse(BaseModel):
+    """Project response schema"""
+    id: int
+    user_id: int
+    name: str
+    description: Optional[str] = None
+    status: str
+    land_size: Optional[float] = None
+    land_dimensions: Optional[Dict[str, Any]] = None
+    land_contour_url: Optional[str] = None
+    building_type: Optional[str] = None
+    num_bedrooms: Optional[int] = None
+    num_bathrooms: Optional[int] = None
+    num_living_areas: Optional[int] = None
+    num_garages: Optional[int] = None
+    questionnaire_data: Optional[Dict[str, Any]] = None
+    ncc_zone: Optional[str] = None
+    bushfire_level: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class ProjectListResponse(BaseModel):
+    """Response for project list"""
+    projects: List[ProjectResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+# =============================================================================
+# Endpoints
+# =============================================================================
+
+@router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
+async def create_project(
+    project_data: ProjectCreateRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new project with requirements from questionnaire.
+    Called when user clicks 'Generate Floor Plans'.
+    """
+    logger.info(f"Creating project for user: {current_user.id}")
+    logger.info(f"Project data: {project_data.dict()}")
+    
+    # Get user from database
     db_user = db.query(models.User).filter(
         models.User.azure_ad_id == current_user.id
     ).first()
     
     if not db_user:
-        # Auto-create user if they don't exist yet
-        db_user = models.User(
-            azure_ad_id=current_user.id,
-            email=current_user.email or f"{current_user.id}@placeholder.com",
-            full_name=current_user.name or "User",
-            is_active=True,
-            subscription_tier="free"
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found. Please sign in again."
         )
-        db.add(db_user)
-        db.commit()
-        db.refresh(db_user)
     
-    return db_user
-
-
-@router.post("/", response_model=schemas.ProjectResponse, status_code=status.HTTP_201_CREATED)
-async def create_project(
-    project: schemas.ProjectCreate,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Create a new project for the authenticated user."""
-    db_user = get_db_user(current_user, db)
+    # Check subscription limits
+    project_count = db.query(models.Project).filter(
+        models.Project.user_id == db_user.id
+    ).count()
     
-    # Calculate land area
-    land_area = None
-    if project.land_width and project.land_depth:
-        land_area = project.land_width * project.land_depth
+    tier_limits = {
+        "free": 2,
+        "basic": 10,
+        "professional": 50,
+        "enterprise": -1
+    }
     
+    limit = tier_limits.get(db_user.subscription_tier, 2)
+    if limit != -1 and project_count >= limit:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Project limit reached. Your {db_user.subscription_tier} plan allows {limit} projects. Please upgrade to create more."
+        )
+    
+    # Build questionnaire_data JSON with all requirements
+    questionnaire_data = project_data.questionnaire_data or {}
+    
+    # Add individual fields to questionnaire_data for easy access
+    questionnaire_data.update({
+        "bedrooms": project_data.num_bedrooms,
+        "bathrooms": project_data.num_bathrooms,
+        "living_areas": project_data.num_living_areas,
+        "garages": project_data.num_garages,
+        "storeys": project_data.building_type,
+        "style": project_data.style,
+        "features": project_data.features or [],
+    })
+    
+    # Create project
     db_project = models.Project(
         user_id=db_user.id,
-        name=project.name,
-        land_width=project.land_width,
-        land_depth=project.land_depth,
-        land_area=land_area,
-        bedrooms=project.bedrooms,
-        bathrooms=project.bathrooms,
-        living_areas=project.living_areas,
-        garage_spaces=project.garage_spaces,
-        storeys=project.storeys,
-        style=project.style,
-        state=project.state,
-        status=models.ProjectStatus.DRAFT,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow()
+        name=project_data.name,
+        description=project_data.description,
+        status="processing",  # Set to processing since we're generating floor plans
+        land_size=project_data.land_size,
+        land_dimensions=project_data.land_dimensions,
+        land_contour_url=project_data.land_contour_url,
+        building_type=project_data.building_type,
+        num_bedrooms=project_data.num_bedrooms,
+        num_bathrooms=int(project_data.num_bathrooms) if project_data.num_bathrooms else None,
+        num_living_areas=project_data.num_living_areas,
+        num_garages=project_data.num_garages,
+        questionnaire_data=questionnaire_data,
+        ncc_zone=project_data.ncc_zone,
+        bushfire_level=project_data.bushfire_level,
     )
     
     db.add(db_project)
     db.commit()
     db.refresh(db_project)
     
-    # Track analytics
-    analytics.track_event("project_created", db_user.id, {
-        "project_id": db_project.id,
-        "bedrooms": project.bedrooms,
-        "bathrooms": project.bathrooms,
-        "style": project.style,
-        "state": project.state,
-        "land_area": land_area
-    })
+    logger.info(f"Created project with ID: {db_project.id}")
     
     return db_project
 
 
-@router.get("/", response_model=List[schemas.ProjectResponse])
+@router.get("", response_model=ProjectListResponse)
+@router.get("/", response_model=ProjectListResponse)
 async def list_projects(
+    page: int = 1,
+    page_size: int = 10,
+    status_filter: Optional[str] = None,
     current_user: AuthenticatedUser = Depends(get_current_user),
-    skip: int = 0,
-    limit: int = 100,
     db: Session = Depends(get_db)
 ):
-    """Get all projects for the authenticated user."""
-    db_user = get_db_user(current_user, db)
+    """Get all projects for the current user."""
+    # Get user from database
+    db_user = db.query(models.User).filter(
+        models.User.azure_ad_id == current_user.id
+    ).first()
     
-    projects = db.query(models.Project).filter(
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Build query
+    query = db.query(models.Project).filter(
         models.Project.user_id == db_user.id
-    ).order_by(models.Project.created_at.desc()).offset(skip).limit(limit).all()
+    )
     
-    return projects
+    if status_filter:
+        query = query.filter(models.Project.status == status_filter)
+    
+    # Get total count
+    total = query.count()
+    
+    # Apply pagination
+    offset = (page - 1) * page_size
+    projects = query.order_by(models.Project.created_at.desc()).offset(offset).limit(page_size).all()
+    
+    return ProjectListResponse(
+        projects=projects,
+        total=total,
+        page=page,
+        page_size=page_size
+    )
 
 
-@router.get("/{project_id}", response_model=schemas.ProjectResponse)
+@router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(
     project_id: int,
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get a specific project by ID."""
-    db_user = get_db_user(current_user, db)
+    # Get user from database
+    db_user = db.query(models.User).filter(
+        models.User.azure_ad_id == current_user.id
+    ).first()
     
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Get project
     project = db.query(models.Project).filter(
         models.Project.id == project_id,
         models.Project.user_id == db_user.id
     ).first()
     
     if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
     
     return project
 
 
-@router.put("/{project_id}", response_model=schemas.ProjectResponse)
+@router.put("/{project_id}", response_model=ProjectResponse)
 async def update_project(
     project_id: int,
-    project_update: schemas.ProjectUpdate,
+    update_data: ProjectUpdateRequest,
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Update a project."""
-    db_user = get_db_user(current_user, db)
+    # Get user from database
+    db_user = db.query(models.User).filter(
+        models.User.azure_ad_id == current_user.id
+    ).first()
     
-    db_project = db.query(models.Project).filter(
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Get project
+    project = db.query(models.Project).filter(
         models.Project.id == project_id,
         models.Project.user_id == db_user.id
     ).first()
     
-    if not db_project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
     
     # Update fields
-    update_data = project_update.dict(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(db_project, field, value)
+    update_dict = update_data.dict(exclude_unset=True)
+    for field, value in update_dict.items():
+        if value is not None:
+            setattr(project, field, value)
     
-    # Recalculate land area if dimensions changed
-    if db_project.land_width and db_project.land_depth:
-        db_project.land_area = db_project.land_width * db_project.land_depth
+    # If status changed to completed, set completed_at
+    if update_data.status == "completed" and not project.completed_at:
+        project.completed_at = datetime.utcnow()
     
-    db_project.updated_at = datetime.utcnow()
     db.commit()
-    db.refresh(db_project)
+    db.refresh(project)
     
-    # Track analytics
-    analytics.track_event("project_updated", db_user.id, {
-        "project_id": project_id,
-        "updated_fields": list(update_data.keys())
-    })
-    
-    return db_project
+    return project
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -170,96 +327,76 @@ async def delete_project(
     db: Session = Depends(get_db)
 ):
     """Delete a project."""
-    db_user = get_db_user(current_user, db)
-    
-    db_project = db.query(models.Project).filter(
-        models.Project.id == project_id,
-        models.Project.user_id == db_user.id
+    # Get user from database
+    db_user = db.query(models.User).filter(
+        models.User.azure_ad_id == current_user.id
     ).first()
     
-    if not db_project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
     
-    # Track analytics before deleting
-    analytics.track_event("project_deleted", db_user.id, {
-        "project_id": project_id,
-        "project_name": db_project.name
-    })
-    
-    db.delete(db_project)
-    db.commit()
-    
-    return None
-
-
-@router.post("/{project_id}/questionnaire", response_model=schemas.ProjectResponse)
-async def submit_questionnaire(
-    project_id: int,
-    questionnaire: schemas.QuestionnaireResponse,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Submit questionnaire data for a project."""
-    db_user = get_db_user(current_user, db)
-    
-    db_project = db.query(models.Project).filter(
-        models.Project.id == project_id,
-        models.Project.user_id == db_user.id
-    ).first()
-    
-    if not db_project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    # Update project with questionnaire data
-    db_project.bedrooms = questionnaire.bedrooms
-    db_project.bathrooms = questionnaire.bathrooms
-    db_project.living_areas = questionnaire.living_areas
-    db_project.garage_spaces = questionnaire.garage_spaces
-    db_project.storeys = questionnaire.storeys
-    db_project.style = questionnaire.style
-    db_project.open_plan = questionnaire.open_plan
-    db_project.outdoor_entertainment = questionnaire.outdoor_entertainment
-    db_project.home_office = questionnaire.home_office
-    db_project.budget_min = questionnaire.budget_min
-    db_project.budget_max = questionnaire.budget_max
-    db_project.status = models.ProjectStatus.QUESTIONNAIRE
-    db_project.updated_at = datetime.utcnow()
-    
-    db.commit()
-    db.refresh(db_project)
-    
-    # Track analytics
-    analytics.track_event("questionnaire_submitted", db_user.id, {
-        "project_id": project_id,
-        "bedrooms": questionnaire.bedrooms,
-        "bathrooms": questionnaire.bathrooms,
-        "style": questionnaire.style,
-        "has_home_office": questionnaire.home_office
-    })
-    
-    return db_project
-
-
-@router.get("/{project_id}/floor-plans", response_model=List[schemas.FloorPlanResponse])
-async def get_floor_plans(
-    project_id: int,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get all floor plans for a project."""
-    db_user = get_db_user(current_user, db)
-    
-    # Verify project belongs to user
+    # Get project
     project = db.query(models.Project).filter(
         models.Project.id == project_id,
         models.Project.user_id == db_user.id
     ).first()
     
     if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
     
-    plans = db.query(models.FloorPlan).filter(
-        models.FloorPlan.project_id == project_id
-    ).all()
+    db.delete(project)
+    db.commit()
     
-    return plans
+    return None
+
+
+@router.post("/{project_id}/generate", response_model=ProjectResponse)
+async def generate_floor_plans(
+    project_id: int,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Trigger floor plan generation for a project.
+    This would typically queue a background job.
+    """
+    # Get user from database
+    db_user = db.query(models.User).filter(
+        models.User.azure_ad_id == current_user.id
+    ).first()
+    
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Get project
+    project = db.query(models.Project).filter(
+        models.Project.id == project_id,
+        models.Project.user_id == db_user.id
+    ).first()
+    
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    # Update status to processing
+    project.status = "processing"
+    db.commit()
+    db.refresh(project)
+    
+    # TODO: Queue background job to generate floor plans using AI
+    # For now, just return the project with processing status
+    
+    logger.info(f"Floor plan generation triggered for project: {project_id}")
+    
+    return project
