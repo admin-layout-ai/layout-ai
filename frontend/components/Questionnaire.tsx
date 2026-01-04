@@ -1,5 +1,5 @@
 // frontend/components/Questionnaire.tsx
-// FIXED: Correct checkbox field mappings and added more features
+// Combined review: Shows project details + questionnaire summary, saves to backend on submit
 
 'use client';
 
@@ -18,12 +18,22 @@ interface QuestionnaireData {
   home_office: boolean;
 }
 
+interface ProjectDetails {
+  name: string;
+  land_width: number;
+  land_depth: number;
+  address?: string;
+  council?: string;
+}
+
 interface QuestionnaireProps {
   onComplete: (data: QuestionnaireData) => void;
   onCancel?: () => void;
+  projectDetails?: ProjectDetails;  // Optional project details to show on review
+  isSubmitting?: boolean;  // Loading state for submit button
 }
 
-export default function Questionnaire({ onComplete, onCancel }: QuestionnaireProps) {
+export default function Questionnaire({ onComplete, onCancel, projectDetails, isSubmitting = false }: QuestionnaireProps) {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState<QuestionnaireData>({
     bedrooms: 3,
@@ -48,6 +58,8 @@ export default function Questionnaire({ onComplete, onCancel }: QuestionnairePro
   const handleBack = () => {
     if (step > 1) {
       setStep(step - 1);
+    } else if (onCancel) {
+      onCancel();
     }
   };
 
@@ -250,7 +262,8 @@ export default function Questionnaire({ onComplete, onCancel }: QuestionnairePro
                 onClick={onCancel}
                 className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg hover:bg-gray-200 transition font-medium"
               >
-                Cancel
+                <ArrowLeft className="w-4 h-4 inline mr-2" />
+                Back
               </button>
             )}
             <button
@@ -292,13 +305,12 @@ export default function Questionnaire({ onComplete, onCancel }: QuestionnairePro
             </select>
           </div>
 
-          {/* Feature Toggles - FIXED: Correct field mappings */}
+          {/* Feature Toggles */}
           <div className="space-y-3">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Additional Features
             </label>
             
-            {/* FIXED: Open Plan Living - correctly maps to open_plan */}
             <ToggleSwitch
               label="Open plan living"
               description="Combined kitchen, dining and living area"
@@ -306,7 +318,6 @@ export default function Questionnaire({ onComplete, onCancel }: QuestionnairePro
               onChange={(checked) => setFormData({ ...formData, open_plan: checked })}
             />
 
-            {/* FIXED: Home Office - correctly maps to home_office */}
             <ToggleSwitch
               label="Home office"
               description="Dedicated workspace or study"
@@ -314,7 +325,6 @@ export default function Questionnaire({ onComplete, onCancel }: QuestionnairePro
               onChange={(checked) => setFormData({ ...formData, home_office: checked })}
             />
 
-            {/* FIXED: Outdoor Entertainment - correctly maps to outdoor_entertainment */}
             <ToggleSwitch
               label="Outdoor entertainment"
               description="Alfresco, patio or deck area"
@@ -345,7 +355,7 @@ export default function Questionnaire({ onComplete, onCancel }: QuestionnairePro
         </div>
       )}
 
-      {/* Step 3: Review */}
+      {/* Step 3: Review - Shows BOTH project details and questionnaire summary */}
       {step === 3 && (
         <div className="space-y-6">
           <div>
@@ -353,8 +363,35 @@ export default function Questionnaire({ onComplete, onCancel }: QuestionnairePro
             <p className="text-gray-600">Confirm your selections before generating floor plans</p>
           </div>
           
-          <div className="bg-gray-50 rounded-xl p-6 space-y-4">
-            <h3 className="font-semibold text-gray-900 mb-4">Summary</h3>
+          {/* Project Details Section - Only show if projectDetails is provided */}
+          {projectDetails && (
+            <div className="bg-gray-50 rounded-xl p-5 space-y-3">
+              <h3 className="font-semibold text-gray-900">Project Details</h3>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500">Name</span>
+                  <p className="font-medium text-gray-900">{projectDetails.name}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Land Size</span>
+                  <p className="font-medium text-gray-900">
+                    {projectDetails.land_width}m × {projectDetails.land_depth}m 
+                    ({(projectDetails.land_width * projectDetails.land_depth).toFixed(0)} m²)
+                  </p>
+                </div>
+                {projectDetails.address && (
+                  <div className="col-span-2">
+                    <span className="text-gray-500">Address</span>
+                    <p className="font-medium text-gray-900">{projectDetails.address}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Requirements Summary */}
+          <div className="bg-gray-50 rounded-xl p-5 space-y-4">
+            <h3 className="font-semibold text-gray-900">Summary</h3>
             
             <div className="grid grid-cols-2 gap-4">
               <div className="flex justify-between py-2 border-b border-gray-200">
@@ -388,7 +425,7 @@ export default function Questionnaire({ onComplete, onCancel }: QuestionnairePro
             </div>
 
             {/* Features */}
-            <div className="pt-4">
+            <div className="pt-2">
               <span className="text-gray-600 text-sm">Features:</span>
               <div className="flex flex-wrap gap-2 mt-2">
                 {formData.open_plan && (
@@ -421,7 +458,8 @@ export default function Questionnaire({ onComplete, onCancel }: QuestionnairePro
             <button
               type="button"
               onClick={handleBack}
-              className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg hover:bg-gray-200 transition font-medium flex items-center justify-center gap-2"
+              disabled={isSubmitting}
+              className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg hover:bg-gray-200 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50"
             >
               <ArrowLeft className="w-4 h-4" />
               Back
@@ -429,9 +467,17 @@ export default function Questionnaire({ onComplete, onCancel }: QuestionnairePro
             <button
               type="button"
               onClick={handleSubmit}
-              className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-medium"
+              disabled={isSubmitting}
+              className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              Generate Floor Plans
+              {isSubmitting ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                'Generate Floor Plans'
+              )}
             </button>
           </div>
         </div>

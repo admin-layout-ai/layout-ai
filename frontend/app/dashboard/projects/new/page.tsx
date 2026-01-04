@@ -1,5 +1,5 @@
 // frontend/app/dashboard/projects/new/page.tsx
-// New project creation wizard - saves all requirements to backend
+// New project creation wizard - 3 steps only, questionnaire handles review & submit
 
 'use client';
 
@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import Questionnaire from '@/components/Questionnaire';
 import api from '@/lib/api';
 
-type Step = 'details' | 'upload' | 'questionnaire' | 'review';
+type Step = 'details' | 'upload' | 'questionnaire';
 
 interface ProjectData {
   name: string;
@@ -22,13 +22,12 @@ interface ProjectData {
   surveyFile: File | null;
 }
 
-// Must match the Questionnaire component's QuestionnaireData type exactly
 interface QuestionnaireData {
   bedrooms: number;
   bathrooms: number;
   living_areas: number;
   garage_spaces: number;
-  storeys: number;  // 1 or 2 (number, not string)
+  storeys: number;
   style: string;
   open_plan: boolean;
   outdoor_entertainment: boolean;
@@ -52,22 +51,15 @@ export default function NewProjectPage() {
     contourFile: null,
     surveyFile: null,
   });
-  
-  const [questionnaireData, setQuestionnaireData] = useState<QuestionnaireData | null>(null);
 
+  // Only 3 steps now
   const steps: { id: Step; label: string }[] = [
     { id: 'details', label: 'Details' },
     { id: 'upload', label: 'Files' },
     { id: 'questionnaire', label: 'Requirements' },
-    { id: 'review', label: 'Review' },
   ];
 
   const currentStepIndex = steps.findIndex(s => s.id === currentStep);
-
-  const handleQuestionnaireComplete = (data: QuestionnaireData) => {
-    setQuestionnaireData(data);
-    setCurrentStep('review');
-  };
 
   const goToNextStep = () => {
     const nextIndex = currentStepIndex + 1;
@@ -98,68 +90,44 @@ export default function NewProjectPage() {
     return features;
   };
 
-  const handleSubmit = async () => {
-    if (!questionnaireData) return;
-    
+  // Called when questionnaire is completed (user clicks "Generate Floor Plans")
+  const handleQuestionnaireComplete = async (questionnaireData: QuestionnaireData) => {
     setIsSubmitting(true);
     setError(null);
     
     try {
-      // Calculate land size in square meters
       const landWidth = parseFloat(projectData.land_width);
       const landDepth = parseFloat(projectData.land_depth);
       const landSize = landWidth * landDepth;
-      
-      // Determine building type from storeys (1 = single, 2 = double)
       const buildingType = questionnaireData.storeys === 2 ? 'double_storey' : 'single_storey';
-      
-      // Build features array
       const features = getFeatures(questionnaireData);
       
       // Create project with all data
       const project = await api.createProject({
         name: projectData.name,
         description: projectData.address ? `Project at ${projectData.address}` : undefined,
-        
-        // Land information
         land_size: landSize,
-        land_dimensions: {
-          width: landWidth,
-          depth: landDepth,
-        },
-        
-        // Building requirements
+        land_dimensions: { width: landWidth, depth: landDepth },
         building_type: buildingType,
         num_bedrooms: questionnaireData.bedrooms,
         num_bathrooms: questionnaireData.bathrooms,
         num_living_areas: questionnaireData.living_areas,
         num_garages: questionnaireData.garage_spaces,
-        
-        // Style and features
         style: questionnaireData.style,
         features: features,
-        
-        // Full questionnaire data for reference
         questionnaire_data: {
-          // Land details
           land_width: landWidth,
           land_depth: landDepth,
           land_size: landSize,
           address: projectData.address || null,
           council: projectData.council || null,
-          
-          // Building requirements
           bedrooms: questionnaireData.bedrooms,
           bathrooms: questionnaireData.bathrooms,
           living_areas: questionnaireData.living_areas,
           garage_spaces: questionnaireData.garage_spaces,
           storeys: questionnaireData.storeys,
           building_type: buildingType,
-          
-          // Style preferences
           style: questionnaireData.style,
-          
-          // Features
           open_plan: questionnaireData.open_plan,
           outdoor_entertainment: questionnaireData.outdoor_entertainment,
           home_office: questionnaireData.home_office,
@@ -168,21 +136,22 @@ export default function NewProjectPage() {
       });
       
       console.log('Project created:', project);
-      
-      // Redirect to project page or projects list
       router.push(`/dashboard/projects?success=created&id=${project.id}`);
       
     } catch (err) {
       console.error('Error creating project:', err);
       setError(err instanceof Error ? err.message : 'Failed to create project. Please try again.');
-    } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Helper to get display text for storeys
-  const getStoreysDisplay = (storeys: number) => {
-    return storeys === 2 ? 'Double' : 'Single';
+  // Project details to pass to Questionnaire for the review step
+  const projectDetailsForReview = {
+    name: projectData.name,
+    land_width: parseFloat(projectData.land_width) || 0,
+    land_depth: parseFloat(projectData.land_depth) || 0,
+    address: projectData.address || undefined,
+    council: projectData.council || undefined,
   };
 
   return (
@@ -198,7 +167,7 @@ export default function NewProjectPage() {
         <h1 className="text-2xl font-bold text-white">Create New Project</h1>
       </div>
 
-      {/* Step Indicator */}
+      {/* Step Indicator - Now only 3 steps */}
       <div className="mb-8 flex items-center justify-between max-w-2xl">
         {steps.map((step, index) => (
           <div key={step.id} className="flex items-center">
@@ -212,7 +181,7 @@ export default function NewProjectPage() {
               {index < currentStepIndex ? <Check className="w-5 h-5" /> : index + 1}
             </div>
             {index < steps.length - 1 && (
-              <div className={`w-12 h-1 mx-2 rounded transition ${
+              <div className={`w-16 h-1 mx-2 rounded transition ${
                 index < currentStepIndex ? 'bg-blue-600' : 'bg-white/10'
               }`} />
             )}
@@ -345,133 +314,15 @@ export default function NewProjectPage() {
           </div>
         )}
 
-        {/* Step 3: Questionnaire */}
+        {/* Step 3: Questionnaire (includes Review) */}
         {currentStep === 'questionnaire' && (
           <div className="bg-white rounded-xl shadow-xl overflow-hidden">
             <Questionnaire 
-              onComplete={handleQuestionnaireComplete} 
-              onCancel={goToPrevStep} 
+              onComplete={handleQuestionnaireComplete}
+              onCancel={goToPrevStep}
+              projectDetails={projectDetailsForReview}
+              isSubmitting={isSubmitting}
             />
-          </div>
-        )}
-
-        {/* Step 4: Review */}
-        {currentStep === 'review' && questionnaireData && (
-          <div className="bg-white/5 rounded-xl p-6 border border-white/10">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-                Review Your Requirements
-              </h2>
-              <span className="text-sm text-gray-400">Step 3 of 3</span>
-            </div>
-            
-            <p className="text-gray-400 mb-6">
-              Confirm your selections before generating floor plans
-            </p>
-            
-            {/* Project Summary */}
-            <div className="bg-white/5 rounded-lg p-5 mb-4">
-              <h3 className="font-semibold text-white mb-3">Project Details</h3>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-400">Name</span>
-                  <p className="text-white font-medium">{projectData.name}</p>
-                </div>
-                <div>
-                  <span className="text-gray-400">Land Size</span>
-                  <p className="text-white font-medium">
-                    {projectData.land_width}m × {projectData.land_depth}m 
-                    ({(parseFloat(projectData.land_width) * parseFloat(projectData.land_depth)).toFixed(0)} m²)
-                  </p>
-                </div>
-                {projectData.address && (
-                  <div className="col-span-2">
-                    <span className="text-gray-400">Address</span>
-                    <p className="text-white font-medium">{projectData.address}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Requirements Summary */}
-            <div className="bg-white/5 rounded-lg p-5 mb-4">
-              <h3 className="font-semibold text-white mb-4">Summary</h3>
-              <div className="grid grid-cols-2 gap-y-4 text-sm">
-                <div className="flex justify-between pr-4 border-r border-white/10">
-                  <span className="text-gray-400">Bedrooms</span>
-                  <span className="text-white font-semibold">{questionnaireData.bedrooms}</span>
-                </div>
-                <div className="flex justify-between pl-4">
-                  <span className="text-gray-400">Bathrooms</span>
-                  <span className="text-white font-semibold">{questionnaireData.bathrooms}</span>
-                </div>
-                <div className="flex justify-between pr-4 border-r border-white/10">
-                  <span className="text-gray-400">Living Areas</span>
-                  <span className="text-white font-semibold">{questionnaireData.living_areas}</span>
-                </div>
-                <div className="flex justify-between pl-4">
-                  <span className="text-gray-400">Garage</span>
-                  <span className="text-white font-semibold">{questionnaireData.garage_spaces} car</span>
-                </div>
-                <div className="flex justify-between pr-4 border-r border-white/10">
-                  <span className="text-gray-400">Storeys</span>
-                  <span className="text-white font-semibold">{getStoreysDisplay(questionnaireData.storeys)}</span>
-                </div>
-                <div className="flex justify-between pl-4">
-                  <span className="text-gray-400">Style</span>
-                  <span className="text-white font-semibold capitalize">{questionnaireData.style}</span>
-                </div>
-              </div>
-              
-              {/* Features */}
-              {(questionnaireData.open_plan || questionnaireData.home_office || questionnaireData.outdoor_entertainment) && (
-                <div className="mt-4 pt-4 border-t border-white/10">
-                  <span className="text-gray-400 text-sm">Features:</span>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {questionnaireData.open_plan && (
-                      <span className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-full text-sm flex items-center gap-1">
-                        <Check className="w-3 h-3" /> Open Plan
-                      </span>
-                    )}
-                    {questionnaireData.home_office && (
-                      <span className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-full text-sm flex items-center gap-1">
-                        <Check className="w-3 h-3" /> Home Office
-                      </span>
-                    )}
-                    {questionnaireData.outdoor_entertainment && (
-                      <span className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-full text-sm flex items-center gap-1">
-                        <Check className="w-3 h-3" /> Outdoor Entertainment
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            {/* Action Buttons */}
-            <div className="flex justify-between mt-6">
-              <button 
-                onClick={goToPrevStep} 
-                disabled={isSubmitting}
-                className="bg-white/10 text-white px-6 py-3 rounded-lg hover:bg-white/20 flex items-center gap-2 transition disabled:opacity-50"
-              >
-                <ArrowLeft className="w-5 h-5" /> Back
-              </button>
-              <button 
-                onClick={handleSubmit} 
-                disabled={isSubmitting} 
-                className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-semibold transition"
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  <>Generate Floor Plans</>
-                )}
-              </button>
-            </div>
           </div>
         )}
       </div>
