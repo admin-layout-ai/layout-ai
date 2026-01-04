@@ -1,306 +1,231 @@
 # backend/app/routers/users.py
-# UPDATED: User router with proper B2C authentication integration
-# This replaces your current users.py to work with your frontend's expectations
-
+"""
+User management endpoints for Layout AI
+FIXED: Properly extracts user info from B2C CIAM token
+"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from typing import Optional
-from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
+import logging
 
-from .. import models, schemas
 from ..database import get_db
-from ..auth import get_current_user, get_optional_user, AuthenticatedUser
-from ..analytics import analytics
+from .. import models
+from ..auth import get_current_user, AuthenticatedUser
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
 
-# ============================================================================
-# SCHEMAS for this router (can also add to schemas.py)
-# ============================================================================
+# =============================================================================
+# Schemas
+# =============================================================================
 
-class DashboardStats(BaseModel):
-    total_projects: int
-    completed_projects: int
-    plans_generated: int
-
-
-class DashboardResponse(BaseModel):
-    user: schemas.UserResponse
-    stats: DashboardStats
-    recent_projects: list
-
-
-class UserPreferences(BaseModel):
-    default_style: Optional[str] = None
-    default_storeys: Optional[int] = None
-    notifications_enabled: bool = True
-    theme: str = "dark"
+class UserResponse(BaseModel):
+    """User response schema"""
+    id: int
+    azure_ad_id: str
+    email: str
+    full_name: str
+    company_name: Optional[str] = None
+    phone: Optional[str] = None
+    is_active: bool
+    is_builder: bool
+    subscription_tier: str
+    
+    class Config:
+        from_attributes = True
 
 
-# ============================================================================
-# USER ENDPOINTS - These are what your frontend expects
-# ============================================================================
+class UserUpdateRequest(BaseModel):
+    """Schema for updating user profile"""
+    full_name: Optional[str] = None
+    company_name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[EmailStr] = None
 
-@router.get("/me", response_model=schemas.UserResponse)
+
+# =============================================================================
+# Endpoints
+# =============================================================================
+
+@router.get("/me", response_model=UserResponse)
 async def get_or_create_current_user(
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Get current user profile from B2C token.
-    Creates user in database if this is their first login.
-    
-    This is the main endpoint your frontend calls after login.
+    Get current user profile. Creates user if first login.
+    User info is extracted from the B2C token.
     """
-    # Look up user by Azure AD ID
+    logger.info(f"Getting/creating user for azure_ad_id: {current_user.id}")
+    logger.info(f"Token claims - email: {current_user.email}, name: {current_user.name}")
+    
+    # Look up user by Azure AD ID (sub claim)
     db_user = db.query(models.User).filter(
         models.User.azure_ad_id == current_user.id
     ).first()
     
-    if not db_user:
-        # First time login - create user from token data
-        db_user = models.User(
-            azure_ad_id=current_user.id,
-            email=current_user.email or f"{current_user.id}@placeholder.com",
-            full_name=current_user.name or f"{current_user.given_name} {current_user.family_name}".strip() or "User",
-            phone=current_user.phone_number,
-            is_active=True,
-            subscription_tier="free",
-            created_at=datetime.utcnow()
-        )
-        db.add(db_user)
-        db.commit()
-        db.refresh(db_user)
+    if db_user:
+        logger.info(f"Found existing user: {db_user.id}")
         
-        # Track new user signup
-        analytics.track_event("user_created", db_user.id, {
-            "identity_provider": current_user.identity_provider,
-            "has_email": bool(current_user.email)
-        })
-    else:
-        # Update user info from token if changed
+        # Update user info if it has changed or was incomplete
         updated = False
         
-        if current_user.email and db_user.email != current_user.email:
-            db_user.email = current_user.email
-            updated = True
-            
-        if current_user.name and db_user.full_name != current_user.name:
-            db_user.full_name = current_user.name
-            updated = True
-            
-        if current_user.phone_number and db_user.phone != current_user.phone_number:
+        # Update email if we have a better one
+        if current_user.email and current_user.email != db_user.email:
+            # Don't update if current email looks like a placeholder
+            if '@placeholder' not in current_user.email and current_user.email:
+                db_user.email = current_user.email
+                updated = True
+                logger.info(f"Updated email to: {current_user.email}")
+        
+        # Update name if we have a better one
+        if current_user.name and current_user.name != 'unknown' and current_user.name != db_user.full_name:
+            if db_user.full_name == 'unknown' or not db_user.full_name:
+                db_user.full_name = current_user.name
+                updated = True
+                logger.info(f"Updated full_name to: {current_user.name}")
+        
+        # Update phone if available
+        if current_user.phone_number and not db_user.phone:
             db_user.phone = current_user.phone_number
             updated = True
         
         if updated:
-            db_user.updated_at = datetime.utcnow()
             db.commit()
             db.refresh(db_user)
+        
+        return db_user
     
-    return db_user
-
-
-@router.put("/me", response_model=schemas.UserResponse)
-async def update_current_user(
-    updates: schemas.UserBase,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Update current user's profile."""
-    db_user = db.query(models.User).filter(
-        models.User.azure_ad_id == current_user.id
-    ).first()
+    # First time login - create new user
+    logger.info(f"Creating new user for: {current_user.id}")
     
-    if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
+    # Build proper email - don't use azure_ad_id as email
+    email = current_user.email
+    if not email or email == '':
+        # Try to construct from other claims
+        email = f"user_{current_user.id[:8]}@layout-ai.com.au"
+        logger.warning(f"No email in token, using generated: {email}")
     
-    # Update allowed fields
-    update_data = updates.dict(exclude_unset=True)
-    for field, value in update_data.items():
-        if hasattr(db_user, field):
-            setattr(db_user, field, value)
+    # Build proper name
+    full_name = current_user.name
+    if not full_name or full_name == '' or full_name == 'unknown':
+        # Try to build from given_name and family_name
+        if current_user.given_name or current_user.family_name:
+            full_name = f"{current_user.given_name} {current_user.family_name}".strip()
+        else:
+            full_name = "New User"
+        logger.warning(f"No name in token, using: {full_name}")
     
-    db_user.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(db_user)
-    
-    # Track profile update
-    analytics.track_event("profile_updated", db_user.id, {
-        "updated_fields": list(update_data.keys())
-    })
-    
-    return db_user
-
-
-@router.get("/me/dashboard")
-async def get_dashboard_data(
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Get dashboard data including stats and recent projects.
-    This is what your dashboard page calls on load.
-    """
-    # Get or create user
-    db_user = db.query(models.User).filter(
-        models.User.azure_ad_id == current_user.id
-    ).first()
-    
-    if not db_user:
-        # Create user if doesn't exist
-        db_user = models.User(
-            azure_ad_id=current_user.id,
-            email=current_user.email or f"{current_user.id}@placeholder.com",
-            full_name=current_user.name or "User",
-            is_active=True,
-            subscription_tier="free"
-        )
-        db.add(db_user)
-        db.commit()
-        db.refresh(db_user)
-    
-    # Get project stats
-    total_projects = db.query(models.Project).filter(
-        models.Project.user_id == db_user.id
-    ).count()
-    
-    completed_projects = db.query(models.Project).filter(
-        models.Project.user_id == db_user.id,
-        models.Project.status == models.ProjectStatus.COMPLETED
-    ).count()
-    
-    plans_generated = db.query(models.FloorPlan).join(models.Project).filter(
-        models.Project.user_id == db_user.id
-    ).count()
-    
-    # Get recent projects (last 5)
-    recent_projects = db.query(models.Project).filter(
-        models.Project.user_id == db_user.id
-    ).order_by(models.Project.created_at.desc()).limit(5).all()
-    
-    return {
-        "user": {
-            "id": db_user.id,
-            "azure_ad_id": db_user.azure_ad_id,
-            "email": db_user.email,
-            "full_name": db_user.full_name,
-            "company_name": db_user.company_name,
-            "phone": db_user.phone,
-            "is_active": db_user.is_active,
-            "subscription_tier": db_user.subscription_tier,
-            "created_at": db_user.created_at
-        },
-        "stats": {
-            "total_projects": total_projects,
-            "completed_projects": completed_projects,
-            "plans_generated": plans_generated
-        },
-        "recent_projects": [
-            {
-                "id": p.id,
-                "name": p.name,
-                "status": p.status.value,
-                "bedrooms": p.bedrooms,
-                "bathrooms": p.bathrooms,
-                "created_at": p.created_at.isoformat() if p.created_at else None
-            }
-            for p in recent_projects
-        ]
-    }
-
-
-@router.get("/me/preferences")
-async def get_user_preferences(
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get user preferences (stored in user record or separate table)."""
-    db_user = db.query(models.User).filter(
-        models.User.azure_ad_id == current_user.id
-    ).first()
-    
-    if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Return default preferences for now
-    # TODO: Store preferences in database
-    return UserPreferences()
-
-
-@router.put("/me/preferences")
-async def update_user_preferences(
-    preferences: UserPreferences,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Update user preferences."""
-    db_user = db.query(models.User).filter(
-        models.User.azure_ad_id == current_user.id
-    ).first()
-    
-    if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # TODO: Store preferences in database
-    
-    return preferences
-
-
-# ============================================================================
-# LEGACY ENDPOINTS (for backwards compatibility)
-# ============================================================================
-
-@router.post("/", status_code=status.HTTP_201_CREATED)
-async def create_user(
-    email: str,
-    azure_ad_id: str,
-    full_name: str = None,
-    db: Session = Depends(get_db)
-):
-    """
-    Create a new user (legacy endpoint).
-    Note: The /me endpoint above is preferred as it uses token data.
-    """
-    existing_user = db.query(models.User).filter(
-        models.User.email == email
-    ).first()
-    
-    if existing_user:
-        return existing_user
+    logger.info(f"Creating user with email={email}, name={full_name}")
     
     db_user = models.User(
-        azure_ad_id=azure_ad_id,
+        azure_ad_id=current_user.id,
         email=email,
         full_name=full_name,
-        is_active=True
+        phone=current_user.phone_number,
+        is_active=True,
+        is_builder=False,
+        subscription_tier="free"
     )
+    
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
+    
+    logger.info(f"Created new user with ID: {db_user.id}")
     return db_user
 
 
-@router.get("/{user_id}")
-async def get_user_by_id(
-    user_id: int,
+@router.put("/me", response_model=UserResponse)
+async def update_current_user(
+    update_data: UserUpdateRequest,
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get a user by ID (admin or self only)."""
-    # Get requesting user
-    requesting_user = db.query(models.User).filter(
+    """
+    Update current user's profile.
+    """
+    # Get user from database
+    db_user = db.query(models.User).filter(
         models.User.azure_ad_id == current_user.id
     ).first()
     
-    # Only allow viewing own profile or if admin
-    if not requesting_user or (requesting_user.id != user_id):
-        raise HTTPException(status_code=403, detail="Access denied")
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
     
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
+    # Update fields if provided
+    if update_data.full_name is not None:
+        db_user.full_name = update_data.full_name
+    
+    if update_data.company_name is not None:
+        db_user.company_name = update_data.company_name
+    
+    if update_data.phone is not None:
+        db_user.phone = update_data.phone
+    
+    if update_data.email is not None:
+        # Check if email is already taken by another user
+        existing = db.query(models.User).filter(
+            models.User.email == update_data.email,
+            models.User.id != db_user.id
+        ).first()
+        
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already in use"
+            )
+        
+        db_user.email = update_data.email
+    
+    db.commit()
+    db.refresh(db_user)
+    
+    return db_user
+
+
+@router.get("/me/subscription")
+async def get_subscription_status(
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get current user's subscription status.
+    """
+    db_user = db.query(models.User).filter(
+        models.User.azure_ad_id == current_user.id
+    ).first()
+    
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Count user's projects
+    project_count = db.query(models.Project).filter(
+        models.Project.user_id == db_user.id
+    ).count()
+    
+    # Define tier limits
+    tier_limits = {
+        "free": 2,
+        "basic": 10,
+        "professional": 50,
+        "enterprise": -1  # unlimited
+    }
+    
+    limit = tier_limits.get(db_user.subscription_tier, 2)
+    
+    return {
+        "tier": db_user.subscription_tier,
+        "project_count": project_count,
+        "project_limit": limit,
+        "can_create_project": limit == -1 or project_count < limit
+    }

@@ -117,7 +117,7 @@ export default function CallbackPage() {
       console.log('User:', user);
 
       // Store authentication data
-      localStorage.setItem('auth_token', accessToken || idToken);
+      localStorage.setItem('auth_token', idToken);
       localStorage.setItem('user_info', JSON.stringify(user));
 
       // Dispatch event for other tabs/components
