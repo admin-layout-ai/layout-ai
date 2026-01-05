@@ -6,23 +6,7 @@
       "allowedRoles": ["anonymous"]
     },
     {
-      "route": "/dashboard/projects",
-      "allowedRoles": ["authenticated", "anonymous"]
-    },
-    {
-      "route": "/dashboard/projects/",
-      "allowedRoles": ["authenticated", "anonymous"]
-    },
-    {
-      "route": "/dashboard/projects/index.html",
-      "allowedRoles": ["authenticated", "anonymous"]
-    },
-    {
       "route": "/dashboard/projects/new",
-      "allowedRoles": ["authenticated", "anonymous"]
-    },
-    {
-      "route": "/dashboard/projects/new/",
       "allowedRoles": ["authenticated", "anonymous"]
     },
     {
@@ -34,7 +18,7 @@
       "allowedRoles": ["authenticated", "anonymous"]
     },
     {
-      "route": "/dashboard/projects/placeholder/",
+      "route": "/dashboard/projects/placeholder/*",
       "allowedRoles": ["authenticated", "anonymous"]
     },
     {
