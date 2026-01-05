@@ -5,7 +5,7 @@
 
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ArrowRight, Upload, Home, Check, Info, X, FileText, Sparkles, Cpu, Layers, Wand2, Clock, Shield, Zap } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Upload, Home, Check, Info, X, FileText, Cpu, Layers, Wand2, Clock, Shield } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import Questionnaire from '@/components/Questionnaire';
 import api from '@/lib/api';
@@ -505,134 +505,114 @@ export default function NewProjectPage() {
               onCancel={goToPrevStep}
               projectDetails={projectDetailsForReview}
               isSubmitting={isSubmitting}
-              submitButtonText="Save Project"
+              submitButtonText="Save Requirements"
             />
           </div>
         )}
 
-        {/* Step 4: AI Generation Page */}
+        {/* Step 4: AI Generation Page - Clean, consistent design */}
         {currentStep === 'generate' && createdProject && (
-          <div className="bg-gradient-to-br from-blue-900/50 to-purple-900/50 rounded-xl p-8 border border-blue-500/20">
-            {/* Success Header */}
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Check className="w-8 h-8 text-green-400" />
-              </div>
-              <h2 className="text-2xl font-bold text-white mb-2">Project Saved Successfully!</h2>
-              <p className="text-gray-400">"{createdProject.name}" is ready for AI floor plan generation</p>
-            </div>
-
-            {/* AI Features Showcase */}
-            <div className="grid md:grid-cols-3 gap-4 mb-8">
-              <div className="bg-white/5 rounded-lg p-4 text-center">
-                <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center mx-auto mb-3">
-                  <Cpu className="w-6 h-6 text-blue-400" />
-                </div>
-                <h3 className="text-white font-semibold mb-1">AI-Powered</h3>
-                <p className="text-gray-400 text-sm">Advanced algorithms analyze your requirements</p>
-              </div>
-              <div className="bg-white/5 rounded-lg p-4 text-center">
-                <div className="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center mx-auto mb-3">
-                  <Layers className="w-6 h-6 text-purple-400" />
-                </div>
-                <h3 className="text-white font-semibold mb-1">Multiple Variants</h3>
-                <p className="text-gray-400 text-sm">Get 3 unique floor plan options</p>
-              </div>
-              <div className="bg-white/5 rounded-lg p-4 text-center">
-                <div className="w-12 h-12 bg-green-500/20 rounded-lg flex items-center justify-center mx-auto mb-3">
+          <div className="space-y-6">
+            {/* Success Message */}
+            <div className="bg-white/5 rounded-xl p-6 border border-white/10">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center flex-shrink-0">
                   <Check className="w-6 h-6 text-green-400" />
                 </div>
-                <h3 className="text-white font-semibold mb-1">NCC Compliant</h3>
-                <p className="text-gray-400 text-sm">Meets Australian building standards</p>
-              </div>
-            </div>
-
-            {/* Animated Preview */}
-            <div className="relative bg-slate-800/50 rounded-xl p-6 mb-8 overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-blue-500/10 animate-pulse" />
-              <div className="relative flex items-center justify-center gap-6">
-                <div className="text-center">
-                  <div className="w-24 h-24 bg-white/10 rounded-lg flex items-center justify-center mb-2 animate-bounce" style={{ animationDelay: '0ms', animationDuration: '2s' }}>
-                    <Home className="w-12 h-12 text-blue-400" />
-                  </div>
-                  <span className="text-gray-400 text-xs">Your Requirements</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-6 h-6 text-yellow-400 animate-pulse" />
-                  <ArrowRight className="w-6 h-6 text-gray-400" />
-                  <Sparkles className="w-6 h-6 text-yellow-400 animate-pulse" style={{ animationDelay: '500ms' }} />
-                </div>
-                <div className="text-center">
-                  <div className="w-24 h-24 bg-white/10 rounded-lg flex items-center justify-center mb-2 animate-bounce" style={{ animationDelay: '300ms', animationDuration: '2s' }}>
-                    <Wand2 className="w-12 h-12 text-purple-400" />
-                  </div>
-                  <span className="text-gray-400 text-xs">AI Magic</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-6 h-6 text-yellow-400 animate-pulse" style={{ animationDelay: '250ms' }} />
-                  <ArrowRight className="w-6 h-6 text-gray-400" />
-                  <Sparkles className="w-6 h-6 text-yellow-400 animate-pulse" style={{ animationDelay: '750ms' }} />
-                </div>
-                <div className="text-center">
-                  <div className="w-24 h-24 bg-white/10 rounded-lg flex items-center justify-center mb-2 animate-bounce" style={{ animationDelay: '600ms', animationDuration: '2s' }}>
-                    <Layers className="w-12 h-12 text-green-400" />
-                  </div>
-                  <span className="text-gray-400 text-xs">Floor Plans</span>
+                <div>
+                  <h2 className="text-xl font-semibold text-white">Requirements Saved Successfully</h2>
+                  <p className="text-gray-400 mt-1">Project "{createdProject.name}" is ready for floor plan generation</p>
                 </div>
               </div>
             </div>
 
-            {/* What to Expect */}
-            <div className="bg-white/5 rounded-lg p-4 mb-8">
-              <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-yellow-400" />
-                What to Expect
+            {/* Generate Floor Plans Card */}
+            <div className="bg-white/5 rounded-xl p-6 border border-white/10">
+              <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
+                <Layers className="w-5 h-5 text-blue-400" />
+                Generate AI Floor Plans
               </h3>
-              <ul className="space-y-2 text-gray-300 text-sm">
-                <li className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
-                  <span>3 unique floor plan variations tailored to your land and requirements</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
-                  <span>Optimized room layouts based on your bedroom, bathroom, and living area preferences</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
-                  <span>Compliance checks for Australian building codes and council requirements</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
-                  <span>Generation typically takes 2-5 minutes depending on complexity</span>
-                </li>
-              </ul>
-            </div>
 
-            {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4">
-              <button 
-                onClick={() => router.push('/dashboard/projects')}
-                className="flex-1 bg-white/10 text-white px-6 py-4 rounded-lg hover:bg-white/20 transition font-medium"
-              >
-                Generate Later
-              </button>
-              <button 
-                onClick={handleGenerateFloorPlans}
-                disabled={isGenerating}
-                className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-4 rounded-lg hover:from-blue-700 hover:to-purple-700 transition font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                {isGenerating ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Starting Generation...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-5 h-5" />
-                    Generate Floor Plans Now
-                  </>
-                )}
-              </button>
+              {/* Features */}
+              <div className="grid md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-white/5 rounded-lg p-4">
+                  <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center mb-3">
+                    <Cpu className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <h4 className="text-white font-medium mb-1">AI-Powered Design</h4>
+                  <p className="text-gray-400 text-sm">Advanced algorithms optimize your floor plan layout</p>
+                </div>
+                <div className="bg-white/5 rounded-lg p-4">
+                  <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center mb-3">
+                    <Layers className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <h4 className="text-white font-medium mb-1">3 Unique Variants</h4>
+                  <p className="text-gray-400 text-sm">Choose from three different layout options</p>
+                </div>
+                <div className="bg-white/5 rounded-lg p-4">
+                  <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center mb-3">
+                    <Shield className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <h4 className="text-white font-medium mb-1">NCC Compliant</h4>
+                  <p className="text-gray-400 text-sm">Meets Australian building code requirements</p>
+                </div>
+              </div>
+
+              {/* What's Included */}
+              <div className="bg-white/5 rounded-lg p-4 mb-6">
+                <h4 className="text-white font-medium mb-3">What's Included</h4>
+                <div className="grid md:grid-cols-2 gap-2">
+                  <div className="flex items-center gap-2 text-gray-300 text-sm">
+                    <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
+                    <span>Detailed room dimensions</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-300 text-sm">
+                    <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
+                    <span>Optimized traffic flow</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-300 text-sm">
+                    <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
+                    <span>PDF export ready</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-300 text-sm">
+                    <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
+                    <span>Council compliance notes</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Generation Time Note */}
+              <div className="flex items-center gap-2 text-gray-400 text-sm mb-6">
+                <Clock className="w-4 h-4" />
+                <span>Generation typically takes 2-5 minutes</span>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button 
+                  onClick={() => router.push('/dashboard/projects')}
+                  className="flex-1 bg-white/10 text-white px-6 py-3 rounded-lg hover:bg-white/20 transition font-medium"
+                >
+                  Generate Later
+                </button>
+                <button 
+                  onClick={handleGenerateFloorPlans}
+                  disabled={isGenerating}
+                  className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isGenerating ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Starting Generation...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-5 h-5" />
+                      Generate Floor Plans
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}
