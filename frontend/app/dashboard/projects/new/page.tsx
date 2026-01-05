@@ -736,7 +736,7 @@ export default function NewProjectPage() {
           // Upload file to Azure Blob Storage
           contourPlanUrl = await api.uploadContourFile(
             projectData.contourFile,
-            user.full_name || user.email,
+            user.name || user.email,
             projectData.name
           );
         } catch (uploadErr) {
