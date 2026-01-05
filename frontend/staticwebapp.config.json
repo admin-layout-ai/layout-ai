@@ -6,6 +6,19 @@
       "allowedRoles": ["anonymous"]
     },
     {
+      "route": "/dashboard/projects/new",
+      "allowedRoles": ["authenticated", "anonymous"]
+    },
+    {
+      "route": "/dashboard/projects/new/*",
+      "allowedRoles": ["authenticated", "anonymous"]
+    },
+    {
+      "route": "/dashboard/projects/*",
+      "rewrite": "/dashboard/projects/",
+      "allowedRoles": ["authenticated", "anonymous"]
+    },
+    {
       "route": "/dashboard/*",
       "allowedRoles": ["authenticated", "anonymous"]
     },
