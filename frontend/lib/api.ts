@@ -4,7 +4,7 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 // =============================================================================
-// Types - Must match database schema
+// Types - Match database schema
 // =============================================================================
 
 export interface User {
@@ -47,8 +47,11 @@ export interface Project {
   outdoor_entertainment?: boolean;
   home_office?: boolean;
   
-  // Location & Compliance
+  // Location details
+  lot_dp?: string;
+  street_address?: string;
   state?: string;
+  postcode?: string;
   council?: string;
   bal_rating?: string;
   
@@ -82,8 +85,11 @@ export interface ProjectCreateData {
   outdoor_entertainment?: boolean;
   home_office?: boolean;
   
-  // Location & Compliance
-  state?: string;
+  // Location details
+  lot_dp?: string;
+  street_address?: string;
+  state: string;      // Mandatory
+  postcode: string;   // Mandatory
   council?: string;
   bal_rating?: string;
 }
@@ -173,7 +179,6 @@ class ApiClient {
         throw new Error(errorMessage);
       }
 
-      // Handle 204 No Content
       if (response.status === 204) {
         return {} as T;
       }
@@ -185,10 +190,7 @@ class ApiClient {
     }
   }
 
-  // ===========================================================================
   // User Endpoints
-  // ===========================================================================
-
   async getCurrentUser(): Promise<User> {
     return this.request<User>('/api/v1/users/me');
   }
@@ -204,10 +206,7 @@ class ApiClient {
     return this.request<SubscriptionStatus>('/api/v1/users/me/subscription');
   }
 
-  // ===========================================================================
   // Project Endpoints
-  // ===========================================================================
-
   async createProject(data: ProjectCreateData): Promise<Project> {
     return this.request<Project>('/api/v1/projects', {
       method: 'POST',
@@ -246,10 +245,7 @@ class ApiClient {
     });
   }
 
-  // ===========================================================================
   // Floor Plan Endpoints
-  // ===========================================================================
-
   async getFloorPlans(projectId: number): Promise<FloorPlan[]> {
     return this.request<FloorPlan[]>(`/api/v1/plans/project/${projectId}`);
   }
@@ -278,10 +274,7 @@ class ApiClient {
     });
   }
 
-  // ===========================================================================
   // Payment Endpoints
-  // ===========================================================================
-
   async createCheckoutSession(planName: string): Promise<{ checkout_url: string }> {
     return this.request<{ checkout_url: string }>('/api/v1/payments/create-checkout', {
       method: 'POST',
@@ -294,8 +287,5 @@ class ApiClient {
   }
 }
 
-// Export singleton instance
 export const api = new ApiClient();
-
-// Export default for convenience
 export default api;

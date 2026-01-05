@@ -1,12 +1,11 @@
 # backend/app/routers/projects.py
 """
 Project management endpoints for Layout AI
-Handles project creation with questionnaire data
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel
+from typing import Optional, List
+from pydantic import BaseModel, validator
 from datetime import datetime
 import logging
 
@@ -18,16 +17,19 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 
+# Valid Australian states
+AUSTRALIAN_STATES = ["NSW", "VIC", "QLD", "SA", "WA", "TAS", "ACT", "NT"]
+
 
 # =============================================================================
 # Schemas
 # =============================================================================
 
 class ProjectCreateRequest(BaseModel):
-    """Schema for creating a new project with requirements"""
+    """Schema for creating a new project"""
     name: str
     
-    # Land/Site information (matches database columns)
+    # Land details
     land_width: Optional[float] = None
     land_depth: Optional[float] = None
     land_area: Optional[float] = None
@@ -36,7 +38,7 @@ class ProjectCreateRequest(BaseModel):
     street_frontage: Optional[str] = None
     contour_plan_url: Optional[str] = None
     
-    # Building requirements from questionnaire (matches database columns)
+    # Building requirements
     bedrooms: Optional[int] = None
     bathrooms: Optional[float] = None
     living_areas: Optional[int] = None
@@ -49,10 +51,26 @@ class ProjectCreateRequest(BaseModel):
     outdoor_entertainment: Optional[bool] = False
     home_office: Optional[bool] = False
     
-    # Location & Compliance
-    state: Optional[str] = None
+    # Location details
+    lot_dp: Optional[str] = None           # Optional
+    street_address: Optional[str] = None   # Optional
+    state: str                              # Mandatory - Australian state
+    postcode: str                           # Mandatory - Australian postcode
     council: Optional[str] = None
     bal_rating: Optional[str] = None
+    
+    @validator('state')
+    def validate_state(cls, v):
+        if v.upper() not in AUSTRALIAN_STATES:
+            raise ValueError(f'Invalid Australian state. Must be one of: {", ".join(AUSTRALIAN_STATES)}')
+        return v.upper()
+    
+    @validator('postcode')
+    def validate_postcode(cls, v):
+        # Australian postcodes are 4 digits
+        if not v.isdigit() or len(v) != 4:
+            raise ValueError('Invalid Australian postcode. Must be 4 digits.')
+        return v
 
 
 class ProjectUpdateRequest(BaseModel):
@@ -75,9 +93,25 @@ class ProjectUpdateRequest(BaseModel):
     open_plan: Optional[bool] = None
     outdoor_entertainment: Optional[bool] = None
     home_office: Optional[bool] = None
+    lot_dp: Optional[str] = None
+    street_address: Optional[str] = None
     state: Optional[str] = None
+    postcode: Optional[str] = None
     council: Optional[str] = None
     bal_rating: Optional[str] = None
+    
+    @validator('state')
+    def validate_state(cls, v):
+        if v is not None and v.upper() not in AUSTRALIAN_STATES:
+            raise ValueError(f'Invalid Australian state. Must be one of: {", ".join(AUSTRALIAN_STATES)}')
+        return v.upper() if v else v
+    
+    @validator('postcode')
+    def validate_postcode(cls, v):
+        if v is not None:
+            if not v.isdigit() or len(v) != 4:
+                raise ValueError('Invalid Australian postcode. Must be 4 digits.')
+        return v
 
 
 class ProjectResponse(BaseModel):
@@ -102,7 +136,10 @@ class ProjectResponse(BaseModel):
     open_plan: Optional[bool] = None
     outdoor_entertainment: Optional[bool] = None
     home_office: Optional[bool] = None
+    lot_dp: Optional[str] = None
+    street_address: Optional[str] = None
     state: Optional[str] = None
+    postcode: Optional[str] = None
     council: Optional[str] = None
     bal_rating: Optional[str] = None
     created_at: datetime
@@ -131,14 +168,9 @@ async def create_project(
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Create a new project with requirements from questionnaire.
-    Called when user clicks 'Generate Floor Plans'.
-    """
+    """Create a new project."""
     logger.info(f"Creating project for user: {current_user.id}")
-    logger.info(f"Project data: {project_data.dict()}")
     
-    # Get user from database
     db_user = db.query(models.User).filter(
         models.User.azure_ad_id == current_user.id
     ).first()
@@ -154,30 +186,24 @@ async def create_project(
         models.Project.user_id == db_user.id
     ).count()
     
-    tier_limits = {
-        "free": 2,
-        "basic": 10,
-        "professional": 50,
-        "enterprise": -1
-    }
-    
+    tier_limits = {"free": 2, "basic": 10, "professional": 50, "enterprise": -1}
     limit = tier_limits.get(db_user.subscription_tier, 2)
+    
     if limit != -1 and project_count >= limit:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Project limit reached. Your {db_user.subscription_tier} plan allows {limit} projects. Please upgrade to create more."
+            detail=f"Project limit reached. Your {db_user.subscription_tier} plan allows {limit} projects."
         )
     
-    # Calculate land_area if width and depth provided
+    # Calculate land_area if not provided
     land_area = project_data.land_area
     if not land_area and project_data.land_width and project_data.land_depth:
         land_area = project_data.land_width * project_data.land_depth
     
-    # Create project with actual database columns
     db_project = models.Project(
         user_id=db_user.id,
         name=project_data.name,
-        status=models.ProjectStatus.GENERATING,
+        status="generating",
         
         # Land details
         land_width=project_data.land_width,
@@ -201,8 +227,11 @@ async def create_project(
         outdoor_entertainment=project_data.outdoor_entertainment,
         home_office=project_data.home_office,
         
-        # Location & Compliance
+        # Location details
+        lot_dp=project_data.lot_dp,
+        street_address=project_data.street_address,
         state=project_data.state,
+        postcode=project_data.postcode,
         council=project_data.council,
         bal_rating=project_data.bal_rating,
     )
@@ -211,8 +240,7 @@ async def create_project(
     db.commit()
     db.refresh(db_project)
     
-    logger.info(f"Created project with ID: {db_project.id}")
-    
+    logger.info(f"Created project ID: {db_project.id}")
     return db_project
 
 
@@ -226,38 +254,23 @@ async def list_projects(
     db: Session = Depends(get_db)
 ):
     """Get all projects for the current user."""
-    # Get user from database
     db_user = db.query(models.User).filter(
         models.User.azure_ad_id == current_user.id
     ).first()
     
     if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
+        raise HTTPException(status_code=404, detail="User not found")
     
-    # Build query
-    query = db.query(models.Project).filter(
-        models.Project.user_id == db_user.id
-    )
+    query = db.query(models.Project).filter(models.Project.user_id == db_user.id)
     
     if status_filter:
         query = query.filter(models.Project.status == status_filter)
     
-    # Get total count
     total = query.count()
-    
-    # Apply pagination
     offset = (page - 1) * page_size
     projects = query.order_by(models.Project.created_at.desc()).offset(offset).limit(page_size).all()
     
-    return ProjectListResponse(
-        projects=projects,
-        total=total,
-        page=page,
-        page_size=page_size
-    )
+    return ProjectListResponse(projects=projects, total=total, page=page, page_size=page_size)
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -266,29 +279,18 @@ async def get_project(
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get a specific project by ID."""
-    # Get user from database
-    db_user = db.query(models.User).filter(
-        models.User.azure_ad_id == current_user.id
-    ).first()
-    
+    """Get a specific project."""
+    db_user = db.query(models.User).filter(models.User.azure_ad_id == current_user.id).first()
     if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
+        raise HTTPException(status_code=404, detail="User not found")
     
-    # Get project
     project = db.query(models.Project).filter(
         models.Project.id == project_id,
         models.Project.user_id == db_user.id
     ).first()
     
     if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
+        raise HTTPException(status_code=404, detail="Project not found")
     
     return project
 
@@ -301,30 +303,18 @@ async def update_project(
     db: Session = Depends(get_db)
 ):
     """Update a project."""
-    # Get user from database
-    db_user = db.query(models.User).filter(
-        models.User.azure_ad_id == current_user.id
-    ).first()
-    
+    db_user = db.query(models.User).filter(models.User.azure_ad_id == current_user.id).first()
     if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
+        raise HTTPException(status_code=404, detail="User not found")
     
-    # Get project
     project = db.query(models.Project).filter(
         models.Project.id == project_id,
         models.Project.user_id == db_user.id
     ).first()
     
     if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
+        raise HTTPException(status_code=404, detail="Project not found")
     
-    # Update fields
     update_dict = update_data.dict(exclude_unset=True)
     for field, value in update_dict.items():
         if hasattr(project, field):
@@ -332,7 +322,6 @@ async def update_project(
     
     db.commit()
     db.refresh(project)
-    
     return project
 
 
@@ -343,32 +332,20 @@ async def delete_project(
     db: Session = Depends(get_db)
 ):
     """Delete a project."""
-    # Get user from database
-    db_user = db.query(models.User).filter(
-        models.User.azure_ad_id == current_user.id
-    ).first()
-    
+    db_user = db.query(models.User).filter(models.User.azure_ad_id == current_user.id).first()
     if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
+        raise HTTPException(status_code=404, detail="User not found")
     
-    # Get project
     project = db.query(models.Project).filter(
         models.Project.id == project_id,
         models.Project.user_id == db_user.id
     ).first()
     
     if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
+        raise HTTPException(status_code=404, detail="Project not found")
     
     db.delete(project)
     db.commit()
-    
     return None
 
 
@@ -378,39 +355,22 @@ async def generate_floor_plans(
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Trigger floor plan generation for a project.
-    This would typically queue a background job.
-    """
-    # Get user from database
-    db_user = db.query(models.User).filter(
-        models.User.azure_ad_id == current_user.id
-    ).first()
-    
+    """Trigger floor plan generation."""
+    db_user = db.query(models.User).filter(models.User.azure_ad_id == current_user.id).first()
     if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
+        raise HTTPException(status_code=404, detail="User not found")
     
-    # Get project
     project = db.query(models.Project).filter(
         models.Project.id == project_id,
         models.Project.user_id == db_user.id
     ).first()
     
     if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
+        raise HTTPException(status_code=404, detail="Project not found")
     
-    # Update status to generating
-    project.status = models.ProjectStatus.GENERATING
+    project.status = "generating"
     db.commit()
     db.refresh(project)
     
-    # TODO: Queue background job to generate floor plans using AI
     logger.info(f"Floor plan generation triggered for project: {project_id}")
-    
     return project

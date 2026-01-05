@@ -1,20 +1,8 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
-import enum
 
-class ProjectStatus(str, enum.Enum):
-    DRAFT = "draft"
-    QUESTIONNAIRE = "questionnaire"
-    GENERATING = "generating"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-class PlanType(str, enum.Enum):
-    BASIC = "basic"
-    STANDARD = "standard"
-    PREMIUM = "premium"
 
 class User(Base):
     __tablename__ = "users"
@@ -35,13 +23,14 @@ class User(Base):
     projects = relationship("Project", back_populates="user", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="user", cascade="all, delete-orphan")
 
+
 class Project(Base):
     __tablename__ = "projects"
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     name = Column(String(255), nullable=False)
-    status = Column(SQLEnum(ProjectStatus), default=ProjectStatus.DRAFT)
+    status = Column(String(13), default="draft")
     
     # Land details
     land_width = Column(Float)
@@ -64,12 +53,11 @@ class Project(Base):
     outdoor_entertainment = Column(Boolean, default=False)
     home_office = Column(Boolean, default=False)
     
-    # Budget
-    budget_min = Column(Integer)
-    budget_max = Column(Integer)
-    
-    # Location
-    state = Column(String(50))
+    # Location details
+    lot_dp = Column(String(100))          # Optional - e.g., "1142/DP214682"
+    street_address = Column(String(500))   # Optional - street address
+    state = Column(String(50))             # Mandatory - Australian state
+    postcode = Column(String(10))          # Mandatory - Australian postcode
     council = Column(String(255))
     bal_rating = Column(String(20))
     
@@ -84,6 +72,7 @@ class Project(Base):
     user = relationship("User", back_populates="projects")
     plans = relationship("FloorPlan", back_populates="project", cascade="all, delete-orphan")
 
+
 class FloorPlan(Base):
     __tablename__ = "floor_plans"
     
@@ -93,7 +82,7 @@ class FloorPlan(Base):
     variant_number = Column(Integer)
     total_area = Column(Float)
     living_area = Column(Float)
-    plan_type = Column(SQLEnum(PlanType))
+    plan_type = Column(String(50))
     
     # JSON data stored as text
     layout_data = Column(Text)
@@ -118,6 +107,7 @@ class FloorPlan(Base):
     # Relationships
     project = relationship("Project", back_populates="plans")
 
+
 class Payment(Base):
     __tablename__ = "payments"
     
@@ -139,6 +129,7 @@ class Payment(Base):
     
     # Relationships
     user = relationship("User", back_populates="payments")
+
 
 class ComplianceRule(Base):
     __tablename__ = "compliance_rules"
