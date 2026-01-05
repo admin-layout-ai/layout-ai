@@ -6,7 +6,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  User, 
+  User as UserIcon, 
   Mail, 
   Phone, 
   Building2, 
@@ -23,24 +23,7 @@ import {
   Calendar
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import api from '@/lib/api';
-
-interface UserProfile {
-  id: number;
-  azure_ad_id: string;
-  email: string;
-  full_name: string;
-  company_name: string | null;
-  phone: string | null;
-  address: string | null;
-  is_active: boolean;
-  is_builder: boolean;
-  abn_acn: string | null;
-  builder_logo_url: string | null;
-  subscription_tier: string;
-  created_at?: string;
-  updated_at?: string;
-}
+import api, { User } from '@/lib/api';
 
 interface AddressSuggestion {
   place_id: string;
@@ -52,7 +35,7 @@ export default function ProfilePage() {
   const { user: authUser, isLoading: authLoading, isAuthenticated } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profile, setProfile] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
@@ -389,7 +372,7 @@ export default function ProfilePage() {
                 {builderLogoUrl && isBuilder ? (
                   <img src={builderLogoUrl} alt="Logo" className="w-full h-full object-cover" />
                 ) : (
-                  <User className="w-8 h-8 text-white" />
+                  <UserIcon className="w-8 h-8 text-white" />
                 )}
               </div>
               <div>
@@ -409,7 +392,7 @@ export default function ProfilePage() {
             {/* Full Name */}
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-2">
-                <User className="w-4 h-4 inline mr-2" />
+                <UserIcon className="w-4 h-4 inline mr-2" />
                 Full Name
               </label>
               <input
