@@ -1,17 +1,17 @@
 // frontend/app/dashboard/projects/new/page.tsx
-// New project creation wizard - 4 steps with AI generation page
+// New project creation wizard - 3 steps, then redirects to project detail page
 
 'use client';
 
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ArrowRight, Upload, Home, Check, Info, X, FileText, Cpu, Layers, Wand2, Clock, Shield } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Upload, Home, Check, Info, X, FileText } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import Questionnaire from '@/components/Questionnaire';
 import api from '@/lib/api';
 import { AUSTRALIAN_STATES, lookupCouncil, isValidAustralianPostcode } from '@/lib/australianCouncils';
 
-type Step = 'details' | 'upload' | 'questionnaire' | 'generate';
+type Step = 'details' | 'upload' | 'questionnaire';
 
 interface ProjectData {
   name: string;
@@ -38,11 +38,6 @@ interface QuestionnaireData {
   home_office: boolean;
 }
 
-interface CreatedProject {
-  id: number;
-  name: string;
-}
-
 export default function NewProjectPage() {
   const router = useRouter();
   const { user } = useAuth();
@@ -50,10 +45,8 @@ export default function NewProjectPage() {
   
   const [currentStep, setCurrentStep] = useState<Step>('details');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [postcodeError, setPostcodeError] = useState<string | null>(null);
-  const [createdProject, setCreatedProject] = useState<CreatedProject | null>(null);
   
   const [projectData, setProjectData] = useState<ProjectData>({
     name: '',
@@ -74,7 +67,6 @@ export default function NewProjectPage() {
     { id: 'details', label: 'Details' },
     { id: 'upload', label: 'Files' },
     { id: 'questionnaire', label: 'Requirements' },
-    { id: 'generate', label: 'Generate' },
   ];
 
   const currentStepIndex = steps.findIndex(s => s.id === currentStep);
@@ -195,31 +187,14 @@ export default function NewProjectPage() {
         home_office: qData.home_office,
       });
       
-      setCreatedProject({ id: project.id, name: project.name });
-      setCurrentStep('generate');
+      // Redirect to project detail page
+      router.push(`/dashboard/projects/${project.id}`);
       
     } catch (err) {
       console.error('Error creating project:', err);
       setError(err instanceof Error ? err.message : 'Failed to save project. Please try again.');
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  // Generate floor plans (Step 4)
-  const handleGenerateFloorPlans = async () => {
-    if (!createdProject) return;
-    
-    setIsGenerating(true);
-    setError(null);
-    
-    try {
-      await api.generateFloorPlans(createdProject.id);
-      router.push(`/dashboard/projects/${createdProject.id}?generating=true`);
-    } catch (err) {
-      console.error('Error generating floor plans:', err);
-      setError(err instanceof Error ? err.message : 'Failed to start generation. Please try again.');
-      setIsGenerating(false);
     }
   };
 
@@ -507,113 +482,6 @@ export default function NewProjectPage() {
               isSubmitting={isSubmitting}
               submitButtonText="Save Requirements"
             />
-          </div>
-        )}
-
-        {/* Step 4: AI Generation Page - Clean, consistent design */}
-        {currentStep === 'generate' && createdProject && (
-          <div className="space-y-6">
-            {/* Success Message */}
-            <div className="bg-white/5 rounded-xl p-6 border border-white/10">
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Check className="w-6 h-6 text-green-400" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-semibold text-white">Requirements Saved Successfully</h2>
-                  <p className="text-gray-400 mt-1">Project "{createdProject.name}" is ready for floor plan generation</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Generate Floor Plans Card */}
-            <div className="bg-white/5 rounded-xl p-6 border border-white/10">
-              <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-                <Layers className="w-5 h-5 text-blue-400" />
-                Generate AI Floor Plans
-              </h3>
-
-              {/* Features */}
-              <div className="grid md:grid-cols-3 gap-4 mb-6">
-                <div className="bg-white/5 rounded-lg p-4">
-                  <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center mb-3">
-                    <Cpu className="w-5 h-5 text-blue-400" />
-                  </div>
-                  <h4 className="text-white font-medium mb-1">AI-Powered Design</h4>
-                  <p className="text-gray-400 text-sm">Advanced algorithms optimize your floor plan layout</p>
-                </div>
-                <div className="bg-white/5 rounded-lg p-4">
-                  <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center mb-3">
-                    <Layers className="w-5 h-5 text-blue-400" />
-                  </div>
-                  <h4 className="text-white font-medium mb-1">3 Unique Variants</h4>
-                  <p className="text-gray-400 text-sm">Choose from three different layout options</p>
-                </div>
-                <div className="bg-white/5 rounded-lg p-4">
-                  <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center mb-3">
-                    <Shield className="w-5 h-5 text-blue-400" />
-                  </div>
-                  <h4 className="text-white font-medium mb-1">NCC Compliant</h4>
-                  <p className="text-gray-400 text-sm">Meets Australian building code requirements</p>
-                </div>
-              </div>
-
-              {/* What's Included */}
-              <div className="bg-white/5 rounded-lg p-4 mb-6">
-                <h4 className="text-white font-medium mb-3">What's Included</h4>
-                <div className="grid md:grid-cols-2 gap-2">
-                  <div className="flex items-center gap-2 text-gray-300 text-sm">
-                    <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
-                    <span>Detailed room dimensions</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-gray-300 text-sm">
-                    <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
-                    <span>Optimized traffic flow</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-gray-300 text-sm">
-                    <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
-                    <span>PDF export ready</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-gray-300 text-sm">
-                    <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
-                    <span>Council compliance notes</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Generation Time Note */}
-              <div className="flex items-center gap-2 text-gray-400 text-sm mb-6">
-                <Clock className="w-4 h-4" />
-                <span>Generation typically takes 2-5 minutes</span>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-3">
-                <button 
-                  onClick={() => router.push('/dashboard')}
-                  className="flex-1 bg-white/10 text-white px-6 py-3 rounded-lg hover:bg-white/20 transition font-medium"
-                >
-                  Generate Later
-                </button>
-                <button 
-                  onClick={handleGenerateFloorPlans}
-                  disabled={isGenerating}
-                  className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isGenerating ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Starting Generation...
-                    </>
-                  ) : (
-                    <>
-                      <Wand2 className="w-5 h-5" />
-                      Generate Floor Plans
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
           </div>
         )}
       </div>
