@@ -6,6 +6,19 @@
       "allowedRoles": ["anonymous"]
     },
     {
+      "route": "/dashboard/projects/new",
+      "allowedRoles": ["authenticated", "anonymous"]
+    },
+    {
+      "route": "/dashboard/projects/new/*",
+      "allowedRoles": ["authenticated", "anonymous"]
+    },
+    {
+      "route": "/dashboard/projects/*",
+      "rewrite": "/dashboard/projects/placeholder/index.html",
+      "allowedRoles": ["authenticated", "anonymous"]
+    },
+    {
       "route": "/dashboard/*",
       "allowedRoles": ["authenticated", "anonymous"]
     },
@@ -31,10 +44,6 @@
     "401": {
       "redirect": "/auth/signin",
       "statusCode": 302
-    },
-    "404": {
-      "rewrite": "/index.html",
-      "statusCode": 200
     }
   },
   "globalHeaders": {
