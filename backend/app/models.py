@@ -19,7 +19,6 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    # Relationships
     projects = relationship("Project", back_populates="user", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="user", cascade="all, delete-orphan")
 
@@ -40,7 +39,7 @@ class Project(Base):
     orientation = Column(String(50))
     street_frontage = Column(String(50))
     
-    # Project requirements
+    # Building requirements
     bedrooms = Column(Integer)
     bathrooms = Column(Float)
     living_areas = Column(Integer)
@@ -54,10 +53,11 @@ class Project(Base):
     home_office = Column(Boolean, default=False)
     
     # Location details
-    lot_dp = Column(String(100))          # Optional - e.g., "1142/DP214682"
-    street_address = Column(String(500))   # Optional - street address
-    state = Column(String(50))             # Mandatory - Australian state
-    postcode = Column(String(10))          # Mandatory - Australian postcode
+    lot_dp = Column(String(100))
+    street_address = Column(String(200))
+    suburb = Column(String(100))
+    state = Column(String(50))
+    postcode = Column(String(10))
     council = Column(String(255))
     bal_rating = Column(String(20))
     
@@ -68,7 +68,6 @@ class Project(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    # Relationships
     user = relationship("User", back_populates="projects")
     plans = relationship("FloorPlan", back_populates="project", cascade="all, delete-orphan")
 
@@ -84,27 +83,22 @@ class FloorPlan(Base):
     living_area = Column(Float)
     plan_type = Column(String(50))
     
-    # JSON data stored as text
     layout_data = Column(Text)
     compliance_data = Column(Text)
     
-    # File URLs
     pdf_url = Column(Text)
     dxf_url = Column(Text)
     preview_image_url = Column(Text)
     model_3d_url = Column(Text)
     
-    # Compliance
     is_compliant = Column(Boolean, default=False)
     compliance_notes = Column(Text)
     
-    # Metadata
     generation_time_seconds = Column(Float)
     ai_model_version = Column(String(50))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    # Relationships
     project = relationship("Project", back_populates="plans")
 
 
@@ -127,7 +121,6 @@ class Payment(Base):
     description = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    # Relationships
     user = relationship("User", back_populates="payments")
 
 

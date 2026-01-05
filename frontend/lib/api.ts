@@ -1,5 +1,5 @@
 // frontend/lib/api.ts
-// API client for Layout AI backend with Azure Blob Storage upload
+// API client for Layout AI backend
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -42,6 +42,7 @@ export interface Project {
   home_office?: boolean;
   lot_dp?: string;
   street_address?: string;
+  suburb?: string;
   state?: string;
   postcode?: string;
   council?: string;
@@ -70,8 +71,9 @@ export interface ProjectCreateData {
   home_office?: boolean;
   lot_dp?: string;
   street_address?: string;
-  state: string;
-  postcode: string;
+  suburb: string;      // Mandatory
+  state: string;       // Mandatory
+  postcode: string;    // Mandatory
   council?: string;
   bal_rating?: string;
 }
@@ -176,10 +178,6 @@ class ApiClient {
   // File Upload
   // ===========================================================================
 
-  /**
-   * Upload contour file to Azure Blob Storage
-   * Creates folder structure: userName/projectName/Contour/filename
-   */
   async uploadContourFile(file: File, userName: string, projectName: string): Promise<string> {
     const token = this.getAuthToken();
     
@@ -187,7 +185,6 @@ class ApiClient {
       throw new Error('Authentication required');
     }
 
-    // Create FormData with file and metadata
     const formData = new FormData();
     formData.append('file', file);
     formData.append('user_name', userName);
@@ -201,7 +198,6 @@ class ApiClient {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
-        // Don't set Content-Type - browser will set it with boundary for FormData
       },
       body: formData,
     });

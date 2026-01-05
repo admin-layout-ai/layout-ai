@@ -1,5 +1,5 @@
 // frontend/components/Questionnaire.tsx
-// Questionnaire with review showing council and contour file
+// Questionnaire with customizable submit button
 
 'use client';
 
@@ -24,6 +24,7 @@ interface ProjectDetails {
   land_depth: number;
   lot_dp?: string;
   street_address?: string;
+  suburb: string;
   state: string;
   postcode: string;
   council?: string;
@@ -35,9 +36,16 @@ interface QuestionnaireProps {
   onCancel?: () => void;
   projectDetails?: ProjectDetails;
   isSubmitting?: boolean;
+  submitButtonText?: string;
 }
 
-export default function Questionnaire({ onComplete, onCancel, projectDetails, isSubmitting = false }: QuestionnaireProps) {
+export default function Questionnaire({ 
+  onComplete, 
+  onCancel, 
+  projectDetails, 
+  isSubmitting = false,
+  submitButtonText = "Generate Floor Plans"
+}: QuestionnaireProps) {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState<QuestionnaireData>({
     bedrooms: 3,
@@ -245,7 +253,7 @@ export default function Questionnaire({ onComplete, onCancel, projectDetails, is
         <div className="space-y-6">
           <div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Review Your Requirements</h2>
-            <p className="text-gray-600">Confirm your selections before generating floor plans</p>
+            <p className="text-gray-600">Confirm your selections before saving</p>
           </div>
           
           {/* Project Details */}
@@ -270,13 +278,17 @@ export default function Questionnaire({ onComplete, onCancel, projectDetails, is
                   </div>
                 )}
                 <div>
+                  <span className="text-gray-500">Suburb</span>
+                  <p className="font-medium text-gray-900">{projectDetails.suburb}</p>
+                </div>
+                <div>
                   <span className="text-gray-500">Location</span>
                   <p className="font-medium text-gray-900">{projectDetails.state} {projectDetails.postcode}</p>
                 </div>
                 {projectDetails.street_address && (
                   <div className="col-span-2">
                     <span className="text-gray-500 flex items-center gap-1"><MapPin className="w-3 h-3" /> Address</span>
-                    <p className="font-medium text-gray-900">{projectDetails.street_address}</p>
+                    <p className="font-medium text-gray-900">{projectDetails.street_address}, {projectDetails.suburb}</p>
                   </div>
                 )}
                 {projectDetails.council && (
@@ -342,9 +354,9 @@ export default function Questionnaire({ onComplete, onCancel, projectDetails, is
             </button>
             <button type="button" onClick={handleSubmit} disabled={isSubmitting} className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-medium disabled:opacity-50 flex items-center justify-center gap-2">
               {isSubmitting ? (
-                <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creating...</>
+                <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving...</>
               ) : (
-                'Generate Floor Plans'
+                submitButtonText
               )}
             </button>
           </div>
