@@ -1,6 +1,12 @@
 // frontend/app/dashboard/projects/[id]/page.tsx
 // Project detail page - shows project info and allows generating floor plans
 
+// Required for static export with dynamic routes
+export function generateStaticParams() {
+  // Return empty array - pages will be generated on-demand
+  return [];
+}
+
 'use client';
 
 import { useState, useEffect } from 'react';
