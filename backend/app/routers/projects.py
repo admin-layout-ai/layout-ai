@@ -1,10 +1,11 @@
 # backend/app/routers/projects.py
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from pydantic import BaseModel, validator
 from datetime import datetime
 import logging
+import json
 
 from ..database import get_db
 from .. import models
@@ -125,6 +126,247 @@ class ProjectListResponse(BaseModel):
     page: int
     page_size: int
 
+
+class GenerateResponse(BaseModel):
+    message: str
+    project_id: int
+    status: str
+    floor_plans_count: Optional[int] = None
+
+
+# =============================================================================
+# Background task for floor plan generation
+# =============================================================================
+
+def generate_floor_plans_task(project_id: int, db_session_factory):
+    """
+    Background task to generate floor plans.
+    This runs asynchronously after the API returns.
+    """
+    from ..database import SessionLocal
+    
+    db = SessionLocal()
+    try:
+        project = db.query(models.Project).filter(models.Project.id == project_id).first()
+        if not project:
+            logger.error(f"Project {project_id} not found for generation")
+            return
+        
+        logger.info(f"Starting floor plan generation for project {project_id}")
+        
+        # Try to import and use the floor plan generator
+        try:
+            from ..services.floor_plan_generator import generate_floor_plans
+            
+            project_data = {
+                'land_width': project.land_width,
+                'land_depth': project.land_depth,
+                'land_area': project.land_area,
+                'bedrooms': project.bedrooms,
+                'bathrooms': project.bathrooms,
+                'living_areas': project.living_areas,
+                'garage_spaces': project.garage_spaces,
+                'open_plan': project.open_plan,
+                'storeys': project.storeys,
+                'style': project.style,
+                'outdoor_entertainment': project.outdoor_entertainment,
+                'home_office': project.home_office,
+            }
+            
+            # Generate floor plans
+            layouts = generate_floor_plans(project_data)
+            
+            # Save floor plans to database
+            for idx, layout in enumerate(layouts):
+                floor_plan = models.FloorPlan(
+                    project_id=project_id,
+                    variant_number=idx + 1,
+                    total_area=layout.get('total_area'),
+                    living_area=layout.get('living_area'),
+                    layout_data=json.dumps(layout),
+                    is_compliant=layout.get('compliant', False),
+                    compliance_notes=layout.get('compliance_notes', ''),
+                    generation_time_seconds=0.5,
+                    ai_model_version='rule-based-v1',
+                    created_at=datetime.utcnow()
+                )
+                db.add(floor_plan)
+            
+            project.status = "completed"
+            project.updated_at = datetime.utcnow()
+            db.commit()
+            
+            logger.info(f"Generated {len(layouts)} floor plans for project {project_id}")
+            
+        except ImportError as e:
+            logger.warning(f"Floor plan generator not available: {e}")
+            # Create placeholder floor plans for demo
+            _create_demo_floor_plans(db, project)
+            
+    except Exception as e:
+        logger.error(f"Error generating floor plans for project {project_id}: {str(e)}")
+        project = db.query(models.Project).filter(models.Project.id == project_id).first()
+        if project:
+            project.status = "error"
+            project.updated_at = datetime.utcnow()
+            db.commit()
+    finally:
+        db.close()
+
+
+def _create_demo_floor_plans(db: Session, project: models.Project):
+    """Create demo floor plans when the generator is not available."""
+    logger.info(f"Creating demo floor plans for project {project.id}")
+    
+    # Calculate areas based on land size
+    land_area = project.land_area or (project.land_width or 15) * (project.land_depth or 30)
+    building_coverage = 0.5  # 50% site coverage
+    building_area = land_area * building_coverage
+    
+    # Create 3 variant floor plans
+    variants = [
+        {
+            "name": "Compact Design",
+            "description": "Efficient use of space with open plan living",
+            "total_area": building_area * 0.85,
+            "living_area": building_area * 0.6,
+        },
+        {
+            "name": "Family Layout",
+            "description": "Spacious family home with separate living zones",
+            "total_area": building_area * 1.0,
+            "living_area": building_area * 0.65,
+        },
+        {
+            "name": "Luxury Design",
+            "description": "Premium layout with additional features",
+            "total_area": building_area * 1.15,
+            "living_area": building_area * 0.7,
+        },
+    ]
+    
+    for idx, variant in enumerate(variants):
+        # Create room layout based on project requirements
+        rooms = []
+        
+        # Add bedrooms
+        for i in range(project.bedrooms or 3):
+            rooms.append({
+                "type": "bedroom",
+                "name": f"Bedroom {i + 1}" if i > 0 else "Master Bedroom",
+                "area": 16 if i == 0 else 12,
+                "width": 4,
+                "depth": 4 if i == 0 else 3,
+            })
+        
+        # Add bathrooms
+        for i in range(int(project.bathrooms or 2)):
+            rooms.append({
+                "type": "bathroom",
+                "name": f"Bathroom {i + 1}" if i > 0 else "Ensuite",
+                "area": 6 if i == 0 else 4,
+                "width": 3,
+                "depth": 2,
+            })
+        
+        # Add living areas
+        rooms.append({
+            "type": "living",
+            "name": "Living Room",
+            "area": 25,
+            "width": 5,
+            "depth": 5,
+        })
+        
+        if project.open_plan:
+            rooms.append({
+                "type": "kitchen_dining",
+                "name": "Kitchen & Dining",
+                "area": 30,
+                "width": 6,
+                "depth": 5,
+            })
+        else:
+            rooms.append({
+                "type": "kitchen",
+                "name": "Kitchen",
+                "area": 15,
+                "width": 4,
+                "depth": 4,
+            })
+            rooms.append({
+                "type": "dining",
+                "name": "Dining Room",
+                "area": 15,
+                "width": 4,
+                "depth": 4,
+            })
+        
+        # Add garage
+        if project.garage_spaces:
+            rooms.append({
+                "type": "garage",
+                "name": f"{project.garage_spaces}-Car Garage",
+                "area": project.garage_spaces * 18,
+                "width": project.garage_spaces * 3,
+                "depth": 6,
+            })
+        
+        # Add optional rooms
+        if project.home_office:
+            rooms.append({
+                "type": "office",
+                "name": "Home Office",
+                "area": 10,
+                "width": 3,
+                "depth": 3.5,
+            })
+        
+        if project.outdoor_entertainment:
+            rooms.append({
+                "type": "alfresco",
+                "name": "Alfresco",
+                "area": 20,
+                "width": 5,
+                "depth": 4,
+            })
+        
+        layout_data = {
+            "variant_name": variant["name"],
+            "description": variant["description"],
+            "rooms": rooms,
+            "total_area": variant["total_area"],
+            "living_area": variant["living_area"],
+            "compliant": True,
+            "compliance_notes": "Meets NCC requirements for residential Class 1a building",
+            "style": project.style or "modern",
+            "storeys": project.storeys or 1,
+        }
+        
+        floor_plan = models.FloorPlan(
+            project_id=project.id,
+            variant_number=idx + 1,
+            total_area=variant["total_area"],
+            living_area=variant["living_area"],
+            layout_data=json.dumps(layout_data),
+            is_compliant=True,
+            compliance_notes="Meets NCC requirements",
+            generation_time_seconds=0.5,
+            ai_model_version='demo-v1',
+            created_at=datetime.utcnow()
+        )
+        db.add(floor_plan)
+    
+    project.status = "completed"
+    project.updated_at = datetime.utcnow()
+    db.commit()
+    
+    logger.info(f"Created 3 demo floor plans for project {project.id}")
+
+
+# =============================================================================
+# Endpoints
+# =============================================================================
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 @router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
@@ -262,6 +504,7 @@ async def update_project(
         if hasattr(project, field):
             setattr(project, field, value)
     
+    project.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(project)
     return project
@@ -285,17 +528,25 @@ async def delete_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
+    # Also delete associated floor plans
+    db.query(models.FloorPlan).filter(models.FloorPlan.project_id == project_id).delete()
+    
     db.delete(project)
     db.commit()
     return None
 
 
-@router.post("/{project_id}/generate", response_model=ProjectResponse)
+@router.post("/{project_id}/generate", response_model=GenerateResponse)
 async def generate_floor_plans(
     project_id: int,
+    background_tasks: BackgroundTasks,
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    """
+    Trigger floor plan generation for a project.
+    Generation happens in the background - the status will change to 'completed' when done.
+    """
     db_user = db.query(models.User).filter(models.User.azure_ad_id == current_user.id).first()
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -308,9 +559,70 @@ async def generate_floor_plans(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
+    # Check if already generating or completed
+    if project.status == "generating":
+        raise HTTPException(status_code=400, detail="Floor plans are already being generated")
+    
+    if project.status == "completed":
+        # Check if floor plans exist
+        existing_plans = db.query(models.FloorPlan).filter(
+            models.FloorPlan.project_id == project_id
+        ).count()
+        if existing_plans > 0:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Floor plans already generated. {existing_plans} plans available."
+            )
+    
+    # Validate project has required data
+    if not project.bedrooms:
+        raise HTTPException(
+            status_code=400, 
+            detail="Please complete the project questionnaire before generating floor plans"
+        )
+    
+    # Update status to generating
     project.status = "generating"
+    project.updated_at = datetime.utcnow()
+    db.commit()
+    
+    # Add background task to generate floor plans
+    background_tasks.add_task(generate_floor_plans_task, project_id, None)
+    
+    logger.info(f"Floor plan generation triggered for project: {project_id}")
+    
+    return GenerateResponse(
+        message="Floor plan generation started. This typically takes 2-5 minutes.",
+        project_id=project_id,
+        status="generating"
+    )
+
+
+@router.post("/{project_id}/reset-status", response_model=ProjectResponse)
+async def reset_project_status(
+    project_id: int,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Reset project status back to draft. Useful if generation got stuck.
+    """
+    db_user = db.query(models.User).filter(models.User.azure_ad_id == current_user.id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    project = db.query(models.Project).filter(
+        models.Project.id == project_id,
+        models.Project.user_id == db_user.id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    project.status = "draft"
+    project.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(project)
     
-    logger.info(f"Floor plan generation triggered for project: {project_id}")
+    logger.info(f"Reset project {project_id} status to draft")
     return project

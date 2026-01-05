@@ -29,7 +29,8 @@ import {
   Wand2,
   FileText,
   Shield,
-  Check
+  Check,
+  Cpu
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import api, { Project } from '@/lib/api';
@@ -404,9 +405,9 @@ export default function ProjectsPage() {
           {/* Sidebar - Generate Floor Plans */}
           <div className="space-y-6">
             <div className="bg-white/5 rounded-xl p-6 border border-white/10">
-              <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                <Wand2 className="w-5 h-5 text-blue-400" />
-                AI Floor Plans
+              <h2 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
+                <Layers className="w-5 h-5 text-blue-400" />
+                Generate AI Floor Plans
               </h2>
 
               {project.status === 'completed' ? (
@@ -443,24 +444,56 @@ export default function ProjectsPage() {
                 </div>
               ) : (
                 <div>
-                  <div className="space-y-3 mb-6">
-                    <div className="flex items-center gap-3 text-gray-300 text-sm">
-                      <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                        <Layers className="w-4 h-4 text-blue-400" />
+                  {/* Feature Cards */}
+                  <div className="grid grid-cols-1 gap-3 mb-6">
+                    {/* AI-Powered Design */}
+                    <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                      <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center mb-3">
+                        <Cpu className="w-5 h-5 text-blue-400" />
                       </div>
-                      <span>3 unique floor plan variants</span>
+                      <h4 className="text-white font-medium mb-1">AI-Powered Design</h4>
+                      <p className="text-gray-400 text-xs">Advanced algorithms optimize your floor plan layout</p>
                     </div>
-                    <div className="flex items-center gap-3 text-gray-300 text-sm">
-                      <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                        <Shield className="w-4 h-4 text-blue-400" />
+                    
+                    {/* 3 Unique Variants */}
+                    <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                      <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center mb-3">
+                        <Layers className="w-5 h-5 text-blue-400" />
                       </div>
-                      <span>NCC compliant designs</span>
+                      <h4 className="text-white font-medium mb-1">3 Unique Variants</h4>
+                      <p className="text-gray-400 text-xs">Choose from three different layout options</p>
                     </div>
-                    <div className="flex items-center gap-3 text-gray-300 text-sm">
-                      <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                        <Clock className="w-4 h-4 text-blue-400" />
+                    
+                    {/* NCC Compliant */}
+                    <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                      <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center mb-3">
+                        <Shield className="w-5 h-5 text-blue-400" />
                       </div>
-                      <span>Ready in 2-5 minutes</span>
+                      <h4 className="text-white font-medium mb-1">NCC Compliant</h4>
+                      <p className="text-gray-400 text-xs">Meets Australian building code requirements</p>
+                    </div>
+                  </div>
+
+                  {/* What's Included */}
+                  <div className="bg-white/5 rounded-lg p-4 border border-white/10 mb-6">
+                    <h4 className="text-white font-medium mb-3">What's Included</h4>
+                    <div className="grid grid-cols-1 gap-2">
+                      <div className="flex items-center gap-2 text-sm">
+                        <Check className="w-4 h-4 text-green-400" />
+                        <span className="text-gray-300">Detailed room dimensions</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <Check className="w-4 h-4 text-green-400" />
+                        <span className="text-gray-300">Optimized traffic flow</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <Check className="w-4 h-4 text-green-400" />
+                        <span className="text-gray-300">PDF export ready</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <Check className="w-4 h-4 text-green-400" />
+                        <span className="text-gray-300">Council compliance notes</span>
+                      </div>
                     </div>
                   </div>
 
