@@ -1,298 +1,346 @@
 // frontend/app/dashboard/projects/page.tsx
-// Projects list page - also handles viewing individual project via ?id=xxx
+// Projects list page
 
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Plus, Eye, Trash2, ArrowLeft, FolderOpen, Search, Filter } from 'lucide-react';
+import { 
+  Plus, 
+  Search, 
+  Filter, 
+  MoreVertical, 
+  Eye, 
+  Trash2, 
+  Clock, 
+  CheckCircle, 
+  AlertCircle,
+  Loader2,
+  Home,
+  MapPin,
+  Calendar,
+  ChevronRight
+} from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import ProjectDetail from '@/components/ProjectDetail';
+import api, { Project } from '@/lib/api';
 
-interface Project {
-  id: number;
-  name: string;
-  status: string;
-  land_width?: number;
-  land_depth?: number;
-  bedrooms?: number;
-  bathrooms?: number;
-  created_at: string;
-}
+type ProjectStatus = 'all' | 'draft' | 'generating' | 'completed' | 'error';
 
-// Separate component that uses useSearchParams
-function ProjectsContent() {
+export default function ProjectsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { getAccessToken } = useAuth();
-  
-  // Check if viewing a specific project
-  const projectId = searchParams.get('id');
-  const successMessage = searchParams.get('success');
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   
   const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<ProjectStatus>('all');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Check for success message from project creation
+  const successMessage = searchParams.get('success');
+  const newProjectId = searchParams.get('id');
 
   useEffect(() => {
-    loadProjects();
-  }, []);
-
-  const loadProjects = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const token = await getAccessToken();
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-      
-      const response = await fetch(`${apiUrl}/api/v1/projects/`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setProjects(data);
-      } else {
-        setError('Failed to load projects');
-      }
-    } catch (err) {
-      console.error('Error loading projects:', err);
-      setError('Failed to load projects');
-    } finally {
-      setLoading(false);
+    if (!authLoading && isAuthenticated) {
+      fetchProjects();
     }
-  };
+  }, [authLoading, isAuthenticated]);
 
-  const deleteProject = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this project?')) return;
+  const fetchProjects = async () => {
+    setIsLoading(true);
+    setError(null);
     
     try {
-      const token = await getAccessToken();
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-      
-      const response = await fetch(`${apiUrl}/api/v1/projects/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        }
-      });
-      
-      if (response.ok) {
-        setProjects(projects.filter(p => p.id !== id));
-      } else {
-        alert('Failed to delete project');
-      }
+      const response = await api.getProjects(1, 50);
+      setProjects(response.projects);
+    } catch (err) {
+      console.error('Error fetching projects:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load projects');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteProject = async (projectId: number) => {
+    setIsDeleting(true);
+    try {
+      await api.deleteProject(projectId);
+      setProjects(prev => prev.filter(p => p.id !== projectId));
+      setShowDeleteConfirm(null);
     } catch (err) {
       console.error('Error deleting project:', err);
-      alert('Failed to delete project');
+      setError(err instanceof Error ? err.message : 'Failed to delete project');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusBadge = (status?: string) => {
     switch (status) {
-      case 'completed': return 'bg-green-500/20 text-green-400 border-green-500/30';
-      case 'in_progress': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-      case 'generating': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
-      default: return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      case 'completed':
+        return (
+          <span className="flex items-center gap-1 px-2 py-1 bg-green-500/20 text-green-400 rounded-full text-xs">
+            <CheckCircle className="w-3 h-3" /> Completed
+          </span>
+        );
+      case 'generating':
+        return (
+          <span className="flex items-center gap-1 px-2 py-1 bg-blue-500/20 text-blue-400 rounded-full text-xs">
+            <Loader2 className="w-3 h-3 animate-spin" /> Generating
+          </span>
+        );
+      case 'error':
+        return (
+          <span className="flex items-center gap-1 px-2 py-1 bg-red-500/20 text-red-400 rounded-full text-xs">
+            <AlertCircle className="w-3 h-3" /> Error
+          </span>
+        );
+      case 'draft':
+      default:
+        return (
+          <span className="flex items-center gap-1 px-2 py-1 bg-gray-500/20 text-gray-400 rounded-full text-xs">
+            <Clock className="w-3 h-3" /> Draft
+          </span>
+        );
     }
   };
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'completed': return 'Completed';
-      case 'in_progress': return 'In Progress';
-      case 'generating': return 'Generating';
-      default: return 'Draft';
-    }
-  };
-
-  // Filter projects
   const filteredProjects = projects.filter(project => {
-    const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      project.suburb?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      project.council?.toLowerCase().includes(searchQuery.toLowerCase());
+    
     const matchesStatus = statusFilter === 'all' || project.status === statusFilter;
+    
     return matchesSearch && matchesStatus;
   });
 
-  // If viewing a specific project, show ProjectDetail component
-  if (projectId) {
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-AU', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+  };
+
+  if (authLoading) {
     return (
-      <ProjectDetail 
-        projectId={projectId} 
-        onBack={() => router.push('/dashboard/projects')}
-      />
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+      </div>
     );
   }
 
-  // Show projects list
   return (
-    <div className="p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
+      {/* Header */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white">My Projects</h1>
+            <p className="text-gray-400 mt-1">Manage your floor plan projects</p>
+          </div>
+          <button
+            onClick={() => router.push('/dashboard/projects/new')}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+          >
+            <Plus className="w-5 h-5" />
+            New Project
+          </button>
+        </div>
+      </div>
+
       {/* Success Message */}
-      {successMessage && (
-        <div className="mb-6 bg-green-500/20 border border-green-500/30 rounded-lg p-4 text-green-400">
-          {successMessage === 'created' && '✓ Project created successfully!'}
-          {successMessage === 'deleted' && '✓ Project deleted successfully!'}
+      {successMessage === 'created' && (
+        <div className="mb-6 bg-green-500/20 border border-green-500/30 rounded-lg p-4 text-green-400 flex items-center gap-3">
+          <CheckCircle className="w-5 h-5" />
+          <span>Project created successfully!</span>
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">My Projects</h1>
-          <p className="text-gray-400 text-sm mt-1">
-            {projects.length} project{projects.length !== 1 ? 's' : ''} total
-          </p>
+      {/* Error Message */}
+      {error && (
+        <div className="mb-6 bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5" />
+          <span>{error}</span>
         </div>
-        <button
-          onClick={() => router.push('/portal')}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 transition font-medium"
-        >
-          <Plus className="w-5 h-5" />
-          New Project
-        </button>
-      </div>
+      )}
 
       {/* Search and Filter */}
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+      <div className="mb-6 flex flex-col sm:flex-row gap-4">
+        {/* Search */}
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
             placeholder="Search projects..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
           />
         </div>
+
+        {/* Status Filter */}
         <div className="relative">
-          <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="pl-10 pr-8 py-2 bg-white/5 border border-white/10 rounded-lg text-white appearance-none focus:outline-none focus:border-blue-500 cursor-pointer"
+            onChange={(e) => setStatusFilter(e.target.value as ProjectStatus)}
+            className="pl-10 pr-8 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:border-blue-500 focus:outline-none appearance-none cursor-pointer"
           >
-            <option value="all">All Status</option>
-            <option value="draft">Draft</option>
-            <option value="in_progress">In Progress</option>
-            <option value="generating">Generating</option>
-            <option value="completed">Completed</option>
+            <option value="all" className="bg-slate-800">All Status</option>
+            <option value="draft" className="bg-slate-800">Draft</option>
+            <option value="generating" className="bg-slate-800">Generating</option>
+            <option value="completed" className="bg-slate-800">Completed</option>
+            <option value="error" className="bg-slate-800">Error</option>
           </select>
         </div>
       </div>
 
-      {/* Loading State */}
-      {loading && (
+      {/* Projects List */}
+      {isLoading ? (
         <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+          <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
         </div>
-      )}
-
-      {/* Error State */}
-      {error && (
-        <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400 mb-6">
-          {error}
-          <button onClick={loadProjects} className="ml-4 underline hover:no-underline">
-            Try again
-          </button>
-        </div>
-      )}
-
-      {/* Empty State */}
-      {!loading && !error && filteredProjects.length === 0 && (
-        <div className="text-center py-12">
-          <FolderOpen className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-white mb-2">
-            {searchTerm || statusFilter !== 'all' ? 'No matching projects' : 'No projects yet'}
+      ) : filteredProjects.length === 0 ? (
+        <div className="bg-white/5 rounded-xl p-12 text-center border border-white/10">
+          <Home className="w-12 h-12 text-gray-500 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-white mb-2">
+            {projects.length === 0 ? 'No projects yet' : 'No matching projects'}
           </h3>
           <p className="text-gray-400 mb-6">
-            {searchTerm || statusFilter !== 'all' 
-              ? 'Try adjusting your search or filter' 
-              : 'Create your first floor plan project to get started'}
+            {projects.length === 0 
+              ? 'Create your first project to get started with AI floor plan generation.'
+              : 'Try adjusting your search or filter criteria.'}
           </p>
-          {!searchTerm && statusFilter === 'all' && (
+          {projects.length === 0 && (
             <button
-              onClick={() => router.push('/portal')}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 inline-flex items-center gap-2 transition"
+              onClick={() => router.push('/dashboard/projects/new')}
+              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
             >
-              <Plus className="w-5 h-5" />
-              Create Project
+              Create Your First Project
             </button>
           )}
         </div>
-      )}
-
-      {/* Projects Grid */}
-      {!loading && !error && filteredProjects.length > 0 && (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+      ) : (
+        <div className="grid gap-4">
           {filteredProjects.map((project) => (
             <div
               key={project.id}
-              className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 overflow-hidden hover:border-white/20 transition group"
+              className="bg-white/5 rounded-xl p-5 border border-white/10 hover:border-white/20 transition cursor-pointer group"
+              onClick={() => router.push(`/dashboard/projects/${project.id}`)}
             >
-              {/* Card Header */}
-              <div className="p-5">
-                <div className="flex items-start justify-between mb-3">
-                  <h3 className="font-semibold text-white text-lg truncate flex-1 mr-2">
-                    {project.name}
-                  </h3>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(project.status)}`}>
-                    {getStatusLabel(project.status)}
-                  </span>
-                </div>
-                
-                {/* Project Details */}
-                <div className="space-y-2 text-sm text-gray-400">
-                  {project.land_width && project.land_depth && (
-                    <p>Land: {project.land_width}m × {project.land_depth}m</p>
-                  )}
-                  <div className="flex gap-4">
-                    {project.bedrooms && <span>{project.bedrooms} bed</span>}
-                    {project.bathrooms && <span>{project.bathrooms} bath</span>}
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className="text-lg font-semibold text-white group-hover:text-blue-400 transition">
+                      {project.name}
+                    </h3>
+                    {getStatusBadge(project.status)}
                   </div>
-                  <p className="text-gray-500">
-                    Created {new Date(project.created_at).toLocaleDateString('en-AU')}
-                  </p>
-                </div>
-              </div>
+                  
+                  <div className="flex flex-wrap items-center gap-4 text-sm text-gray-400">
+                    {project.suburb && (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-4 h-4" />
+                        {project.suburb}, {project.state} {project.postcode}
+                      </span>
+                    )}
+                    {project.council && (
+                      <span className="text-gray-500">• {project.council}</span>
+                    )}
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-4 h-4" />
+                      {formatDate(project.created_at)}
+                    </span>
+                  </div>
 
-              {/* Card Actions */}
-              <div className="bg-white/5 px-5 py-3 flex gap-2 border-t border-white/10">
-                <button 
-                  onClick={() => router.push(`/dashboard/projects?id=${project.id}`)} 
-                  className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 text-sm flex items-center justify-center gap-2 transition"
-                >
-                  <Eye className="w-4 h-4" />
-                  View
-                </button>
-                <button 
-                  onClick={() => deleteProject(project.id)}
-                  className="p-2 border border-red-500/50 text-red-400 rounded-lg hover:bg-red-500/20 transition"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                  {/* Project Details */}
+                  <div className="mt-3 flex flex-wrap gap-3 text-xs text-gray-500">
+                    {project.land_area && (
+                      <span className="bg-white/5 px-2 py-1 rounded">
+                        {project.land_area.toFixed(0)} m² land
+                      </span>
+                    )}
+                    {project.bedrooms && (
+                      <span className="bg-white/5 px-2 py-1 rounded">
+                        {project.bedrooms} bed
+                      </span>
+                    )}
+                    {project.bathrooms && (
+                      <span className="bg-white/5 px-2 py-1 rounded">
+                        {project.bathrooms} bath
+                      </span>
+                    )}
+                    {project.storeys && (
+                      <span className="bg-white/5 px-2 py-1 rounded">
+                        {project.storeys} storey
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => router.push(`/dashboard/projects/${project.id}`)}
+                    className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition"
+                    title="View project"
+                  >
+                    <Eye className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm(project.id)}
+                    className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition"
+                    title="Delete project"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                  <ChevronRight className="w-5 h-5 text-gray-600 group-hover:text-gray-400" />
+                </div>
               </div>
             </div>
           ))}
         </div>
       )}
-    </div>
-  );
-}
 
-// Main page component with Suspense wrapper
-export default function ProjectsPage() {
-  return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-      </div>
-    }>
-      <ProjectsContent />
-    </Suspense>
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full border border-white/10">
+            <h3 className="text-lg font-semibold text-white mb-2">Delete Project?</h3>
+            <p className="text-gray-400 mb-6">
+              Are you sure you want to delete this project? This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(null)}
+                className="flex-1 px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition"
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteProject(showDeleteConfirm)}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center justify-center gap-2"
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

@@ -590,7 +590,7 @@ export default function NewProjectPage() {
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row gap-3">
                 <button 
-                  onClick={() => router.push('/dashboard/projects')}
+                  onClick={() => router.push('/dashboard')}
                   className="flex-1 bg-white/10 text-white px-6 py-3 rounded-lg hover:bg-white/20 transition font-medium"
                 >
                   Generate Later
