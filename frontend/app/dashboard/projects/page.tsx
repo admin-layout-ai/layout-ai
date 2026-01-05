@@ -42,12 +42,21 @@ export default function ProjectsPage() {
   const pathname = usePathname();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   
-  // Determine if we're viewing a specific project or the list
+  // Determine if we're viewing a specific project, plans, or the list
   // /dashboard/projects -> list view
   // /dashboard/projects/1 -> detail view for project 1
+  // /dashboard/projects/1/plans -> plans view for project 1
   const pathSegments = pathname?.split('/').filter(Boolean) || [];
-  const projectIdFromUrl = pathSegments.length > 2 ? pathSegments[pathSegments.length - 1] : null;
-  const isDetailView = projectIdFromUrl && !isNaN(parseInt(projectIdFromUrl));
+  const lastSegment = pathSegments[pathSegments.length - 1] || '';
+  const isPlansView = lastSegment === 'plans';
+  
+  // Get project ID - either second to last (if /plans) or last segment
+  const projectIdSegment = isPlansView 
+    ? pathSegments[pathSegments.length - 2] 
+    : lastSegment;
+  const projectIdFromUrl = projectIdSegment && !isNaN(parseInt(projectIdSegment)) ? projectIdSegment : null;
+  const isDetailView = projectIdFromUrl !== null && !isPlansView;
+  const isProjectView = projectIdFromUrl !== null; // Either detail or plans view
   
   // List view state
   const [projects, setProjects] = useState<Project[]>([]);
@@ -61,16 +70,17 @@ export default function ProjectsPage() {
   // Detail view state
   const [project, setProject] = useState<Project | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [floorPlans, setFloorPlans] = useState<any[]>([]);
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      if (isDetailView && projectIdFromUrl) {
+      if (isProjectView && projectIdFromUrl) {
         fetchProject(parseInt(projectIdFromUrl));
       } else {
         fetchProjects();
       }
     }
-  }, [authLoading, isAuthenticated, isDetailView, projectIdFromUrl]);
+  }, [authLoading, isAuthenticated, isProjectView, projectIdFromUrl]);
 
   const fetchProjects = async () => {
     setIsLoading(true);
@@ -94,6 +104,17 @@ export default function ProjectsPage() {
     try {
       const data = await api.getProject(id);
       setProject(data);
+      
+      // If project is completed, fetch floor plans
+      if (data.status === 'completed') {
+        try {
+          const plans = await api.getFloorPlans(id);
+          setFloorPlans(plans);
+        } catch (planErr) {
+          console.error('Error fetching floor plans:', planErr);
+          // Don't set error - floor plans are optional
+        }
+      }
     } catch (err) {
       console.error('Error fetching project:', err);
       setError(err instanceof Error ? err.message : 'Failed to load project');
@@ -145,7 +166,7 @@ export default function ProjectsPage() {
       case 'completed':
         return (
           <span className={`flex items-center ${sizeClasses} bg-green-500/20 text-green-400 rounded-full font-medium`}>
-            <CheckCircle className={iconSize} /> Completed
+            <CheckCircle className={iconSize} /> Generated
           </span>
         );
       case 'generating':
@@ -192,6 +213,161 @@ export default function ProjectsPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+      </div>
+    );
+  }
+
+  // ==================== PLANS VIEW ====================
+  if (isPlansView) {
+    if (error || !project) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
+          <button 
+            onClick={() => router.push('/dashboard')}
+            className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition"
+          >
+            <ArrowLeft className="w-5 h-5" /> Back to Dashboard
+          </button>
+          
+          <div className="bg-red-500/20 border border-red-500/30 rounded-xl p-6 text-center">
+            <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-white mb-2">Project Not Found</h2>
+            <p className="text-gray-400 mb-4">{error || 'The project you\'re looking for doesn\'t exist.'}</p>
+            <button
+              onClick={() => router.push('/dashboard')}
+              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
+            >
+              Go to Dashboard
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
+        {/* Header */}
+        <div className="mb-6">
+          <button 
+            onClick={() => router.push(`/dashboard/projects/${project.id}`)}
+            className="flex items-center gap-2 text-gray-400 hover:text-white mb-4 transition"
+          >
+            <ArrowLeft className="w-5 h-5" /> Back to Project
+          </button>
+          
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <h1 className="text-2xl font-bold text-white">{project.name} - Floor Plans</h1>
+                {getStatusBadge(project.status, 'md')}
+              </div>
+              <p className="text-gray-400 flex items-center gap-2">
+                <MapPin className="w-4 h-4" />
+                {project.suburb}, {project.state} {project.postcode}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Floor Plans Grid */}
+        {floorPlans.length === 0 ? (
+          <div className="bg-white/5 rounded-xl p-12 text-center border border-white/10">
+            <Layers className="w-12 h-12 text-gray-500 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-white mb-2">No Floor Plans Yet</h3>
+            <p className="text-gray-400 mb-6">
+              Floor plans are being generated or haven't been created yet.
+            </p>
+            <button
+              onClick={() => router.push(`/dashboard/projects/${project.id}`)}
+              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
+            >
+              Back to Project
+            </button>
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {floorPlans.map((plan, index) => {
+              const layoutData = typeof plan.layout_data === 'string' 
+                ? JSON.parse(plan.layout_data) 
+                : plan.layout_data;
+              
+              return (
+                <div 
+                  key={plan.id || index}
+                  className="bg-white/5 rounded-xl border border-white/10 overflow-hidden hover:border-blue-500/50 transition"
+                >
+                  {/* Plan Preview */}
+                  <div className="aspect-[4/3] bg-slate-800 flex items-center justify-center p-6">
+                    <div className="text-center">
+                      <Layers className="w-16 h-16 text-blue-400 mx-auto mb-3" />
+                      <p className="text-white font-medium">{layoutData?.variant_name || `Variant ${plan.variant_number}`}</p>
+                      <p className="text-gray-400 text-sm mt-1">{layoutData?.description || 'Floor plan layout'}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Plan Details */}
+                  <div className="p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-white font-semibold">
+                        {layoutData?.variant_name || `Floor Plan ${plan.variant_number}`}
+                      </h3>
+                      {plan.is_compliant && (
+                        <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs">
+                          NCC Compliant
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-sm mb-4">
+                      <div className="bg-white/5 rounded p-2 text-center">
+                        <p className="text-white font-medium">{plan.total_area?.toFixed(0) || '-'}m²</p>
+                        <p className="text-gray-500 text-xs">Total Area</p>
+                      </div>
+                      <div className="bg-white/5 rounded p-2 text-center">
+                        <p className="text-white font-medium">{plan.living_area?.toFixed(0) || '-'}m²</p>
+                        <p className="text-gray-500 text-xs">Living Area</p>
+                      </div>
+                    </div>
+
+                    {/* Room Summary */}
+                    {layoutData?.rooms && (
+                      <div className="flex flex-wrap gap-1 mb-4">
+                        {(() => {
+                          const roomCounts: Record<string, number> = {};
+                          layoutData.rooms.forEach((room: any) => {
+                            const type = room.type || 'other';
+                            roomCounts[type] = (roomCounts[type] || 0) + 1;
+                          });
+                          return Object.entries(roomCounts).slice(0, 4).map(([type, count]) => (
+                            <span key={type} className="px-2 py-0.5 bg-white/5 text-gray-400 rounded text-xs">
+                              {count} {type}
+                            </span>
+                          ));
+                        })()}
+                      </div>
+                    )}
+                    
+                    {/* Actions */}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {/* TODO: View details */}}
+                        className="flex-1 bg-white/10 text-white py-2 rounded-lg hover:bg-white/20 transition text-sm"
+                      >
+                        View Details
+                      </button>
+                      <button
+                        onClick={() => {/* TODO: Download PDF */}}
+                        className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition text-sm"
+                      >
+                        Download PDF
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   }
