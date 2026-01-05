@@ -192,7 +192,7 @@ def generate_floor_plans_task(project_id: int, db_session_factory):
                 )
                 db.add(floor_plan)
             
-            project.status = "completed"
+            project.status = "generated"
             project.updated_at = datetime.utcnow()
             db.commit()
             
@@ -357,7 +357,7 @@ def _create_demo_floor_plans(db: Session, project: models.Project):
         )
         db.add(floor_plan)
     
-    project.status = "completed"
+    project.status = "generated"
     project.updated_at = datetime.utcnow()
     db.commit()
     
@@ -545,7 +545,7 @@ async def generate_floor_plans(
 ):
     """
     Trigger floor plan generation for a project.
-    Generation happens in the background - the status will change to 'completed' when done.
+    Generation happens in the background - the status will change to 'generated' when done.
     """
     db_user = db.query(models.User).filter(models.User.azure_ad_id == current_user.id).first()
     if not db_user:
@@ -559,11 +559,11 @@ async def generate_floor_plans(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Check if already generating or completed
+    # Check if already generating or generated
     if project.status == "generating":
         raise HTTPException(status_code=400, detail="Floor plans are already being generated")
     
-    if project.status == "completed":
+    if project.status == "generated":
         # Check if floor plans exist
         existing_plans = db.query(models.FloorPlan).filter(
             models.FloorPlan.project_id == project_id

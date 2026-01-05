@@ -30,12 +30,15 @@ import {
   FileText,
   Shield,
   Check,
-  Cpu
+  Cpu,
+  Download,
+  X
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import api, { Project } from '@/lib/api';
+import FloorPlanCanvas from '@/components/FloorPlanCanvas';
 
-type ProjectStatus = 'all' | 'draft' | 'generating' | 'completed' | 'error';
+type ProjectStatus = 'all' | 'draft' | 'generating' | 'generated' | 'error';
 
 export default function ProjectsPage() {
   const router = useRouter();
@@ -71,6 +74,7 @@ export default function ProjectsPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [floorPlans, setFloorPlans] = useState<any[]>([]);
+  const [selectedPlan, setSelectedPlan] = useState<any | null>(null);
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
@@ -105,8 +109,8 @@ export default function ProjectsPage() {
       const data = await api.getProject(id);
       setProject(data);
       
-      // If project is completed, fetch floor plans
-      if (data.status === 'completed') {
+      // If project is generated, fetch floor plans
+      if (data.status === 'generated') {
         try {
           const plans = await api.getFloorPlans(id);
           setFloorPlans(plans);
@@ -163,7 +167,7 @@ export default function ProjectsPage() {
     const iconSize = size === 'sm' ? 'w-3 h-3' : 'w-4 h-4';
     
     switch (status) {
-      case 'completed':
+      case 'generated':
         return (
           <span className={`flex items-center ${sizeClasses} bg-green-500/20 text-green-400 rounded-full font-medium`}>
             <CheckCircle className={iconSize} /> Generated
@@ -294,15 +298,25 @@ export default function ProjectsPage() {
               return (
                 <div 
                   key={plan.id || index}
-                  className="bg-white/5 rounded-xl border border-white/10 overflow-hidden hover:border-blue-500/50 transition"
+                  className="bg-white/5 rounded-xl border border-white/10 overflow-hidden hover:border-blue-500/50 transition group"
                 >
-                  {/* Plan Preview */}
-                  <div className="aspect-[4/3] bg-slate-800 flex items-center justify-center p-6">
-                    <div className="text-center">
-                      <Layers className="w-16 h-16 text-blue-400 mx-auto mb-3" />
-                      <p className="text-white font-medium">{layoutData?.variant_name || `Variant ${plan.variant_number}`}</p>
-                      <p className="text-gray-400 text-sm mt-1">{layoutData?.description || 'Floor plan layout'}</p>
-                    </div>
+                  {/* Plan Preview - Using FloorPlanCanvas */}
+                  <div className="aspect-[4/3] bg-slate-800 overflow-hidden cursor-pointer"
+                    onClick={() => setSelectedPlan({ ...plan, layoutData })}
+                  >
+                    {layoutData?.rooms && layoutData.rooms.length > 0 ? (
+                      <FloorPlanCanvas 
+                        data={{ rooms: layoutData.rooms, total_area: plan.total_area }}
+                        compact={true}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="text-center">
+                          <Layers className="w-12 h-12 text-blue-400 mx-auto mb-2" />
+                          <p className="text-gray-400 text-sm">{layoutData?.variant_name || `Variant ${plan.variant_number}`}</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   {/* Plan Details */}
@@ -317,6 +331,10 @@ export default function ProjectsPage() {
                         </span>
                       )}
                     </div>
+                    
+                    {layoutData?.description && (
+                      <p className="text-gray-400 text-sm mb-3">{layoutData.description}</p>
+                    )}
                     
                     <div className="grid grid-cols-2 gap-2 text-sm mb-4">
                       <div className="bg-white/5 rounded p-2 text-center">
@@ -339,8 +357,8 @@ export default function ProjectsPage() {
                             roomCounts[type] = (roomCounts[type] || 0) + 1;
                           });
                           return Object.entries(roomCounts).slice(0, 4).map(([type, count]) => (
-                            <span key={type} className="px-2 py-0.5 bg-white/5 text-gray-400 rounded text-xs">
-                              {count} {type}
+                            <span key={type} className="px-2 py-0.5 bg-white/5 text-gray-400 rounded text-xs capitalize">
+                              {count} {type.replace('_', ' ')}
                             </span>
                           ));
                         })()}
@@ -350,22 +368,133 @@ export default function ProjectsPage() {
                     {/* Actions */}
                     <div className="flex gap-2">
                       <button
-                        onClick={() => {/* TODO: View details */}}
-                        className="flex-1 bg-white/10 text-white py-2 rounded-lg hover:bg-white/20 transition text-sm"
+                        onClick={() => setSelectedPlan({ ...plan, layoutData })}
+                        className="flex-1 bg-white/10 text-white py-2 rounded-lg hover:bg-white/20 transition text-sm flex items-center justify-center gap-1"
                       >
-                        View Details
+                        <Eye className="w-4 h-4" />
+                        View
                       </button>
                       <button
-                        onClick={() => {/* TODO: Download PDF */}}
-                        className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition text-sm"
+                        onClick={() => {
+                          // TODO: Implement PDF download
+                          alert('PDF download coming soon!');
+                        }}
+                        className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition text-sm flex items-center justify-center gap-1"
                       >
-                        Download PDF
+                        <Download className="w-4 h-4" />
+                        PDF
                       </button>
                     </div>
                   </div>
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Floor Plan Detail Modal */}
+        {selectedPlan && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-xl max-w-5xl w-full max-h-[90vh] overflow-hidden border border-white/10">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-4 border-b border-white/10">
+                <div>
+                  <h2 className="text-xl font-semibold text-white">
+                    {selectedPlan.layoutData?.variant_name || `Floor Plan ${selectedPlan.variant_number}`}
+                  </h2>
+                  <p className="text-gray-400 text-sm">
+                    {selectedPlan.layoutData?.description || 'Floor plan layout'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedPlan(null)}
+                  className="p-2 hover:bg-white/10 rounded-lg transition"
+                >
+                  <X className="w-6 h-6 text-gray-400" />
+                </button>
+              </div>
+              
+              {/* Modal Body */}
+              <div className="p-4 overflow-auto" style={{ maxHeight: 'calc(90vh - 140px)' }}>
+                {/* Floor Plan Canvas */}
+                {selectedPlan.layoutData?.rooms && selectedPlan.layoutData.rooms.length > 0 ? (
+                  <FloorPlanCanvas 
+                    data={{ 
+                      rooms: selectedPlan.layoutData.rooms, 
+                      total_area: selectedPlan.total_area,
+                      variant_name: selectedPlan.layoutData.variant_name
+                    }}
+                    compact={false}
+                  />
+                ) : (
+                  <div className="bg-slate-700 rounded-lg p-12 text-center">
+                    <Layers className="w-16 h-16 text-blue-400 mx-auto mb-4" />
+                    <p className="text-gray-400">No room layout data available</p>
+                  </div>
+                )}
+                
+                {/* Plan Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                  <div className="bg-white/5 rounded-lg p-4 text-center">
+                    <p className="text-2xl font-bold text-white">{selectedPlan.total_area?.toFixed(0) || '-'}m²</p>
+                    <p className="text-gray-500 text-sm">Total Area</p>
+                  </div>
+                  <div className="bg-white/5 rounded-lg p-4 text-center">
+                    <p className="text-2xl font-bold text-white">{selectedPlan.living_area?.toFixed(0) || '-'}m²</p>
+                    <p className="text-gray-500 text-sm">Living Area</p>
+                  </div>
+                  <div className="bg-white/5 rounded-lg p-4 text-center">
+                    <p className="text-2xl font-bold text-white">{selectedPlan.layoutData?.rooms?.length || 0}</p>
+                    <p className="text-gray-500 text-sm">Rooms</p>
+                  </div>
+                  <div className="bg-white/5 rounded-lg p-4 text-center">
+                    {selectedPlan.is_compliant ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <Check className="w-6 h-6 text-green-400" />
+                        <span className="text-green-400 font-medium">Compliant</span>
+                      </div>
+                    ) : (
+                      <span className="text-yellow-400">Pending</span>
+                    )}
+                    <p className="text-gray-500 text-sm">NCC Status</p>
+                  </div>
+                </div>
+
+                {/* Room List */}
+                {selectedPlan.layoutData?.rooms && (
+                  <div className="mt-6">
+                    <h3 className="text-white font-semibold mb-3">Room Details</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                      {selectedPlan.layoutData.rooms.map((room: any, idx: number) => (
+                        <div key={idx} className="bg-white/5 rounded-lg p-3">
+                          <p className="text-white font-medium text-sm">{room.name}</p>
+                          <p className="text-gray-400 text-xs">
+                            {room.width}m × {room.depth}m = {room.area?.toFixed(1) || (room.width * room.depth).toFixed(1)}m²
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* Modal Footer */}
+              <div className="flex items-center justify-end gap-3 p-4 border-t border-white/10">
+                <button
+                  onClick={() => setSelectedPlan(null)}
+                  className="px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => alert('PDF download coming soon!')}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  Download PDF
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -586,7 +715,7 @@ export default function ProjectsPage() {
                 Generate AI Floor Plans
               </h2>
 
-              {project.status === 'completed' ? (
+              {project.status === 'generated' ? (
                 <div>
                   <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4 mb-4">
                     <div className="flex items-center gap-2 text-green-400 mb-2">
@@ -805,7 +934,7 @@ export default function ProjectsPage() {
             <option value="all" className="bg-slate-800">All Status</option>
             <option value="draft" className="bg-slate-800">Draft</option>
             <option value="generating" className="bg-slate-800">Generating</option>
-            <option value="completed" className="bg-slate-800">Completed</option>
+            <option value="generated" className="bg-slate-800">Generated</option>
             <option value="error" className="bg-slate-800">Error</option>
           </select>
         </div>
