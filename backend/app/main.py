@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from .routers import projects, plans, payments, users
+from .routers import projects, plans, payments, users, files
 from .database import engine, Base
 import os
 import logging
@@ -26,17 +26,15 @@ app = FastAPI(
     description="AI-powered floor plan generation for Australian builders"
 )
 
-# CORS - List all allowed origins explicitly (wildcards don't work!)
+# CORS - List all allowed origins explicitly
 origins = [
     "http://localhost:3000",
     "http://localhost:3001",
     "https://layout-ai.com.au",
     "https://www.layout-ai.com.au",
-    # Add your Azure Static Web Apps default domain here
-    "https://red-rock-0a6966100.azurestaticapps.net",
 ]
 
-# Also allow origins from environment variable for flexibility
+# Also allow origins from environment variable
 extra_origins = os.getenv("ALLOWED_ORIGINS", "")
 if extra_origins:
     origins.extend([o.strip() for o in extra_origins.split(",") if o.strip()])
@@ -79,6 +77,7 @@ app.include_router(users.router)
 app.include_router(projects.router)
 app.include_router(plans.router)
 app.include_router(payments.router)
+app.include_router(files.router)
 
 @app.get("/")
 async def root():
