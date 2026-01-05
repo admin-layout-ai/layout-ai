@@ -5,8 +5,9 @@
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { Plus, Home, FolderOpen, Clock, Bell } from 'lucide-react';
+import { Plus, Home, FolderOpen, Clock, Bell, MapPin, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import api, { Project } from '@/lib/api';
 
 interface DashboardStats {
   total: number;
@@ -14,17 +15,8 @@ interface DashboardStats {
   plans: number;
 }
 
-interface Project {
-  id: number;
-  name: string;
-  status: string;
-  bedrooms?: number;
-  bathrooms?: number;
-  created_at?: string;
-}
-
 export default function DashboardPage() {
-  const { user, getAccessToken } = useAuth();
+  const { user } = useAuth();
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,31 +102,19 @@ export default function DashboardPage() {
 
   const loadDashboardData = async () => {
     try {
-      const token = localStorage.getItem('auth_token');
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-
-      if (!apiUrl || !token) {
-        setLoading(false);
-        return;
-      }
-
-      // Call dashboard endpoint to get stats and recent projects
-      const response = await fetch(`${apiUrl}/api/v1/users/me/dashboard`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+      // Use the api client to fetch projects
+      const response = await api.getProjects(1, 50);
+      const projectList = response.projects || [];
+      
+      setProjects(projectList);
+      
+      // Calculate stats from projects
+      const completedCount = projectList.filter((p: Project) => p.status === 'completed').length;
+      setStats({
+        total: projectList.length,
+        completed: completedCount,
+        plans: completedCount * 3 // Assuming 3 plans per completed project
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        setStats({
-          total: data.stats?.total_projects || 0,
-          completed: data.stats?.completed_projects || 0,
-          plans: data.stats?.plans_generated || 0
-        });
-        setProjects(data.recent_projects || []);
-      }
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
@@ -158,35 +138,47 @@ export default function DashboardPage() {
     if (user?.name && user.name !== 'User' && user.name !== 'unknown') {
       return user.name.split(' ')[0]; // First name only
     }
-    if (user?.givenName) {
-      return user.givenName;
-    }
     if (user?.email) {
       return user.email.split('@')[0];
     }
     return 'there';
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusBadge = (status?: string) => {
     switch (status) {
       case 'completed':
-        return 'bg-green-500';
-      case 'in_progress':
-        return 'bg-blue-500';
+        return (
+          <span className="flex items-center gap-1 px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full text-xs">
+            <CheckCircle className="w-3 h-3" /> Completed
+          </span>
+        );
+      case 'generating':
+        return (
+          <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded-full text-xs">
+            <Loader2 className="w-3 h-3 animate-spin" /> Generating
+          </span>
+        );
+      case 'error':
+        return (
+          <span className="flex items-center gap-1 px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full text-xs">
+            <AlertCircle className="w-3 h-3" /> Error
+          </span>
+        );
+      case 'draft':
       default:
-        return 'bg-yellow-500';
+        return (
+          <span className="flex items-center gap-1 px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded-full text-xs">
+            <Clock className="w-3 h-3" /> Draft
+          </span>
+        );
     }
   };
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'Completed';
-      case 'in_progress':
-        return 'In Progress';
-      default:
-        return 'Draft';
-    }
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-AU', {
+      day: 'numeric',
+      month: 'short'
+    });
   };
 
   return (
@@ -267,7 +259,7 @@ export default function DashboardPage() {
             </p>
             <button
               onClick={handleCreateProject}
-              className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm"
+              className="inline-flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-sm"
             >
               <Plus className="w-4 h-4" />
               Create Project
@@ -279,12 +271,26 @@ export default function DashboardPage() {
               <button
                 key={project.id}
                 onClick={() => router.push(`/dashboard/projects/${project.id}`)}
-                className="w-full bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 hover:border-blue-500/50 hover:bg-white/10 transition flex items-center justify-between text-left"
+                className="w-full bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 hover:border-blue-500/50 hover:bg-white/10 transition text-left"
               >
-                <span className="text-white font-medium">{project.name}</span>
-                <span className={`${getStatusColor(project.status)} text-white text-xs px-3 py-1 rounded-full`}>
-                  {getStatusLabel(project.status)}
-                </span>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-white font-medium">{project.name}</span>
+                  {getStatusBadge(project.status)}
+                </div>
+                <div className="flex items-center gap-4 text-xs text-gray-500">
+                  {(project.suburb || project.state) && (
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      {project.suburb ? `${project.suburb}, ${project.state}` : `${project.state} ${project.postcode}`}
+                    </span>
+                  )}
+                  {project.created_at && (
+                    <span>{formatDate(project.created_at)}</span>
+                  )}
+                  {project.land_area && (
+                    <span>{project.land_area.toFixed(0)} m²</span>
+                  )}
+                </div>
               </button>
             ))}
           </div>
