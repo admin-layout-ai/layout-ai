@@ -11,7 +11,7 @@ import api, { Project } from '@/lib/api';
 
 interface DashboardStats {
   total: number;
-  completed: number;
+  generated: number;
   plans: number;
 }
 
@@ -23,7 +23,7 @@ export default function DashboardPage() {
   const [userSynced, setUserSynced] = useState(false);
   const [stats, setStats] = useState<DashboardStats>({
     total: 0,
-    completed: 0,
+    generated: 0,
     plans: 0
   });
 
@@ -108,12 +108,15 @@ export default function DashboardPage() {
       
       setProjects(projectList);
       
-      // Calculate stats from projects
-      const completedCount = projectList.filter((p: Project) => p.status === 'completed').length;
+      // Calculate stats from projects - check for both 'completed' and 'generated' status
+      const generatedCount = projectList.filter((p: Project) => 
+        p.status === 'generated' || p.status === 'completed'
+      ).length;
+      
       setStats({
         total: projectList.length,
-        completed: completedCount,
-        plans: completedCount * 3 // Assuming 3 plans per completed project
+        generated: generatedCount,
+        plans: generatedCount * 3 // Assuming 3 plans per generated project
       });
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
@@ -146,10 +149,11 @@ export default function DashboardPage() {
 
   const getStatusBadge = (status?: string) => {
     switch (status) {
+      case 'generated':
       case 'completed':
         return (
           <span className="flex items-center gap-1 px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full text-xs">
-            <CheckCircle className="w-3 h-3" /> Completed
+            <CheckCircle className="w-3 h-3" /> Generated
           </span>
         );
       case 'generating':
@@ -211,8 +215,8 @@ export default function DashboardPage() {
           <p className="text-sm text-gray-400">Projects</p>
         </div>
         <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 text-center">
-          <p className="text-3xl font-bold text-white">{stats.completed}</p>
-          <p className="text-sm text-gray-400">Completed</p>
+          <p className="text-3xl font-bold text-white">{stats.generated}</p>
+          <p className="text-sm text-gray-400">Generated</p>
         </div>
         <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 text-center">
           <p className="text-3xl font-bold text-white">{stats.plans}</p>
@@ -308,12 +312,12 @@ export default function DashboardPage() {
           <p className="text-gray-500 text-xs">{stats.total} total</p>
         </button>
         <button
-          onClick={() => router.push('/dashboard/billing')}
+          onClick={() => router.push('/dashboard/profile')}
           className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 hover:border-blue-500/50 hover:bg-white/10 transition text-left"
         >
           <Clock className="w-5 h-5 text-green-400 mb-2" />
           <p className="text-white text-sm font-medium">Account</p>
-          <p className="text-gray-500 text-xs">View plans</p>
+          <p className="text-gray-500 text-xs">View profile</p>
         </button>
       </div>
     </div>

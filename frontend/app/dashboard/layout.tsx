@@ -3,7 +3,7 @@
 
 'use client';
 
-import { Home, FolderOpen, CreditCard, Settings, LogOut, LayoutDashboard } from 'lucide-react';
+import { Home, FolderOpen, CreditCard, Settings, LogOut, LayoutDashboard, User } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useAuth } from '@/contexts/AuthContext';
@@ -21,6 +21,7 @@ export default function DashboardLayout({
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
     { icon: FolderOpen, label: 'Projects', href: '/dashboard/projects' },
     { icon: CreditCard, label: 'Billing', href: '/dashboard/billing' },
+    { icon: User, label: 'User Profile', href: '/dashboard/profile' },
     { icon: Settings, label: 'Settings', href: '/dashboard/settings' },
   ];
 
@@ -55,7 +56,10 @@ export default function DashboardLayout({
 
           {/* User Profile */}
           <div className="p-4 border-b border-white/10">
-            <div className="flex items-center gap-3">
+            <button 
+              onClick={() => router.push('/dashboard/profile')}
+              className="w-full flex items-center gap-3 hover:bg-white/5 rounded-lg p-2 -m-2 transition"
+            >
               <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">
                 {user?.profilePicture ? (
                   <img 
@@ -69,7 +73,7 @@ export default function DashboardLayout({
                   </span>
                 )}
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 text-left">
                 <p className="text-sm font-medium text-white truncate">
                   {user?.name || 'User'}
                 </p>
@@ -77,7 +81,7 @@ export default function DashboardLayout({
                   {user?.email || ''}
                 </p>
               </div>
-            </div>
+            </button>
           </div>
 
           {/* Navigation */}
@@ -85,7 +89,8 @@ export default function DashboardLayout({
             <ul className="space-y-1">
               {menuItems.map((item) => {
                 const Icon = item.icon;
-                const isActive = pathname === item.href;
+                const isActive = pathname === item.href || 
+                  (item.href !== '/dashboard' && pathname?.startsWith(item.href));
                 
                 return (
                   <li key={item.href}>

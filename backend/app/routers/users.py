@@ -1,12 +1,13 @@
 # backend/app/routers/users.py
 """
 User management endpoints for Layout AI
-FIXED: Properly extracts user info from B2C CIAM token
+UPDATED: Added address, abn_acn, builder_logo_url fields
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Optional
 from pydantic import BaseModel, EmailStr
+from datetime import datetime
 import logging
 
 from ..database import get_db
@@ -30,9 +31,14 @@ class UserResponse(BaseModel):
     full_name: str
     company_name: Optional[str] = None
     phone: Optional[str] = None
+    address: Optional[str] = None
     is_active: bool
     is_builder: bool
+    abn_acn: Optional[str] = None
+    builder_logo_url: Optional[str] = None
     subscription_tier: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True
@@ -43,7 +49,11 @@ class UserUpdateRequest(BaseModel):
     full_name: Optional[str] = None
     company_name: Optional[str] = None
     phone: Optional[str] = None
+    address: Optional[str] = None
     email: Optional[EmailStr] = None
+    is_builder: Optional[bool] = None
+    abn_acn: Optional[str] = None
+    builder_logo_url: Optional[str] = None
 
 
 # =============================================================================
@@ -94,6 +104,7 @@ async def get_or_create_current_user(
             updated = True
         
         if updated:
+            db_user.updated_at = datetime.utcnow()
             db.commit()
             db.refresh(db_user)
         
@@ -128,7 +139,8 @@ async def get_or_create_current_user(
         phone=current_user.phone_number,
         is_active=True,
         is_builder=False,
-        subscription_tier="free"
+        subscription_tier="free",
+        created_at=datetime.utcnow()
     )
     
     db.add(db_user)
@@ -169,6 +181,18 @@ async def update_current_user(
     if update_data.phone is not None:
         db_user.phone = update_data.phone
     
+    if update_data.address is not None:
+        db_user.address = update_data.address
+    
+    if update_data.is_builder is not None:
+        db_user.is_builder = update_data.is_builder
+    
+    if update_data.abn_acn is not None:
+        db_user.abn_acn = update_data.abn_acn
+    
+    if update_data.builder_logo_url is not None:
+        db_user.builder_logo_url = update_data.builder_logo_url
+    
     if update_data.email is not None:
         # Check if email is already taken by another user
         existing = db.query(models.User).filter(
@@ -184,6 +208,7 @@ async def update_current_user(
         
         db_user.email = update_data.email
     
+    db_user.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(db_user)
     

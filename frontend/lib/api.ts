@@ -14,9 +14,24 @@ export interface User {
   full_name: string;
   company_name?: string;
   phone?: string;
+  address?: string;
   is_active: boolean;
   is_builder: boolean;
+  abn_acn?: string;
+  builder_logo_url?: string;
   subscription_tier: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface UserProfileUpdate {
+  full_name?: string;
+  company_name?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  is_builder?: boolean;
+  abn_acn?: string | null;
+  builder_logo_url?: string | null;
 }
 
 export interface Project {
@@ -88,11 +103,14 @@ export interface FloorPlan {
   pdf_url?: string;
   thumbnail_url?: string;
   total_area?: number;
+  living_area?: number;
+  layout_data?: string;
   room_layout?: Record<string, any>;
-  is_favorite: boolean;
+  is_compliant?: boolean;
+  is_favorite?: boolean;
   user_rating?: number;
   user_notes?: string;
-  created_at: string;
+  created_at?: string;
 }
 
 export interface SubscriptionStatus {
@@ -211,6 +229,39 @@ class ApiClient {
     return result.url;
   }
 
+  async uploadBuilderLogo(file: File, userName: string): Promise<string> {
+    const token = this.getAuthToken();
+    
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('user_name', userName);
+    formData.append('project_name', 'profile');
+    formData.append('folder_type', 'Logo');
+
+    const url = `${this.baseUrl}/api/v1/files/upload`;
+    console.log(`Uploading logo: ${file.name} to ${url}`);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || errorData.message || 'Logo upload failed');
+    }
+
+    const result: FileUploadResponse = await response.json();
+    return result.url;
+  }
+
   // ===========================================================================
   // User Endpoints
   // ===========================================================================
@@ -220,6 +271,13 @@ class ApiClient {
   }
 
   async updateUser(data: Partial<User>): Promise<User> {
+    return this.request<User>('/api/v1/users/me', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateUserProfile(data: UserProfileUpdate): Promise<User> {
     return this.request<User>('/api/v1/users/me', {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -277,11 +335,11 @@ class ApiClient {
   // ===========================================================================
 
   async getFloorPlans(projectId: number): Promise<FloorPlan[]> {
-    return this.request<FloorPlan[]>(`/api/v1/plans/project/${projectId}`);
+    return this.request<FloorPlan[]>(`/api/v1/plans/${projectId}/plans`);
   }
 
   async getFloorPlan(planId: number): Promise<FloorPlan> {
-    return this.request<FloorPlan>(`/api/v1/plans/${planId}`);
+    return this.request<FloorPlan>(`/api/v1/plans/${planId}/preview`);
   }
 
   async updateFloorPlan(planId: number, data: Partial<FloorPlan>): Promise<FloorPlan> {
