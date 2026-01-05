@@ -121,10 +121,12 @@ export default function ProfilePage() {
             componentRestrictions: { country: 'au' },
             types: ['address'],
           },
-          (predictions, status) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (predictions: any[] | null, status: any) => {
             if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
               setAddressSuggestions(
-                predictions.map((p) => ({
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                predictions.map((p: any) => ({
                   place_id: p.place_id,
                   description: p.description,
                 }))
