@@ -1,10 +1,10 @@
 // frontend/lib/api.ts
-// API client for Layout AI backend
+// API client for Layout AI backend with Azure Blob Storage upload
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 // =============================================================================
-// Types - Match database schema
+// Types
 // =============================================================================
 
 export interface User {
@@ -24,8 +24,6 @@ export interface Project {
   user_id: number;
   name: string;
   status?: string;
-  
-  // Land details
   land_width?: number;
   land_depth?: number;
   land_area?: number;
@@ -33,37 +31,27 @@ export interface Project {
   orientation?: string;
   street_frontage?: string;
   contour_plan_url?: string;
-  
-  // Building requirements
   bedrooms?: number;
   bathrooms?: number;
   living_areas?: number;
   garage_spaces?: number;
   storeys?: number;
-  
-  // Style preferences
   style?: string;
   open_plan?: boolean;
   outdoor_entertainment?: boolean;
   home_office?: boolean;
-  
-  // Location details
   lot_dp?: string;
   street_address?: string;
   state?: string;
   postcode?: string;
   council?: string;
   bal_rating?: string;
-  
-  // Timestamps
   created_at: string;
   updated_at?: string;
 }
 
 export interface ProjectCreateData {
   name: string;
-  
-  // Land details
   land_width?: number;
   land_depth?: number;
   land_area?: number;
@@ -71,25 +59,19 @@ export interface ProjectCreateData {
   orientation?: string;
   street_frontage?: string;
   contour_plan_url?: string;
-  
-  // Building requirements
   bedrooms?: number;
   bathrooms?: number;
   living_areas?: number;
   garage_spaces?: number;
   storeys?: number;
-  
-  // Style preferences
   style?: string;
   open_plan?: boolean;
   outdoor_entertainment?: boolean;
   home_office?: boolean;
-  
-  // Location details
   lot_dp?: string;
   street_address?: string;
-  state: string;      // Mandatory
-  postcode: string;   // Mandatory
+  state: string;
+  postcode: string;
   council?: string;
   bal_rating?: string;
 }
@@ -125,6 +107,12 @@ export interface ProjectListResponse {
   page_size: number;
 }
 
+export interface FileUploadResponse {
+  url: string;
+  filename: string;
+  size: number;
+}
+
 // =============================================================================
 // API Client Class
 // =============================================================================
@@ -141,10 +129,7 @@ class ApiClient {
     return localStorage.getItem('auth_token');
   }
 
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const token = this.getAuthToken();
     
     const headers: HeadersInit = {
@@ -160,10 +145,7 @@ class ApiClient {
     console.log(`API Request: ${options.method || 'GET'} ${url}`);
 
     try {
-      const response = await fetch(url, {
-        ...options,
-        headers,
-      });
+      const response = await fetch(url, { ...options, headers });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -190,7 +172,53 @@ class ApiClient {
     }
   }
 
+  // ===========================================================================
+  // File Upload
+  // ===========================================================================
+
+  /**
+   * Upload contour file to Azure Blob Storage
+   * Creates folder structure: userName/projectName/Contour/filename
+   */
+  async uploadContourFile(file: File, userName: string, projectName: string): Promise<string> {
+    const token = this.getAuthToken();
+    
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    // Create FormData with file and metadata
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('user_name', userName);
+    formData.append('project_name', projectName);
+    formData.append('folder_type', 'Contour');
+
+    const url = `${this.baseUrl}/api/v1/files/upload`;
+    console.log(`Uploading file: ${file.name} to ${url}`);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        // Don't set Content-Type - browser will set it with boundary for FormData
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || errorData.message || 'File upload failed');
+    }
+
+    const result: FileUploadResponse = await response.json();
+    return result.url;
+  }
+
+  // ===========================================================================
   // User Endpoints
+  // ===========================================================================
+
   async getCurrentUser(): Promise<User> {
     return this.request<User>('/api/v1/users/me');
   }
@@ -206,7 +234,10 @@ class ApiClient {
     return this.request<SubscriptionStatus>('/api/v1/users/me/subscription');
   }
 
+  // ===========================================================================
   // Project Endpoints
+  // ===========================================================================
+
   async createProject(data: ProjectCreateData): Promise<Project> {
     return this.request<Project>('/api/v1/projects', {
       method: 'POST',
@@ -245,7 +276,10 @@ class ApiClient {
     });
   }
 
+  // ===========================================================================
   // Floor Plan Endpoints
+  // ===========================================================================
+
   async getFloorPlans(projectId: number): Promise<FloorPlan[]> {
     return this.request<FloorPlan[]>(`/api/v1/plans/project/${projectId}`);
   }
@@ -274,7 +308,10 @@ class ApiClient {
     });
   }
 
+  // ===========================================================================
   // Payment Endpoints
+  // ===========================================================================
+
   async createCheckoutSession(planName: string): Promise<{ checkout_url: string }> {
     return this.request<{ checkout_url: string }>('/api/v1/payments/create-checkout', {
       method: 'POST',

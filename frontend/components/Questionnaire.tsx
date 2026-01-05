@@ -1,10 +1,10 @@
 // frontend/components/Questionnaire.tsx
-// Questionnaire with review showing location details
+// Questionnaire with review showing council and contour file
 
 'use client';
 
 import { useState } from 'react';
-import { Home, Bath, Sofa, Car, Building2, ArrowLeft, ArrowRight, Check, MapPin } from 'lucide-react';
+import { Home, Bath, Sofa, Car, Building2, ArrowLeft, ArrowRight, Check, MapPin, FileText } from 'lucide-react';
 
 interface QuestionnaireData {
   bedrooms: number;
@@ -26,6 +26,8 @@ interface ProjectDetails {
   street_address?: string;
   state: string;
   postcode: string;
+  council?: string;
+  contourFileName?: string;
 }
 
 interface QuestionnaireProps {
@@ -248,7 +250,7 @@ export default function Questionnaire({ onComplete, onCancel, projectDetails, is
           
           {/* Project Details */}
           {projectDetails && (
-            <div className="bg-gray-50 rounded-xl p-5 space-y-3">
+            <div className="bg-gray-50 rounded-xl p-5 space-y-4">
               <h3 className="font-semibold text-gray-900">Project Details</h3>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
@@ -277,13 +279,25 @@ export default function Questionnaire({ onComplete, onCancel, projectDetails, is
                     <p className="font-medium text-gray-900">{projectDetails.street_address}</p>
                   </div>
                 )}
+                {projectDetails.council && (
+                  <div className="col-span-2">
+                    <span className="text-gray-500">Local Council</span>
+                    <p className="font-medium text-green-700">{projectDetails.council}</p>
+                  </div>
+                )}
+                {projectDetails.contourFileName && (
+                  <div className="col-span-2">
+                    <span className="text-gray-500 flex items-center gap-1"><FileText className="w-3 h-3" /> Contour Plan</span>
+                    <p className="font-medium text-blue-700">{projectDetails.contourFileName}</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
           {/* Requirements Summary */}
           <div className="bg-gray-50 rounded-xl p-5 space-y-4">
-            <h3 className="font-semibold text-gray-900">Summary</h3>
+            <h3 className="font-semibold text-gray-900">Building Requirements</h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex justify-between py-2 border-b border-gray-200">
                 <span className="text-gray-600">Bedrooms</span>
