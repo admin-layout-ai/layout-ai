@@ -22,7 +22,7 @@
       "allowedRoles": ["authenticated", "anonymous"]
     },
     {
-      "route": "/dashboard/projects/*",
+      "route": "/dashboard/projects/*/*",
       "rewrite": "/dashboard/projects/placeholder/",
       "allowedRoles": ["authenticated", "anonymous"]
     },
