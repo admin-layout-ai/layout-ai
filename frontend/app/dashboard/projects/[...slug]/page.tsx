@@ -1,16 +1,10 @@
-// frontend/app/dashboard/projects/[id]/page.tsx
-// Project detail page - shows project info and allows generating floor plans
-
-// Required for static export with dynamic routes
-export function generateStaticParams() {
-  // Return empty array - pages will be generated on-demand
-  return [];
-}
-
 'use client';
 
+// frontend/app/dashboard/projects/[...slug]/page.tsx
+// Catch-all route for project details - works with static export
+
 import { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { 
   ArrowLeft, 
   Home, 
@@ -28,18 +22,24 @@ import {
   AlertCircle,
   Wand2,
   FileText,
-  Download,
   Trash2,
-  Edit,
   Shield
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import api, { Project } from '@/lib/api';
 
+// Required for static export - generates empty params at build time
+export function generateStaticParams() {
+  return [{ slug: ['placeholder'] }];
+}
+
 export default function ProjectDetailPage() {
   const router = useRouter();
-  const params = useParams();
-  const projectId = params.id as string;
+  const pathname = usePathname();
+  
+  // Extract project ID from pathname: /dashboard/projects/123 -> 123
+  const projectId = pathname?.split('/').pop() || '';
+  
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   
   const [project, setProject] = useState<Project | null>(null);
@@ -50,8 +50,11 @@ export default function ProjectDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && isAuthenticated && projectId) {
+    if (!authLoading && isAuthenticated && projectId && projectId !== 'placeholder') {
       fetchProject();
+    } else if (projectId === 'placeholder') {
+      // Redirect placeholder to projects list
+      router.push('/dashboard/projects');
     }
   }, [authLoading, isAuthenticated, projectId]);
 
@@ -60,7 +63,11 @@ export default function ProjectDetailPage() {
     setError(null);
     
     try {
-      const data = await api.getProject(parseInt(projectId));
+      const id = parseInt(projectId);
+      if (isNaN(id)) {
+        throw new Error('Invalid project ID');
+      }
+      const data = await api.getProject(id);
       setProject(data);
     } catch (err) {
       console.error('Error fetching project:', err);
@@ -78,7 +85,6 @@ export default function ProjectDetailPage() {
       await api.generateFloorPlans(project.id);
       // Refresh project to get updated status
       await fetchProject();
-      // TODO: Navigate to generation progress page or show progress
     } catch (err) {
       console.error('Error generating floor plans:', err);
       setError(err instanceof Error ? err.message : 'Failed to start generation');
@@ -93,7 +99,7 @@ export default function ProjectDetailPage() {
     setIsDeleting(true);
     try {
       await api.deleteProject(project.id);
-      router.push('/dashboard/projects?deleted=true');
+      router.push('/dashboard');
     } catch (err) {
       console.error('Error deleting project:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete project');
@@ -173,8 +179,6 @@ export default function ProjectDetailPage() {
       </div>
     );
   }
-
-  const isDraft = project.status === 'draft' || project.status === 'generating';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
