@@ -1017,24 +1017,6 @@ export default function ProjectsPage() {
                     )}
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    onClick={() => router.push(`/dashboard/projects/${proj.id}`)}
-                    className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition"
-                    title="View project"
-                  >
-                    <Eye className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={() => setShowDeleteConfirm(proj.id)}
-                    className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition"
-                    title="Delete project"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                  <ChevronRight className="w-5 h-5 text-gray-600 group-hover:text-gray-400" />
-                </div>
               </div>
             </div>
           ))}
