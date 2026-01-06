@@ -119,18 +119,25 @@ export default function CallbackPage() {
       // Dispatch event for other tabs/components
       window.dispatchEvent(new Event('auth-updated'));
 
-      setStatus('Redirecting to dashboard...');
+      setStatus('Redirecting...');
 
       // Check for stored redirect path
       const storedRedirect = sessionStorage.getItem('auth_redirect');
       sessionStorage.removeItem('auth_redirect');
 
-      // Always redirect to dashboard - the welcome modal will handle new users
-      // who don't have a record in dbo.users table yet
+      // If no email, redirect to collect it first
+      if (!user.email || user.email.length === 0) {
+        console.log('No email in token, redirecting to complete-email');
+        router.push('/auth/complete-email');
+        return;
+      }
+
+      // User has email - go to dashboard or stored redirect
       if (storedRedirect && 
           storedRedirect !== '/auth/signin' && 
           storedRedirect !== '/auth/signup' &&
-          storedRedirect !== '/auth/complete-profile') {
+          storedRedirect !== '/auth/complete-profile' &&
+          storedRedirect !== '/auth/complete-email') {
         // Redirect to originally requested page
         router.push(storedRedirect);
       } else {

@@ -1,5 +1,5 @@
 // frontend/app/dashboard/page.tsx
-// Dashboard page - checks if user exists, shows welcome popup if not
+// Dashboard page - shows welcome modal for new/incomplete users
 
 'use client';
 
@@ -45,7 +45,6 @@ export default function DashboardPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userExists, setUserExists] = useState<boolean | null>(null); // null = checking
   const [profileData, setProfileData] = useState<ApiUser | null>(null);
   const [stats, setStats] = useState<DashboardStats>({
     total: 0,
@@ -60,7 +59,6 @@ export default function DashboardPage() {
   
   // Welcome form fields
   const [formFullName, setFormFullName] = useState('');
-  const [formEmail, setFormEmail] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formAddress, setFormAddress] = useState('');
   const [formCompanyName, setFormCompanyName] = useState('');
@@ -82,19 +80,12 @@ export default function DashboardPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Check if user exists on mount
+  // Load user and check profile on mount
   useEffect(() => {
-    checkUserExists();
+    loadUserProfile();
   }, []);
 
-  // Load dashboard data after user check
-  useEffect(() => {
-    if (userExists === true && !showWelcomeModal) {
-      loadDashboardData();
-    }
-  }, [userExists, showWelcomeModal]);
-
-  const checkUserExists = async () => {
+  const loadUserProfile = async () => {
     try {
       const token = localStorage.getItem('auth_token');
       
@@ -104,94 +95,78 @@ export default function DashboardPage() {
         return;
       }
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-      if (!apiUrl) {
-        console.warn('API URL not configured');
-        setLoading(false);
-        return;
+      // Get user from backend (will auto-create if doesn't exist)
+      const userData = await api.getCurrentUser();
+      console.log('User data from backend:', userData);
+      setProfileData(userData);
+
+      // Check if profile is incomplete (needs welcome modal)
+      const isIncomplete = isProfileIncomplete(userData);
+      
+      if (isIncomplete) {
+        console.log('Profile incomplete, showing welcome modal');
+        prefillFormFromSources(userData);
+        setShowWelcomeModal(true);
       }
 
-      // Call GET /api/v1/users/me/check to see if user exists WITHOUT auto-creating
-      const response = await fetch(`${apiUrl}/api/v1/users/me/check`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      // Load dashboard data
+      await loadDashboardData();
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log('User check result:', data);
-        
-        if (data.exists && data.user) {
-          // User exists in database
-          setUserExists(true);
-          setProfileData(data.user);
-          
-          // Update local storage
-          const currentUserInfo = localStorage.getItem('user_info');
-          if (currentUserInfo) {
-            const localUser = JSON.parse(currentUserInfo);
-            const mergedUser = {
-              ...localUser,
-              dbId: data.user.id,
-              email: data.user.email,
-              name: data.user.full_name,
-            };
-            localStorage.setItem('user_info', JSON.stringify(mergedUser));
-          }
-          
-          setLoading(false);
-        } else {
-          // User does NOT exist - show welcome modal
-          console.log('User does not exist in database, showing welcome modal');
-          setUserExists(false);
-          setShowWelcomeModal(true);
-          setLoading(false);
-          
-          // Pre-fill form with all available info from auth context and localStorage
-          const userInfo = localStorage.getItem('user_info');
-          if (userInfo) {
-            try {
-              const storedUser = JSON.parse(userInfo);
-              console.log('Pre-filling form with:', storedUser);
-              
-              // Pre-fill name - try full name first, then construct from parts
-              if (storedUser.name && storedUser.name !== 'User' && storedUser.name !== 'unknown') {
-                setFormFullName(storedUser.name);
-              } else if (storedUser.givenName || storedUser.familyName) {
-                const fullName = `${storedUser.givenName || ''} ${storedUser.familyName || ''}`.trim();
-                if (fullName) setFormFullName(fullName);
-              }
-              
-              // Pre-fill email if available
-              if (storedUser.email && storedUser.email.length > 0) {
-                setFormEmail(storedUser.email);
-              }
-            } catch (e) {
-              console.error('Error parsing user info:', e);
-            }
-          }
-          
-          // Also try from auth context
-          if (user?.name && user.name !== 'User' && user.name !== 'unknown' && !formFullName) {
-            setFormFullName(user.name);
-          }
-          if (user?.email && !formEmail) {
-            setFormEmail(user.email);
-          }
-        }
-      } else if (response.status === 401) {
-        console.error('Unauthorized - token may be expired');
-        router.push('/auth/signin');
-      } else {
-        console.error('Failed to check user:', response.status);
-        setLoading(false);
-      }
     } catch (error) {
-      console.error('Error checking user:', error);
+      console.error('Error loading user profile:', error);
+      // If 401, redirect to signin
+      if (error instanceof Error && error.message.includes('401')) {
+        router.push('/auth/signin');
+      }
+    } finally {
       setLoading(false);
+    }
+  };
+
+  // Check if profile needs completion
+  const isProfileIncomplete = (userData: ApiUser): boolean => {
+    // Profile is incomplete if full_name is auto-generated or missing
+    const hasValidName = userData.full_name && 
+      userData.full_name !== 'New User' && 
+      userData.full_name !== 'unknown' &&
+      !userData.full_name.startsWith('user_') &&
+      userData.full_name.trim().length > 0;
+    
+    return !hasValidName;
+  };
+
+  // Pre-fill form from all available sources
+  const prefillFormFromSources = (userData: ApiUser) => {
+    // Try backend data first
+    if (userData.full_name && userData.full_name !== 'New User' && userData.full_name !== 'unknown') {
+      setFormFullName(userData.full_name);
+    }
+    if (userData.phone) setFormPhone(userData.phone);
+    if (userData.address) setFormAddress(userData.address);
+    if (userData.company_name) setFormCompanyName(userData.company_name);
+    if (userData.is_builder) setFormIsBuilder(userData.is_builder);
+
+    // Then try localStorage for name if not set
+    if (!formFullName) {
+      const userInfo = localStorage.getItem('user_info');
+      if (userInfo) {
+        try {
+          const storedUser = JSON.parse(userInfo);
+          if (storedUser.name && storedUser.name !== 'User' && storedUser.name !== 'unknown') {
+            setFormFullName(storedUser.name);
+          } else if (storedUser.givenName || storedUser.familyName) {
+            const fullName = `${storedUser.givenName || ''} ${storedUser.familyName || ''}`.trim();
+            if (fullName) setFormFullName(fullName);
+          }
+        } catch (e) {
+          console.error('Error parsing user info:', e);
+        }
+      }
+    }
+
+    // Also try from auth context
+    if (!formFullName && user?.name && user.name !== 'User' && user.name !== 'unknown') {
+      setFormFullName(user.name);
     }
   };
 
@@ -235,22 +210,10 @@ export default function DashboardPage() {
     setShowAddressSuggestions(false);
   };
 
-  // Create new user from welcome form
-  const handleCreateUser = async () => {
+  // Save profile from welcome modal
+  const handleSaveProfile = async () => {
     if (!formFullName.trim()) {
       setProfileError('Please enter your full name');
-      return;
-    }
-    
-    if (!formEmail.trim()) {
-      setProfileError('Please enter your email address');
-      return;
-    }
-    
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formEmail.trim())) {
-      setProfileError('Please enter a valid email address');
       return;
     }
 
@@ -258,58 +221,36 @@ export default function DashboardPage() {
     setProfileError(null);
 
     try {
-      const token = localStorage.getItem('auth_token');
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-
-      // Call POST /api/v1/users/me to CREATE the user
-      const response = await fetch(`${apiUrl}/api/v1/users/me`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          full_name: formFullName.trim(),
-          email: formEmail.trim(),
-          phone: formPhone.trim() || null,
-          address: formAddress.trim() || null,
-          company_name: formCompanyName.trim() || null,
-          is_builder: formIsBuilder,
-          abn_acn: null
-        })
+      // Update user profile via API
+      const updatedProfile = await api.updateUserProfile({
+        full_name: formFullName.trim(),
+        phone: formPhone.trim() || null,
+        address: formAddress.trim() || null,
+        company_name: formCompanyName.trim() || null,
+        is_builder: formIsBuilder,
       });
 
-      if (response.ok) {
-        const newUser = await response.json();
-        console.log('User created:', newUser);
-        
-        setProfileData(newUser);
-        setUserExists(true);
-        
-        // Update local storage
-        const currentUserInfo = localStorage.getItem('user_info');
-        if (currentUserInfo) {
-          const localUser = JSON.parse(currentUserInfo);
-          const mergedUser = {
-            ...localUser,
-            dbId: newUser.id,
-            email: newUser.email,
-            name: newUser.full_name,
-          };
-          localStorage.setItem('user_info', JSON.stringify(mergedUser));
-        }
+      console.log('Profile updated:', updatedProfile);
+      setProfileData(updatedProfile);
 
-        // Close modal and load dashboard
-        setShowWelcomeModal(false);
-        setLoading(true);
-        await loadDashboardData();
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to create user');
+      // Update local storage
+      const currentUserInfo = localStorage.getItem('user_info');
+      if (currentUserInfo) {
+        const localUser = JSON.parse(currentUserInfo);
+        const mergedUser = {
+          ...localUser,
+          dbId: updatedProfile.id,
+          name: updatedProfile.full_name,
+        };
+        localStorage.setItem('user_info', JSON.stringify(mergedUser));
       }
+
+      // Close modal
+      setShowWelcomeModal(false);
+
     } catch (err) {
-      console.error('Error creating user:', err);
-      setProfileError(err instanceof Error ? err.message : 'Failed to create user');
+      console.error('Error saving profile:', err);
+      setProfileError(err instanceof Error ? err.message : 'Failed to save profile');
     } finally {
       setIsSavingProfile(false);
     }
@@ -333,8 +274,6 @@ export default function DashboardPage() {
       });
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -350,7 +289,7 @@ export default function DashboardPage() {
   };
 
   const getDisplayName = () => {
-    if (profileData?.full_name && profileData.full_name !== 'New User') {
+    if (profileData?.full_name && profileData.full_name !== 'New User' && profileData.full_name !== 'unknown') {
       return profileData.full_name.split(' ')[0];
     }
     if (user?.name && user.name !== 'User' && user.name !== 'unknown') {
@@ -400,8 +339,8 @@ export default function DashboardPage() {
     });
   };
 
-  // Show loading while checking user
-  if (loading && userExists === null) {
+  // Show loading
+  if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 flex items-center justify-center">
         <div className="text-center">
@@ -415,22 +354,22 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6 relative">
       
-      {/* Welcome Modal Overlay - Shows when user doesn't exist in database */}
+      {/* Welcome Modal Overlay */}
       {showWelcomeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           {/* Backdrop with blur */}
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
           
           {/* Modal */}
-          <div className="relative bg-slate-800 rounded-2xl shadow-2xl border border-white/10 w-full max-w-lg mx-4 overflow-hidden">
+          <div className="relative bg-slate-800 rounded-2xl shadow-2xl border border-white/10 w-full max-w-lg mx-4 overflow-hidden max-h-[90vh] overflow-y-auto">
             {/* Header */}
             <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-center">
               <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Sparkles className="w-8 h-8 text-white" />
               </div>
-              <h2 className="text-2xl font-bold text-white mb-2">Welcome to Layout AI! 🎉</h2>
+              <h2 className="text-2xl font-bold text-white mb-2">Complete Your Profile</h2>
               <p className="text-blue-100 text-sm">
-                Let's set up your profile to get started with AI-powered floor plans
+                Just a few more details to get started with AI-powered floor plans
               </p>
             </div>
 
@@ -456,21 +395,6 @@ export default function DashboardPage() {
                   placeholder="Enter your full name"
                   className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   autoFocus
-                />
-              </div>
-
-              {/* Email - Required */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1.5">
-                  <Mail className="w-4 h-4 inline mr-1.5" />
-                  Email Address <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="email"
-                  value={formEmail}
-                  onChange={(e) => setFormEmail(e.target.value)}
-                  placeholder="Enter your email address"
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
@@ -568,14 +492,14 @@ export default function DashboardPage() {
             {/* Footer */}
             <div className="px-6 pb-6">
               <button
-                onClick={handleCreateUser}
+                onClick={handleSaveProfile}
                 disabled={isSavingProfile || !formFullName.trim()}
                 className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSavingProfile ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Creating Account...
+                    Saving...
                   </>
                 ) : (
                   <>
@@ -653,12 +577,7 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {loading ? (
-            <div className="bg-white/5 backdrop-blur-sm rounded-xl p-8 border border-white/10 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-3"></div>
-              <p className="text-gray-400 text-sm">Loading...</p>
-            </div>
-          ) : projects.length === 0 ? (
+          {projects.length === 0 ? (
             <div className="bg-white/5 backdrop-blur-sm rounded-xl p-8 border border-white/10 text-center">
               <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Home className="w-8 h-8 text-gray-500" />
