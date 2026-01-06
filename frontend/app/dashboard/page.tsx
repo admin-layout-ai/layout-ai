@@ -1,5 +1,5 @@
 // frontend/app/dashboard/page.tsx
-// Dashboard page - with welcome modal for new users
+// Dashboard page - checks if user exists, shows welcome popup if not
 
 'use client';
 
@@ -7,8 +7,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { 
   Plus, Home, FolderOpen, Clock, Bell, MapPin, CheckCircle, 
-  Loader2, AlertCircle, User, Mail, Phone, Building2, HardHat,
-  MapPinIcon, X, Sparkles, Save
+  Loader2, AlertCircle, User, Phone, Building2, HardHat,
+  MapPinIcon, Sparkles, Save
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import api, { Project, User as ApiUser } from '@/lib/api';
@@ -45,7 +45,8 @@ export default function DashboardPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userSynced, setUserSynced] = useState(false);
+  const [userExists, setUserExists] = useState<boolean | null>(null); // null = checking
+  const [profileData, setProfileData] = useState<ApiUser | null>(null);
   const [stats, setStats] = useState<DashboardStats>({
     total: 0,
     generated: 0,
@@ -54,7 +55,6 @@ export default function DashboardPage() {
 
   // Welcome modal state
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
-  const [profileData, setProfileData] = useState<ApiUser | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   
@@ -81,38 +81,37 @@ export default function DashboardPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Sync user with backend on first load
+  // Check if user exists on mount
   useEffect(() => {
-    syncUserWithBackend();
+    checkUserExists();
   }, []);
 
-  // Load projects after user is synced
+  // Load dashboard data after user check
   useEffect(() => {
-    if (userSynced && !showWelcomeModal) {
+    if (userExists === true && !showWelcomeModal) {
       loadDashboardData();
     }
-  }, [userSynced, showWelcomeModal]);
+  }, [userExists, showWelcomeModal]);
 
-  const syncUserWithBackend = async () => {
+  const checkUserExists = async () => {
     try {
       const token = localStorage.getItem('auth_token');
       
       if (!token) {
         console.warn('No auth token found');
-        setLoading(false);
+        router.push('/auth/signin');
         return;
       }
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       if (!apiUrl) {
-        console.warn('API URL not configured, skipping user sync');
-        setUserSynced(true);
+        console.warn('API URL not configured');
         setLoading(false);
         return;
       }
 
-      // Call GET /api/v1/users/me to create or sync user
-      const response = await fetch(`${apiUrl}/api/v1/users/me`, {
+      // Call GET /api/v1/users/me/check to see if user exists WITHOUT auto-creating
+      const response = await fetch(`${apiUrl}/api/v1/users/me/check`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -121,71 +120,51 @@ export default function DashboardPage() {
       });
 
       if (response.ok) {
-        const userData: ApiUser = await response.json();
-        console.log('User synced with backend:', userData);
-        setProfileData(userData);
+        const data = await response.json();
+        console.log('User check result:', data);
         
-        // Check if this is a new user (profile incomplete)
-        const isNewUser = isProfileIncomplete(userData);
-        
-        if (isNewUser) {
-          // Pre-fill form with any existing data
-          setFormFullName(userData.full_name || '');
-          setFormPhone(userData.phone || '');
-          setFormAddress(userData.address || '');
-          setFormCompanyName(userData.company_name || '');
-          setFormIsBuilder(userData.is_builder || false);
+        if (data.exists && data.user) {
+          // User exists in database
+          setUserExists(true);
+          setProfileData(data.user);
           
-          // Show welcome modal
-          setShowWelcomeModal(true);
-          setLoading(false);
-        } else {
           // Update local storage
           const currentUserInfo = localStorage.getItem('user_info');
           if (currentUserInfo) {
             const localUser = JSON.parse(currentUserInfo);
             const mergedUser = {
               ...localUser,
-              dbId: userData.id,
-              email: userData.email || localUser.email,
-              name: userData.full_name || localUser.name,
+              dbId: data.user.id,
+              email: data.user.email,
+              name: data.user.full_name,
             };
             localStorage.setItem('user_info', JSON.stringify(mergedUser));
           }
           
-          setUserSynced(true);
+          setLoading(false);
+        } else {
+          // User does NOT exist - show welcome modal
+          console.log('User does not exist in database, showing welcome modal');
+          setUserExists(false);
+          setShowWelcomeModal(true);
+          setLoading(false);
+          
+          // Pre-fill name from auth context if available
+          if (user?.name && user.name !== 'User' && user.name !== 'unknown') {
+            setFormFullName(user.name);
+          }
         }
       } else if (response.status === 401) {
         console.error('Unauthorized - token may be expired');
         router.push('/auth/signin');
       } else {
-        console.error('Failed to sync user:', response.status);
-        setUserSynced(true);
-      }
-    } catch (error) {
-      console.error('Error syncing user with backend:', error);
-      setUserSynced(true);
-    } finally {
-      if (!showWelcomeModal) {
+        console.error('Failed to check user:', response.status);
         setLoading(false);
       }
+    } catch (error) {
+      console.error('Error checking user:', error);
+      setLoading(false);
     }
-  };
-
-  // Check if profile is incomplete (new user)
-  const isProfileIncomplete = (userData: ApiUser): boolean => {
-    // User is considered new if they don't have a full name set
-    // or if the full name looks auto-generated
-    const hasValidName = userData.full_name && 
-      userData.full_name !== 'New User' && 
-      userData.full_name !== 'unknown' &&
-      !userData.full_name.startsWith('user_');
-    
-    // Also check if they have an address (optional but indicates completion)
-    const hasAddress = !!userData.address;
-    
-    // Profile is incomplete if no valid name
-    return !hasValidName;
   };
 
   // Generate address suggestions
@@ -228,8 +207,8 @@ export default function DashboardPage() {
     setShowAddressSuggestions(false);
   };
 
-  // Save welcome profile
-  const handleSaveWelcomeProfile = async () => {
+  // Create new user from welcome form
+  const handleCreateUser = async () => {
     if (!formFullName.trim()) {
       setProfileError('Please enter your full name');
       return;
@@ -239,38 +218,57 @@ export default function DashboardPage() {
     setProfileError(null);
 
     try {
-      const updateData = {
-        full_name: formFullName.trim(),
-        phone: formPhone.trim() || null,
-        address: formAddress.trim() || null,
-        company_name: formCompanyName.trim() || null,
-        is_builder: formIsBuilder,
-      };
+      const token = localStorage.getItem('auth_token');
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
-      const updatedProfile = await api.updateUserProfile(updateData);
-      setProfileData(updatedProfile);
-      
-      // Update local storage
-      const currentUserInfo = localStorage.getItem('user_info');
-      if (currentUserInfo) {
-        const localUser = JSON.parse(currentUserInfo);
-        const mergedUser = {
-          ...localUser,
-          dbId: updatedProfile.id,
-          email: updatedProfile.email,
-          name: updatedProfile.full_name,
-        };
-        localStorage.setItem('user_info', JSON.stringify(mergedUser));
+      // Call POST /api/v1/users/me to CREATE the user
+      const response = await fetch(`${apiUrl}/api/v1/users/me`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          full_name: formFullName.trim(),
+          phone: formPhone.trim() || null,
+          address: formAddress.trim() || null,
+          company_name: formCompanyName.trim() || null,
+          is_builder: formIsBuilder,
+          abn_acn: null
+        })
+      });
+
+      if (response.ok) {
+        const newUser = await response.json();
+        console.log('User created:', newUser);
+        
+        setProfileData(newUser);
+        setUserExists(true);
+        
+        // Update local storage
+        const currentUserInfo = localStorage.getItem('user_info');
+        if (currentUserInfo) {
+          const localUser = JSON.parse(currentUserInfo);
+          const mergedUser = {
+            ...localUser,
+            dbId: newUser.id,
+            email: newUser.email,
+            name: newUser.full_name,
+          };
+          localStorage.setItem('user_info', JSON.stringify(mergedUser));
+        }
+
+        // Close modal and load dashboard
+        setShowWelcomeModal(false);
+        setLoading(true);
+        await loadDashboardData();
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to create user');
       }
-
-      // Close modal and load dashboard
-      setShowWelcomeModal(false);
-      setUserSynced(true);
-      setLoading(true);
-      await loadDashboardData();
     } catch (err) {
-      console.error('Error saving profile:', err);
-      setProfileError(err instanceof Error ? err.message : 'Failed to save profile');
+      console.error('Error creating user:', err);
+      setProfileError(err instanceof Error ? err.message : 'Failed to create user');
     } finally {
       setIsSavingProfile(false);
     }
@@ -311,7 +309,7 @@ export default function DashboardPage() {
   };
 
   const getDisplayName = () => {
-    if (profileData?.full_name && profileData.full_name !== 'New User' && profileData.full_name !== 'unknown') {
+    if (profileData?.full_name && profileData.full_name !== 'New User') {
       return profileData.full_name.split(' ')[0];
     }
     if (user?.name && user.name !== 'User' && user.name !== 'unknown') {
@@ -361,10 +359,22 @@ export default function DashboardPage() {
     });
   };
 
+  // Show loading while checking user
+  if (loading && userExists === null) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 text-blue-400 animate-spin mx-auto mb-4" />
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6 relative">
       
-      {/* Welcome Modal Overlay */}
+      {/* Welcome Modal Overlay - Shows when user doesn't exist in database */}
       {showWelcomeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           {/* Backdrop with blur */}
@@ -502,14 +512,14 @@ export default function DashboardPage() {
             {/* Footer */}
             <div className="px-6 pb-6">
               <button
-                onClick={handleSaveWelcomeProfile}
+                onClick={handleCreateUser}
                 disabled={isSavingProfile || !formFullName.trim()}
                 className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSavingProfile ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Saving...
+                    Creating Account...
                   </>
                 ) : (
                   <>

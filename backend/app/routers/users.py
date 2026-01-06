@@ -1,7 +1,7 @@
 # backend/app/routers/users.py
 """
 User management endpoints for Layout AI
-UPDATED: Added address, abn_acn, builder_logo_url fields
+UPDATED: Added /me/check endpoint to verify if user exists without auto-creating
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -44,6 +44,22 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 
+class UserCheckResponse(BaseModel):
+    """Response for user existence check"""
+    exists: bool
+    user: Optional[UserResponse] = None
+
+
+class UserCreateRequest(BaseModel):
+    """Schema for creating a new user (from welcome form)"""
+    full_name: str
+    company_name: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    is_builder: bool = False
+    abn_acn: Optional[str] = None
+
+
 class UserUpdateRequest(BaseModel):
     """Schema for updating user profile"""
     full_name: Optional[str] = None
@@ -60,85 +76,73 @@ class UserUpdateRequest(BaseModel):
 # Endpoints
 # =============================================================================
 
-@router.get("/me", response_model=UserResponse)
-async def get_or_create_current_user(
+@router.get("/me/check", response_model=UserCheckResponse)
+async def check_user_exists(
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Get current user profile. Creates user if first login.
-    User info is extracted from the B2C token.
-    """
-    logger.info(f"Getting/creating user for azure_ad_id: {current_user.id}")
-    logger.info(f"Token claims - email: {current_user.email}, name: {current_user.name}")
+    Check if user exists in database WITHOUT auto-creating.
+    Used by frontend to determine if welcome form should be shown.
     
-    # Look up user by Azure AD ID (sub claim)
+    Returns:
+        exists: True if user record exists in database
+        user: User data if exists, None otherwise
+    """
+    logger.info(f"Checking if user exists for azure_ad_id: {current_user.id}")
+    
+    # Look up user by Azure AD ID
     db_user = db.query(models.User).filter(
         models.User.azure_ad_id == current_user.id
     ).first()
     
     if db_user:
-        logger.info(f"Found existing user: {db_user.id}")
-        
-        # Update user info if it has changed or was incomplete
-        updated = False
-        
-        # Update email if we have a better one
-        if current_user.email and current_user.email != db_user.email:
-            # Don't update if current email looks like a placeholder
-            if '@placeholder' not in current_user.email and current_user.email:
-                db_user.email = current_user.email
-                updated = True
-                logger.info(f"Updated email to: {current_user.email}")
-        
-        # Update name if we have a better one
-        if current_user.name and current_user.name != 'unknown' and current_user.name != db_user.full_name:
-            if db_user.full_name == 'unknown' or not db_user.full_name:
-                db_user.full_name = current_user.name
-                updated = True
-                logger.info(f"Updated full_name to: {current_user.name}")
-        
-        # Update phone if available
-        if current_user.phone_number and not db_user.phone:
-            db_user.phone = current_user.phone_number
-            updated = True
-        
-        if updated:
-            db_user.updated_at = datetime.utcnow()
-            db.commit()
-            db.refresh(db_user)
-        
-        return db_user
+        logger.info(f"User exists: {db_user.id}")
+        return UserCheckResponse(exists=True, user=db_user)
     
-    # First time login - create new user
-    logger.info(f"Creating new user for: {current_user.id}")
+    logger.info(f"User does not exist for azure_ad_id: {current_user.id}")
+    return UserCheckResponse(exists=False, user=None)
+
+
+@router.post("/me", response_model=UserResponse)
+async def create_user(
+    user_data: UserCreateRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new user record (called after welcome form submission).
+    """
+    logger.info(f"Creating user for azure_ad_id: {current_user.id}")
     
-    # Build proper email - don't use azure_ad_id as email
+    # Check if user already exists
+    existing_user = db.query(models.User).filter(
+        models.User.azure_ad_id == current_user.id
+    ).first()
+    
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User already exists"
+        )
+    
+    # Get email from token
     email = current_user.email
     if not email or email == '':
-        # Try to construct from other claims
         email = f"user_{current_user.id[:8]}@layout-ai.com.au"
         logger.warning(f"No email in token, using generated: {email}")
     
-    # Build proper name
-    full_name = current_user.name
-    if not full_name or full_name == '' or full_name == 'unknown':
-        # Try to build from given_name and family_name
-        if current_user.given_name or current_user.family_name:
-            full_name = f"{current_user.given_name} {current_user.family_name}".strip()
-        else:
-            full_name = "New User"
-        logger.warning(f"No name in token, using: {full_name}")
-    
-    logger.info(f"Creating user with email={email}, name={full_name}")
-    
+    # Create new user
     db_user = models.User(
         azure_ad_id=current_user.id,
         email=email,
-        full_name=full_name,
-        phone=current_user.phone_number,
+        full_name=user_data.full_name,
+        company_name=user_data.company_name,
+        phone=user_data.phone,
+        address=user_data.address,
         is_active=True,
-        is_builder=False,
+        is_builder=user_data.is_builder,
+        abn_acn=user_data.abn_acn,
         subscription_tier="free",
         created_at=datetime.utcnow()
     )
@@ -151,6 +155,48 @@ async def get_or_create_current_user(
     return db_user
 
 
+@router.get("/me", response_model=UserResponse)
+async def get_current_user_profile(
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get current user profile. Returns 404 if user doesn't exist.
+    Use /me/check to check existence without error, then POST /me to create.
+    """
+    logger.info(f"Getting user for azure_ad_id: {current_user.id}")
+    
+    # Look up user by Azure AD ID (sub claim)
+    db_user = db.query(models.User).filter(
+        models.User.azure_ad_id == current_user.id
+    ).first()
+    
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found. Please complete registration."
+        )
+    
+    logger.info(f"Found user: {db_user.id}")
+    
+    # Update user info if it has changed
+    updated = False
+    
+    # Update email if we have a better one
+    if current_user.email and current_user.email != db_user.email:
+        if '@placeholder' not in current_user.email:
+            db_user.email = current_user.email
+            updated = True
+            logger.info(f"Updated email to: {current_user.email}")
+    
+    if updated:
+        db_user.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(db_user)
+    
+    return db_user
+
+
 @router.put("/me", response_model=UserResponse)
 async def update_current_user(
     update_data: UserUpdateRequest,
@@ -160,7 +206,6 @@ async def update_current_user(
     """
     Update current user's profile.
     """
-    # Get user from database
     db_user = db.query(models.User).filter(
         models.User.azure_ad_id == current_user.id
     ).first()
@@ -194,7 +239,6 @@ async def update_current_user(
         db_user.builder_logo_url = update_data.builder_logo_url
     
     if update_data.email is not None:
-        # Check if email is already taken by another user
         existing = db.query(models.User).filter(
             models.User.email == update_data.email,
             models.User.id != db_user.id
@@ -233,17 +277,15 @@ async def get_subscription_status(
             detail="User not found"
         )
     
-    # Count user's projects
     project_count = db.query(models.Project).filter(
         models.Project.user_id == db_user.id
     ).count()
     
-    # Define tier limits
     tier_limits = {
         "free": 2,
         "basic": 10,
         "professional": 50,
-        "enterprise": -1  # unlimited
+        "enterprise": -1
     }
     
     limit = tier_limits.get(db_user.subscription_tier, 2)

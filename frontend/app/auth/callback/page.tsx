@@ -1,5 +1,5 @@
 // frontend/app/auth/callback/page.tsx
-// Auth callback handler - FIXED: Better error handling and redirect logic
+// Auth callback handler - Always redirects to dashboard (welcome modal handles new users)
 
 'use client';
 
@@ -100,13 +100,9 @@ export default function CallbackPage() {
         throw new Error('No user identifier in token');
       }
 
-      // Check if this user has already provided email before
-      const existingUsers = JSON.parse(localStorage.getItem('user_emails') || '{}');
-      const savedEmail = existingUsers[userId];
-
       const user = {
         id: userId,
-        email: email || savedEmail || '',
+        email: email || '', // Email might be empty, that's OK - dashboard will handle it
         name: fullName,
         givenName: givenName,
         familyName: familyName,
@@ -123,21 +119,22 @@ export default function CallbackPage() {
       // Dispatch event for other tabs/components
       window.dispatchEvent(new Event('auth-updated'));
 
-      setStatus('Redirecting...');
+      setStatus('Redirecting to dashboard...');
 
       // Check for stored redirect path
       const storedRedirect = sessionStorage.getItem('auth_redirect');
       sessionStorage.removeItem('auth_redirect');
 
-      // Determine where to redirect
-      if (!user.email) {
-        // If no email, redirect to collect it (only once per user)
-        router.push('/auth/complete-profile');
-      } else if (storedRedirect && storedRedirect !== '/auth/signin' && storedRedirect !== '/auth/signup') {
+      // Always redirect to dashboard - the welcome modal will handle new users
+      // who don't have a record in dbo.users table yet
+      if (storedRedirect && 
+          storedRedirect !== '/auth/signin' && 
+          storedRedirect !== '/auth/signup' &&
+          storedRedirect !== '/auth/complete-profile') {
         // Redirect to originally requested page
         router.push(storedRedirect);
       } else {
-        // Default to dashboard
+        // Default to dashboard - welcome modal will show if user doesn't exist in DB
         router.push('/dashboard');
       }
     } catch (err) {
