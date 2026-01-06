@@ -28,6 +28,7 @@ class ProjectCreateRequest(BaseModel):
     orientation: Optional[str] = None
     street_frontage: Optional[str] = None
     contour_plan_url: Optional[str] = None
+    developer_guidelines_url: Optional[str] = None
     bedrooms: Optional[int] = None
     bathrooms: Optional[float] = None
     living_areas: Optional[int] = None
@@ -68,6 +69,7 @@ class ProjectUpdateRequest(BaseModel):
     orientation: Optional[str] = None
     street_frontage: Optional[str] = None
     contour_plan_url: Optional[str] = None
+    developer_guidelines_url: Optional[str] = None
     bedrooms: Optional[int] = None
     bathrooms: Optional[float] = None
     living_areas: Optional[int] = None
@@ -98,6 +100,7 @@ class ProjectResponse(BaseModel):
     orientation: Optional[str] = None
     street_frontage: Optional[str] = None
     contour_plan_url: Optional[str] = None
+    developer_guidelines_url: Optional[str] = None
     bedrooms: Optional[int] = None
     bathrooms: Optional[float] = None
     living_areas: Optional[int] = None
@@ -493,6 +496,7 @@ async def create_project(
         orientation=project_data.orientation,
         street_frontage=project_data.street_frontage,
         contour_plan_url=project_data.contour_plan_url,
+        developer_guidelines_url=project_data.developer_guidelines_url,
         bedrooms=project_data.bedrooms,
         bathrooms=project_data.bathrooms,
         living_areas=project_data.living_areas,

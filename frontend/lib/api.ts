@@ -60,6 +60,7 @@ export interface Project {
   orientation?: string;
   street_frontage?: string;
   contour_plan_url?: string;
+  developer_guidelines_url?: string;
   bedrooms?: number;
   bathrooms?: number;
   living_areas?: number;
@@ -89,6 +90,7 @@ export interface ProjectCreateData {
   orientation?: string;
   street_frontage?: string;
   contour_plan_url?: string;
+  developer_guidelines_url?: string;
   bedrooms?: number;
   bathrooms?: number;
   living_areas?: number;
@@ -243,6 +245,39 @@ class ApiClient {
     return result.url;
   }
 
+  async uploadDeveloperGuidelines(file: File, userName: string, projectName: string): Promise<string> {
+    const token = this.getAuthToken();
+    
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('user_name', userName);
+    formData.append('project_name', projectName);
+    formData.append('folder_type', 'DeveloperGuidelines');
+
+    const url = `${this.baseUrl}/api/v1/files/upload`;
+    console.log(`Uploading developer guidelines: ${file.name} to ${url}`);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || errorData.message || 'Developer guidelines upload failed');
+    }
+
+    const result: FileUploadResponse = await response.json();
+    return result.url;
+  }
+
   async uploadBuilderLogo(file: File, userName: string): Promise<string> {
     const token = this.getAuthToken();
     
@@ -280,17 +315,10 @@ class ApiClient {
   // User Endpoints
   // ===========================================================================
 
-  /**
-   * Check if user exists in database WITHOUT auto-creating.
-   * Returns { exists: boolean, user: User | null }
-   */
   async checkUserExists(): Promise<UserCheckResponse> {
     return this.request<UserCheckResponse>('/api/v1/users/me/check');
   }
 
-  /**
-   * Create a new user (called after welcome form submission).
-   */
   async createUser(data: UserCreateData): Promise<User> {
     return this.request<User>('/api/v1/users/me', {
       method: 'POST',
