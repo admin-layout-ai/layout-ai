@@ -8,9 +8,9 @@ import { useRouter } from 'next/navigation';
 import { 
   Plus, Home, FolderOpen, Clock, Bell, MapPin, CheckCircle, 
   Loader2, AlertCircle, User, Phone, Building2, HardHat,
-  MapPinIcon, Sparkles, Save
+  MapPinIcon, Sparkles, Save, Hash
 } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import api, { Project, User as ApiUser } from '@/lib/api';
 
 interface DashboardStats {
@@ -18,27 +18,6 @@ interface DashboardStats {
   generated: number;
   plans: number;
 }
-
-// Australian suburbs for address autocomplete
-const AUSTRALIAN_SUBURBS: Record<string, { state: string; postcode: string }[]> = {
-  'sydney': [{ state: 'NSW', postcode: '2000' }],
-  'melbourne': [{ state: 'VIC', postcode: '3000' }],
-  'brisbane': [{ state: 'QLD', postcode: '4000' }],
-  'perth': [{ state: 'WA', postcode: '6000' }],
-  'adelaide': [{ state: 'SA', postcode: '5000' }],
-  'hobart': [{ state: 'TAS', postcode: '7000' }],
-  'darwin': [{ state: 'NT', postcode: '0800' }],
-  'canberra': [{ state: 'ACT', postcode: '2600' }],
-  'parramatta': [{ state: 'NSW', postcode: '2150' }],
-  'newcastle': [{ state: 'NSW', postcode: '2300' }],
-  'gold coast': [{ state: 'QLD', postcode: '4217' }],
-  'geelong': [{ state: 'VIC', postcode: '3220' }],
-};
-
-const AUSTRALIAN_STREETS = [
-  'George Street', 'Pitt Street', 'King Street', 'Collins Street', 
-  'Bourke Street', 'Queen Street', 'Hay Street', 'Murray Street'
-];
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -64,22 +43,7 @@ export default function DashboardPage() {
   const [formAddress, setFormAddress] = useState('');
   const [formCompanyName, setFormCompanyName] = useState('');
   const [formIsBuilder, setFormIsBuilder] = useState(false);
-  
-  // Address autocomplete
-  const [addressSuggestions, setAddressSuggestions] = useState<{id: string; text: string}[]>([]);
-  const [showAddressSuggestions, setShowAddressSuggestions] = useState(false);
-  const addressRef = useRef<HTMLDivElement>(null);
-
-  // Close address suggestions on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (addressRef.current && !addressRef.current.contains(e.target as Node)) {
-        setShowAddressSuggestions(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  const [formAbnAcn, setFormAbnAcn] = useState('');
 
   // Load user on mount
   useEffect(() => {
@@ -179,52 +143,13 @@ export default function DashboardPage() {
       if (userData.address) setFormAddress(userData.address);
       if (userData.company_name) setFormCompanyName(userData.company_name);
       if (userData.is_builder) setFormIsBuilder(userData.is_builder);
+      if (userData.abn_acn) setFormAbnAcn(userData.abn_acn);
     }
 
     // Use local name if form name not set
     if (!formFullName && localName) {
       setFormFullName(localName);
     }
-  };
-
-  // Generate address suggestions
-  const generateAddressSuggestions = (query: string) => {
-    if (query.length < 2) {
-      setAddressSuggestions([]);
-      return;
-    }
-    
-    const lowerQuery = query.toLowerCase();
-    const suggestions: {id: string; text: string}[] = [];
-    const numberMatch = query.match(/^(\d+)\s*/);
-    const streetNumber = numberMatch ? numberMatch[1] : '';
-    
-    Object.entries(AUSTRALIAN_SUBURBS).forEach(([suburb, locations]) => {
-      if (suburb.includes(lowerQuery) || lowerQuery.includes(suburb.substring(0, 3))) {
-        locations.forEach(loc => {
-          AUSTRALIAN_STREETS.slice(0, 2).forEach((street, idx) => {
-            const num = streetNumber || String((idx + 1) * 10 + Math.floor(Math.random() * 90));
-            suggestions.push({
-              id: `${suburb}-${idx}`,
-              text: `${num} ${street}, ${suburb.charAt(0).toUpperCase() + suburb.slice(1)} ${loc.state} ${loc.postcode}`
-            });
-          });
-        });
-      }
-    });
-    
-    setAddressSuggestions(suggestions.slice(0, 5));
-    setShowAddressSuggestions(suggestions.length > 0);
-  };
-
-  const handleAddressChange = (value: string) => {
-    setFormAddress(value);
-    generateAddressSuggestions(value);
-  };
-
-  const selectAddress = (address: string) => {
-    setFormAddress(address);
-    setShowAddressSuggestions(false);
   };
 
   // Save profile - creates or updates user
@@ -247,8 +172,9 @@ export default function DashboardPage() {
         email: userEmail, // Pass email from localStorage
         phone: formPhone.trim() || null,
         address: formAddress.trim() || null,
-        company_name: formCompanyName.trim() || null,
+        company_name: formIsBuilder ? (formCompanyName.trim() || null) : null,
         is_builder: formIsBuilder,
+        abn_acn: formIsBuilder ? (formAbnAcn.replace(/\s/g, '').trim() || null) : null, // Remove spaces for storage
       };
 
       console.log('Saving profile with email:', userEmail);
@@ -463,8 +389,8 @@ export default function DashboardPage() {
                 />
               </div>
 
-              {/* Address with Autocomplete */}
-              <div className="relative" ref={addressRef}>
+              {/* Address - Simple input */}
+              <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1.5">
                   <MapPinIcon className="w-4 h-4 inline mr-1.5" />
                   Address
@@ -472,26 +398,10 @@ export default function DashboardPage() {
                 <input
                   type="text"
                   value={formAddress}
-                  onChange={(e) => handleAddressChange(e.target.value)}
-                  onFocus={() => formAddress.length >= 2 && generateAddressSuggestions(formAddress)}
-                  placeholder="Start typing your address"
+                  onChange={(e) => setFormAddress(e.target.value)}
+                  placeholder="Enter your full address"
                   className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                
-                {showAddressSuggestions && addressSuggestions.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-slate-700 border border-white/10 rounded-lg shadow-xl max-h-48 overflow-auto">
-                    {addressSuggestions.map((suggestion) => (
-                      <button
-                        key={suggestion.id}
-                        onClick={() => selectAddress(suggestion.text)}
-                        className="w-full px-4 py-2.5 text-left text-white hover:bg-blue-600/30 transition text-sm flex items-center gap-2"
-                      >
-                        <MapPinIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                        {suggestion.text}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
 
               {/* Is Builder Toggle */}
@@ -521,21 +431,57 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Company Name - Show if builder */}
+              {/* Builder Fields - Show if builder */}
               {formIsBuilder && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1.5">
-                    <Building2 className="w-4 h-4 inline mr-1.5" />
-                    Company Name
-                  </label>
-                  <input
-                    type="text"
-                    value={formCompanyName}
-                    onChange={(e) => setFormCompanyName(e.target.value)}
-                    placeholder="Enter your company name"
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+                <>
+                  {/* Company Name */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1.5">
+                      <Building2 className="w-4 h-4 inline mr-1.5" />
+                      Company Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formCompanyName}
+                      onChange={(e) => setFormCompanyName(e.target.value)}
+                      placeholder="Enter your company name"
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* ABN/ACN */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1.5">
+                      <Hash className="w-4 h-4 inline mr-1.5" />
+                      ABN / ACN
+                    </label>
+                    <input
+                      type="text"
+                      value={formAbnAcn}
+                      onChange={(e) => {
+                        // Only allow numbers and format as user types
+                        const value = e.target.value.replace(/[^\d]/g, '');
+                        if (value.length <= 11) {
+                          // Format: XX XXX XXX XXX (ABN) or XXX XXX XXX (ACN)
+                          let formatted = '';
+                          if (value.length <= 9) {
+                            // ACN format: XXX XXX XXX
+                            formatted = value.replace(/(\d{3})(?=\d)/g, '$1 ').trim();
+                          } else {
+                            // ABN format: XX XXX XXX XXX
+                            formatted = value.replace(/(\d{2})(\d{3})(\d{3})(\d{3})/, '$1 $2 $3 $4').trim();
+                          }
+                          setFormAbnAcn(formatted);
+                        }
+                      }}
+                      placeholder="Enter ABN (11 digits) or ACN (9 digits)"
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      ABN: 11 digits (XX XXX XXX XXX) | ACN: 9 digits (XXX XXX XXX)
+                    </p>
+                  </div>
+                </>
               )}
             </div>
 
