@@ -115,18 +115,24 @@ export interface FloorPlan {
   variant_number: number;
   name?: string;
   description?: string;
-  floor_plan_url?: string;
-  pdf_url?: string;
-  thumbnail_url?: string;
+  plan_type?: string;
   total_area?: number;
   living_area?: number;
   layout_data?: string;
-  room_layout?: Record<string, unknown>;
+  compliance_data?: string;
+  pdf_url?: string;
+  dxf_url?: string;
+  preview_image_url?: string;
+  model_3d_url?: string;
   is_compliant?: boolean;
+  compliance_notes?: string;
+  generation_time_seconds?: number;
+  ai_model_version?: string;
   is_favorite?: boolean;
   user_rating?: number;
   user_notes?: string;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface SubscriptionStatus {
