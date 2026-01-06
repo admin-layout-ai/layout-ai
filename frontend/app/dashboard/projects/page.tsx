@@ -550,14 +550,6 @@ export default function ProjectsPage() {
                 Created {formatDate(project.created_at, true)}
               </p>
             </div>
-            
-            <button
-              onClick={() => setShowDeleteConfirm(project.id)}
-              className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition"
-              title="Delete project"
-            >
-              <Trash2 className="w-5 h-5" />
-            </button>
           </div>
         </div>
 
