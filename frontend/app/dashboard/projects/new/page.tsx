@@ -225,7 +225,7 @@ export default function NewProjectPage() {
       </div>
 
       {/* Step Indicator - Now 4 steps */}
-      <div className="mb-8 flex items-center justify-between max-w-3xl">
+      <div className="mb-8 flex items-center justify-between max-w-6xl">
         {steps.map((step, index) => (
           <div key={step.id} className="flex items-center">
             <div 
@@ -248,13 +248,13 @@ export default function NewProjectPage() {
 
       {/* Error Message */}
       {error && (
-        <div className="max-w-2xl mb-6 bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400">
+        <div className="max-w-5xl mb-6 bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400">
           {error}
         </div>
       )}
 
       {/* Step Content */}
-      <div className="max-w-2xl">
+      <div className="max-w-5xl">
         {/* Step 1: Project Details */}
         {currentStep === 'details' && (
           <div className="bg-white/5 rounded-xl p-6 border border-white/10">
