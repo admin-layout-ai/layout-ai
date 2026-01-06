@@ -606,11 +606,14 @@ export default function ProfilePage() {
                         </div>
                       </div>
                     ) : (
-                      <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-white/20 rounded-lg cursor-pointer bg-white/5 hover:bg-white/10 transition">
+                      <div 
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-white/20 rounded-lg cursor-pointer bg-white/5 hover:bg-white/10 transition"
+                      >
                         <Upload className="w-6 h-6 text-gray-400 mb-1" />
                         <span className="text-gray-300 text-sm">Click to upload</span>
                         <span className="text-gray-500 text-xs">PNG, JPG (max 5MB)</span>
-                      </label>
+                      </div>
                     )}
                     
                     <input 
