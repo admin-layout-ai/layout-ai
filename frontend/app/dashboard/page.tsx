@@ -1,5 +1,5 @@
 // frontend/app/dashboard/page.tsx
-// Dashboard page - shows welcome modal for new/incomplete users
+// Dashboard page - reads email from localStorage, shows welcome modal for profile completion
 
 'use client';
 
@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import { 
   Plus, Home, FolderOpen, Clock, Bell, MapPin, CheckCircle, 
   Loader2, AlertCircle, User, Phone, Building2, HardHat,
-  MapPinIcon, Sparkles, Save, Mail
+  MapPinIcon, Sparkles, Save
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import api, { Project, User as ApiUser } from '@/lib/api';
@@ -46,6 +46,7 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [profileData, setProfileData] = useState<ApiUser | null>(null);
+  const [userEmail, setUserEmail] = useState<string>('');
   const [stats, setStats] = useState<DashboardStats>({
     total: 0,
     generated: 0,
@@ -80,12 +81,12 @@ export default function DashboardPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Load user and check profile on mount
+  // Load user on mount
   useEffect(() => {
-    loadUserProfile();
+    initializeDashboard();
   }, []);
 
-  const loadUserProfile = async () => {
+  const initializeDashboard = async () => {
     try {
       const token = localStorage.getItem('auth_token');
       
@@ -95,37 +96,71 @@ export default function DashboardPage() {
         return;
       }
 
-      // Get user from backend (will auto-create if doesn't exist)
-      const userData = await api.getCurrentUser();
-      console.log('User data from backend:', userData);
-      setProfileData(userData);
-
-      // Check if profile is incomplete (needs welcome modal)
-      const isIncomplete = isProfileIncomplete(userData);
+      // Get email from localStorage (set by complete-email page)
+      const userInfo = localStorage.getItem('user_info');
+      let email = '';
+      let userName = '';
       
-      if (isIncomplete) {
-        console.log('Profile incomplete, showing welcome modal');
-        prefillFormFromSources(userData);
-        setShowWelcomeModal(true);
+      if (userInfo) {
+        try {
+          const storedUser = JSON.parse(userInfo);
+          email = storedUser.email || '';
+          
+          // Get name for pre-fill
+          if (storedUser.name && storedUser.name !== 'User' && storedUser.name !== 'unknown') {
+            userName = storedUser.name;
+          } else if (storedUser.givenName || storedUser.familyName) {
+            userName = `${storedUser.givenName || ''} ${storedUser.familyName || ''}`.trim();
+          }
+          
+          console.log('User info from localStorage:', { email, userName });
+        } catch (e) {
+          console.error('Error parsing user info:', e);
+        }
       }
 
-      // Load dashboard data
-      await loadDashboardData();
+      // If no email, redirect to complete-email page
+      if (!email || email.length === 0) {
+        console.log('No email in localStorage, redirecting to complete-email');
+        router.push('/auth/complete-email');
+        return;
+      }
+
+      setUserEmail(email);
+
+      // Check if user exists in database by calling a simple endpoint
+      // We'll try to get the user, and handle the response
+      try {
+        const userData = await api.getCurrentUser();
+        console.log('Existing user found:', userData);
+        setProfileData(userData);
+
+        // Check if profile needs completion
+        if (isProfileIncomplete(userData)) {
+          console.log('Profile incomplete, showing welcome modal');
+          prefillForm(userData, userName);
+          setShowWelcomeModal(true);
+        }
+
+        // Load projects
+        await loadDashboardData();
+
+      } catch (error) {
+        console.log('User not found or error, will show welcome modal:', error);
+        
+        // User doesn't exist - show welcome modal to create profile
+        prefillForm(null, userName);
+        setShowWelcomeModal(true);
+        setLoading(false);
+      }
 
     } catch (error) {
-      console.error('Error loading user profile:', error);
-      // If 401, redirect to signin
-      if (error instanceof Error && error.message.includes('401')) {
-        router.push('/auth/signin');
-      }
-    } finally {
+      console.error('Error initializing dashboard:', error);
       setLoading(false);
     }
   };
 
-  // Check if profile needs completion
   const isProfileIncomplete = (userData: ApiUser): boolean => {
-    // Profile is incomplete if full_name is auto-generated or missing
     const hasValidName = userData.full_name && 
       userData.full_name !== 'New User' && 
       userData.full_name !== 'unknown' &&
@@ -135,38 +170,20 @@ export default function DashboardPage() {
     return !hasValidName;
   };
 
-  // Pre-fill form from all available sources
-  const prefillFormFromSources = (userData: ApiUser) => {
-    // Try backend data first
-    if (userData.full_name && userData.full_name !== 'New User' && userData.full_name !== 'unknown') {
-      setFormFullName(userData.full_name);
-    }
-    if (userData.phone) setFormPhone(userData.phone);
-    if (userData.address) setFormAddress(userData.address);
-    if (userData.company_name) setFormCompanyName(userData.company_name);
-    if (userData.is_builder) setFormIsBuilder(userData.is_builder);
-
-    // Then try localStorage for name if not set
-    if (!formFullName) {
-      const userInfo = localStorage.getItem('user_info');
-      if (userInfo) {
-        try {
-          const storedUser = JSON.parse(userInfo);
-          if (storedUser.name && storedUser.name !== 'User' && storedUser.name !== 'unknown') {
-            setFormFullName(storedUser.name);
-          } else if (storedUser.givenName || storedUser.familyName) {
-            const fullName = `${storedUser.givenName || ''} ${storedUser.familyName || ''}`.trim();
-            if (fullName) setFormFullName(fullName);
-          }
-        } catch (e) {
-          console.error('Error parsing user info:', e);
-        }
+  const prefillForm = (userData: ApiUser | null, localName: string) => {
+    if (userData) {
+      if (userData.full_name && userData.full_name !== 'New User' && userData.full_name !== 'unknown') {
+        setFormFullName(userData.full_name);
       }
+      if (userData.phone) setFormPhone(userData.phone);
+      if (userData.address) setFormAddress(userData.address);
+      if (userData.company_name) setFormCompanyName(userData.company_name);
+      if (userData.is_builder) setFormIsBuilder(userData.is_builder);
     }
 
-    // Also try from auth context
-    if (!formFullName && user?.name && user.name !== 'User' && user.name !== 'unknown') {
-      setFormFullName(user.name);
+    // Use local name if form name not set
+    if (!formFullName && localName) {
+      setFormFullName(localName);
     }
   };
 
@@ -210,7 +227,7 @@ export default function DashboardPage() {
     setShowAddressSuggestions(false);
   };
 
-  // Save profile from welcome modal
+  // Save profile - creates or updates user
   const handleSaveProfile = async () => {
     if (!formFullName.trim()) {
       setProfileError('Please enter your full name');
@@ -221,32 +238,61 @@ export default function DashboardPage() {
     setProfileError(null);
 
     try {
-      // Update user profile via API
-      const updatedProfile = await api.updateUserProfile({
+      const token = localStorage.getItem('auth_token');
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+
+      // Try to update first, if fails then create
+      const profilePayload = {
         full_name: formFullName.trim(),
+        email: userEmail, // Pass email from localStorage
         phone: formPhone.trim() || null,
         address: formAddress.trim() || null,
         company_name: formCompanyName.trim() || null,
         is_builder: formIsBuilder,
-      });
+      };
 
-      console.log('Profile updated:', updatedProfile);
-      setProfileData(updatedProfile);
+      console.log('Saving profile with email:', userEmail);
 
-      // Update local storage
-      const currentUserInfo = localStorage.getItem('user_info');
-      if (currentUserInfo) {
-        const localUser = JSON.parse(currentUserInfo);
-        const mergedUser = {
-          ...localUser,
-          dbId: updatedProfile.id,
-          name: updatedProfile.full_name,
-        };
-        localStorage.setItem('user_info', JSON.stringify(mergedUser));
+      let updatedUser: ApiUser;
+
+      if (profileData) {
+        // User exists - update
+        updatedUser = await api.updateUserProfile(profilePayload);
+      } else {
+        // User doesn't exist - create via POST
+        const response = await fetch(`${apiUrl}/api/v1/users/me`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(profilePayload)
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.detail || 'Failed to create profile');
+        }
+
+        updatedUser = await response.json();
       }
 
-      // Close modal
+      console.log('Profile saved:', updatedUser);
+      setProfileData(updatedUser);
+
+      // Update localStorage
+      const userInfo = localStorage.getItem('user_info');
+      if (userInfo) {
+        const localUser = JSON.parse(userInfo);
+        localUser.dbId = updatedUser.id;
+        localUser.name = updatedUser.full_name;
+        localUser.email = updatedUser.email;
+        localStorage.setItem('user_info', JSON.stringify(localUser));
+      }
+
+      // Close modal and load data
       setShowWelcomeModal(false);
+      await loadDashboardData();
 
     } catch (err) {
       console.error('Error saving profile:', err);
@@ -274,6 +320,8 @@ export default function DashboardPage() {
       });
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -294,9 +342,6 @@ export default function DashboardPage() {
     }
     if (user?.name && user.name !== 'User' && user.name !== 'unknown') {
       return user.name.split(' ')[0];
-    }
-    if (user?.email) {
-      return user.email.split('@')[0];
     }
     return 'there';
   };
@@ -340,7 +385,7 @@ export default function DashboardPage() {
   };
 
   // Show loading
-  if (loading) {
+  if (loading && !showWelcomeModal) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 flex items-center justify-center">
         <div className="text-center">
@@ -371,6 +416,11 @@ export default function DashboardPage() {
               <p className="text-blue-100 text-sm">
                 Just a few more details to get started with AI-powered floor plans
               </p>
+              {userEmail && (
+                <p className="text-blue-200 text-xs mt-2">
+                  Email: {userEmail}
+                </p>
+              )}
             </div>
 
             {/* Form */}
