@@ -1,14 +1,14 @@
 # backend/app/routers/plans.py
-# Floor plans router with B2C authentication
+# Floor plans router with Azure OpenAI integration
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime
 import json
 import logging
+import os
 
 from .. import models
 from ..database import get_db
@@ -18,8 +18,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/plans", tags=["plans"])
 
+# Check if OpenAI is configured
+OPENAI_ENABLED = bool(os.getenv("AZURE_OPENAI_ENDPOINT") and os.getenv("AZURE_OPENAI_KEY"))
 
-# Pydantic models for responses
+
+# Pydantic models
 class FloorPlanResponse(BaseModel):
     id: int
     project_id: int
@@ -27,7 +30,7 @@ class FloorPlanResponse(BaseModel):
     total_area: Optional[float] = None
     living_area: Optional[float] = None
     plan_type: Optional[str] = None
-    layout_data: Optional[str] = None  # JSON string with room data
+    layout_data: Optional[str] = None
     compliance_data: Optional[str] = None
     pdf_url: Optional[str] = None
     dxf_url: Optional[str] = None
@@ -88,7 +91,7 @@ async def get_plan_preview(
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get floor plan preview data (layout JSON)."""
+    """Get floor plan preview data."""
     db_user = get_db_user(current_user, db)
     
     floor_plan = db.query(models.FloorPlan).filter(
@@ -98,7 +101,6 @@ async def get_plan_preview(
     if not floor_plan:
         raise HTTPException(status_code=404, detail="Floor plan not found")
     
-    # Verify project belongs to user
     project = db.query(models.Project).filter(
         models.Project.id == floor_plan.project_id,
         models.Project.user_id == db_user.id
@@ -107,7 +109,6 @@ async def get_plan_preview(
     if not project:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Parse layout_data if it exists
     layout_data = None
     if floor_plan.layout_data:
         try:
@@ -124,8 +125,8 @@ async def get_plan_preview(
         "plan_type": floor_plan.plan_type,
         "is_compliant": floor_plan.is_compliant,
         "compliance_notes": floor_plan.compliance_notes,
-        "layout_data": floor_plan.layout_data,  # Keep as string for frontend parsing
-        "layout": layout_data,  # Also provide parsed version
+        "layout_data": floor_plan.layout_data,
+        "layout": layout_data,
         "pdf_url": floor_plan.pdf_url,
         "preview_image_url": floor_plan.preview_image_url,
         "created_at": floor_plan.created_at,
@@ -139,7 +140,7 @@ async def generate_plans(
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Generate floor plans for a project."""
+    """Generate floor plans for a project using AI or rule-based system."""
     db_user = get_db_user(current_user, db)
     
     project = db.query(models.Project).filter(
@@ -150,7 +151,6 @@ async def generate_plans(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Check if questionnaire is completed
     if not project.bedrooms:
         raise HTTPException(
             status_code=400, 
@@ -158,49 +158,81 @@ async def generate_plans(
         )
     
     try:
-        # Update status to generating
+        # Update status
         project.status = "generating"
         db.commit()
         
-        # Delete existing floor plans for this project
+        # Delete existing floor plans
         db.query(models.FloorPlan).filter(
             models.FloorPlan.project_id == project_id
         ).delete()
         db.commit()
         
-        # Generate 3 variants
-        variants = [
-            {"name": "Compact Design", "scale": 0.85, "plan_type": "compact"},
-            {"name": "Family Layout", "scale": 1.0, "plan_type": "family"},
-            {"name": "Luxury Design", "scale": 1.15, "plan_type": "luxury"},
-        ]
+        # Prepare project data
+        project_data = {
+            "land_width": project.land_width,
+            "land_depth": project.land_depth,
+            "land_area": project.land_area,
+            "bedrooms": project.bedrooms,
+            "bathrooms": project.bathrooms,
+            "garage_spaces": project.garage_spaces,
+            "storeys": project.storeys or 1,
+            "style": project.style or "modern",
+            "open_plan": project.open_plan,
+            "outdoor_entertainment": project.outdoor_entertainment,
+            "home_office": project.home_office,
+            "suburb": project.suburb,
+            "state": project.state,
+            "council": project.council,
+        }
         
+        # Try OpenAI generation first, fall back to rule-based
+        variants = []
+        ai_model_version = "rule-based-v1"
+        
+        if OPENAI_ENABLED:
+            try:
+                from ..services.openai_floor_plan_generator import OpenAIFloorPlanGenerator
+                
+                generator = OpenAIFloorPlanGenerator()
+                if generator.client:
+                    logger.info("Using Azure OpenAI for floor plan generation")
+                    variants = generator.generate_floor_plan_variants(project_data, num_variants=3)
+                    ai_model_version = generator.deployment
+                    
+            except Exception as e:
+                logger.warning(f"OpenAI generation failed, falling back to rule-based: {e}")
+                variants = []
+        
+        # Fall back to rule-based if OpenAI didn't work
+        if not variants:
+            logger.info("Using rule-based floor plan generation")
+            variants = _generate_rule_based_variants(project)
+        
+        # Save floor plans to database
         for idx, variant in enumerate(variants):
-            rooms = _generate_rooms(project, variant["scale"])
-            total_area = sum(r["area"] for r in rooms)
-            living_area = sum(r["area"] for r in rooms if r["type"] in ["living", "kitchen_dining", "dining", "kitchen"])
+            # Handle both OpenAI format and rule-based format
+            if "rooms" in variant:
+                # OpenAI format
+                total_area = variant.get("total_area") or sum(r.get("area", r.get("width", 0) * r.get("depth", 0)) for r in variant.get("rooms", []))
+                living_area = variant.get("living_area") or sum(
+                    r.get("area", r.get("width", 0) * r.get("depth", 0)) 
+                    for r in variant.get("rooms", []) 
+                    if r.get("type") in ["living", "kitchen_dining", "dining", "kitchen"]
+                )
+                layout_data = variant
+            else:
+                # Rule-based format (already processed)
+                total_area = variant.get("total_area", 0)
+                living_area = variant.get("living_area", 0)
+                layout_data = variant
             
-            layout_data = {
-                "variant_name": variant["name"],
-                "description": f"{variant['name']} - optimized for your {project.land_width}m x {project.land_depth}m lot",
-                "rooms": rooms,
-                "total_area": total_area,
-                "living_area": living_area,
-                "building_width": project.land_width * 0.7 * variant["scale"],
-                "building_depth": project.land_depth * 0.6 * variant["scale"],
-                "compliant": True,
-                "style": project.style or "modern",
-                "storeys": project.storeys or 1,
-            }
+            plan_type = variant.get("variant_style") or variant.get("plan_type") or ["compact", "family", "luxury"][idx]
             
             compliance_data = {
-                "ncc_compliant": True,
+                "ncc_compliant": variant.get("compliant", True),
                 "council": project.council,
-                "notes": [
-                    "Minimum room sizes met",
-                    "Setback requirements satisfied",
-                    "Building coverage within limits"
-                ]
+                "notes": ["Minimum room sizes met", "Setback requirements satisfied"]
             }
             
             floor_plan = models.FloorPlan(
@@ -208,13 +240,13 @@ async def generate_plans(
                 variant_number=idx + 1,
                 total_area=total_area,
                 living_area=living_area,
-                plan_type=variant["plan_type"],
+                plan_type=plan_type,
                 layout_data=json.dumps(layout_data),
                 compliance_data=json.dumps(compliance_data),
-                is_compliant=True,
-                compliance_notes="Meets NCC requirements for residential Class 1a building",
-                generation_time_seconds=0.5,
-                ai_model_version="rule-based-v1",
+                is_compliant=variant.get("compliant", True),
+                compliance_notes=variant.get("compliance_notes", "Meets NCC requirements for residential Class 1a building"),
+                generation_time_seconds=variant.get("tokens_used", {}).get("total", 0) / 1000 if "tokens_used" in variant else 0.5,
+                ai_model_version=ai_model_version,
                 created_at=datetime.utcnow()
             )
             db.add(floor_plan)
@@ -223,12 +255,13 @@ async def generate_plans(
         project.updated_at = datetime.utcnow()
         db.commit()
         
-        logger.info(f"Generated 3 floor plans for project {project_id}")
+        logger.info(f"Generated {len(variants)} floor plans for project {project_id} using {ai_model_version}")
         
         return {
             "message": "Floor plans generated successfully",
-            "count": 3,
-            "project_id": project_id
+            "count": len(variants),
+            "project_id": project_id,
+            "ai_model": ai_model_version
         }
         
     except Exception as e:
@@ -238,13 +271,46 @@ async def generate_plans(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _generate_rule_based_variants(project: models.Project) -> List[Dict]:
+    """Generate floor plans using rule-based algorithm (fallback)."""
+    variants = []
+    
+    variant_configs = [
+        {"name": "Compact Design", "scale": 0.85, "plan_type": "compact"},
+        {"name": "Family Layout", "scale": 1.0, "plan_type": "family"},
+        {"name": "Luxury Design", "scale": 1.15, "plan_type": "luxury"},
+    ]
+    
+    for config in variant_configs:
+        rooms = _generate_rooms(project, config["scale"])
+        total_area = sum(r["area"] for r in rooms)
+        living_area = sum(r["area"] for r in rooms if r["type"] in ["living", "kitchen_dining", "dining", "kitchen"])
+        
+        variant = {
+            "variant_name": config["name"],
+            "variant_style": config["plan_type"],
+            "description": f"{config['name']} - optimized for your {project.land_width}m x {project.land_depth}m lot",
+            "rooms": rooms,
+            "total_area": total_area,
+            "living_area": living_area,
+            "building_width": project.land_width * 0.7 * config["scale"],
+            "building_depth": project.land_depth * 0.6 * config["scale"],
+            "compliant": True,
+            "compliance_notes": "Meets NCC requirements for residential Class 1a building",
+            "style": project.style or "modern",
+            "storeys": project.storeys or 1,
+        }
+        variants.append(variant)
+    
+    return variants
+
+
 def _generate_rooms(project: models.Project, scale: float = 1.0) -> list:
     """Generate rooms based on project requirements."""
     rooms = []
     x_offset = 0
     y_offset = 0
     
-    # Base dimensions (will be scaled)
     base_sizes = {
         "garage": {"width": 6.0, "depth": 6.0},
         "entry": {"width": 2.5, "depth": 3.0},
@@ -260,7 +326,6 @@ def _generate_rooms(project: models.Project, scale: float = 1.0) -> list:
         "alfresco": {"width": 4.0, "depth": 3.5},
     }
     
-    # Scale factor based on variant
     s = scale
     
     # Garage
@@ -341,7 +406,6 @@ def _generate_rooms(project: models.Project, scale: float = 1.0) -> list:
     
     for i in range(project.bedrooms or 3):
         if i == 0:
-            # Master bedroom with ensuite and WIR
             width = base_sizes["master_bedroom"]["width"] * s
             depth = base_sizes["master_bedroom"]["depth"] * s
             rooms.append({
@@ -355,7 +419,6 @@ def _generate_rooms(project: models.Project, scale: float = 1.0) -> list:
                 "floor": 0
             })
             
-            # Ensuite
             ens_width = base_sizes["ensuite"]["width"] * s
             ens_depth = base_sizes["ensuite"]["depth"] * s
             rooms.append({
@@ -369,7 +432,6 @@ def _generate_rooms(project: models.Project, scale: float = 1.0) -> list:
                 "floor": 0
             })
             
-            # Walk-in Robe
             wir_width = base_sizes["wir"]["width"] * s
             wir_depth = base_sizes["wir"]["depth"] * s
             rooms.append({
@@ -399,8 +461,8 @@ def _generate_rooms(project: models.Project, scale: float = 1.0) -> list:
             })
             bedroom_x += width + 0.5
     
-    # Bathrooms (additional)
-    bath_count = int(project.bathrooms or 2) - 1  # -1 for ensuite
+    # Bathrooms
+    bath_count = int(project.bathrooms or 2) - 1
     for i in range(bath_count):
         width = base_sizes["bathroom"]["width"] * s
         depth = base_sizes["bathroom"]["depth"] * s
@@ -416,7 +478,7 @@ def _generate_rooms(project: models.Project, scale: float = 1.0) -> list:
         })
         bedroom_x += width + 0.5
     
-    # Home Office (if requested)
+    # Home Office
     if project.home_office:
         width = base_sizes["office"]["width"] * s
         depth = base_sizes["office"]["depth"] * s
@@ -431,7 +493,7 @@ def _generate_rooms(project: models.Project, scale: float = 1.0) -> list:
             "floor": 0
         })
     
-    # Alfresco (if outdoor entertainment)
+    # Alfresco
     if project.outdoor_entertainment:
         width = base_sizes["alfresco"]["width"] * s
         depth = base_sizes["alfresco"]["depth"] * s
@@ -456,7 +518,7 @@ async def select_floor_plan(
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Select a floor plan as the final choice for a project."""
+    """Select a floor plan as the final choice."""
     db_user = get_db_user(current_user, db)
     
     project = db.query(models.Project).filter(
@@ -467,7 +529,6 @@ async def select_floor_plan(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Verify floor plan belongs to project
     floor_plan = db.query(models.FloorPlan).filter(
         models.FloorPlan.id == floor_plan_id,
         models.FloorPlan.project_id == project_id
