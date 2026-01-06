@@ -53,6 +53,7 @@ class UserCheckResponse(BaseModel):
 class UserCreateRequest(BaseModel):
     """Schema for creating a new user (from welcome form)"""
     full_name: str
+    email: Optional[str] = None  # Email from form (since B2C might not provide it)
     company_name: Optional[str] = None
     phone: Optional[str] = None
     address: Optional[str] = None
@@ -126,11 +127,13 @@ async def create_user(
             detail="User already exists"
         )
     
-    # Get email from token
-    email = current_user.email
+    # Get email - prefer form input, fallback to token, then generate
+    email = user_data.email
+    if not email or email == '':
+        email = current_user.email
     if not email or email == '':
         email = f"user_{current_user.id[:8]}@layout-ai.com.au"
-        logger.warning(f"No email in token, using generated: {email}")
+        logger.warning(f"No email provided, using generated: {email}")
     
     # Create new user
     db_user = models.User(
@@ -151,7 +154,7 @@ async def create_user(
     db.commit()
     db.refresh(db_user)
     
-    logger.info(f"Created new user with ID: {db_user.id}")
+    logger.info(f"Created new user with ID: {db_user.id}, email: {email}")
     return db_user
 
 

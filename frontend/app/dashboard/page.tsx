@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import { 
   Plus, Home, FolderOpen, Clock, Bell, MapPin, CheckCircle, 
   Loader2, AlertCircle, User, Phone, Building2, HardHat,
-  MapPinIcon, Sparkles, Save
+  MapPinIcon, Sparkles, Save, Mail
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import api, { Project, User as ApiUser } from '@/lib/api';
@@ -60,6 +60,7 @@ export default function DashboardPage() {
   
   // Welcome form fields
   const [formFullName, setFormFullName] = useState('');
+  const [formEmail, setFormEmail] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formAddress, setFormAddress] = useState('');
   const [formCompanyName, setFormCompanyName] = useState('');
@@ -149,9 +150,36 @@ export default function DashboardPage() {
           setShowWelcomeModal(true);
           setLoading(false);
           
-          // Pre-fill name from auth context if available
-          if (user?.name && user.name !== 'User' && user.name !== 'unknown') {
+          // Pre-fill form with all available info from auth context and localStorage
+          const userInfo = localStorage.getItem('user_info');
+          if (userInfo) {
+            try {
+              const storedUser = JSON.parse(userInfo);
+              console.log('Pre-filling form with:', storedUser);
+              
+              // Pre-fill name - try full name first, then construct from parts
+              if (storedUser.name && storedUser.name !== 'User' && storedUser.name !== 'unknown') {
+                setFormFullName(storedUser.name);
+              } else if (storedUser.givenName || storedUser.familyName) {
+                const fullName = `${storedUser.givenName || ''} ${storedUser.familyName || ''}`.trim();
+                if (fullName) setFormFullName(fullName);
+              }
+              
+              // Pre-fill email if available
+              if (storedUser.email && storedUser.email.length > 0) {
+                setFormEmail(storedUser.email);
+              }
+            } catch (e) {
+              console.error('Error parsing user info:', e);
+            }
+          }
+          
+          // Also try from auth context
+          if (user?.name && user.name !== 'User' && user.name !== 'unknown' && !formFullName) {
             setFormFullName(user.name);
+          }
+          if (user?.email && !formEmail) {
+            setFormEmail(user.email);
           }
         }
       } else if (response.status === 401) {
@@ -213,6 +241,18 @@ export default function DashboardPage() {
       setProfileError('Please enter your full name');
       return;
     }
+    
+    if (!formEmail.trim()) {
+      setProfileError('Please enter your email address');
+      return;
+    }
+    
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formEmail.trim())) {
+      setProfileError('Please enter a valid email address');
+      return;
+    }
 
     setIsSavingProfile(true);
     setProfileError(null);
@@ -230,6 +270,7 @@ export default function DashboardPage() {
         },
         body: JSON.stringify({
           full_name: formFullName.trim(),
+          email: formEmail.trim(),
           phone: formPhone.trim() || null,
           address: formAddress.trim() || null,
           company_name: formCompanyName.trim() || null,
@@ -415,6 +456,21 @@ export default function DashboardPage() {
                   placeholder="Enter your full name"
                   className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   autoFocus
+                />
+              </div>
+
+              {/* Email - Required */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1.5">
+                  <Mail className="w-4 h-4 inline mr-1.5" />
+                  Email Address <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={formEmail}
+                  onChange={(e) => setFormEmail(e.target.value)}
+                  placeholder="Enter your email address"
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
