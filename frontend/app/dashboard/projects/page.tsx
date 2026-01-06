@@ -814,26 +814,6 @@ export default function ProjectsPage() {
                 </div>
               )}
             </div>
-
-            <div className="bg-white/5 rounded-xl p-6 border border-white/10">
-              <h3 className="text-sm font-medium text-gray-400 mb-3">Project Info</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Project ID</span>
-                  <span className="text-white">#{project.id}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Created</span>
-                  <span className="text-white">{formatDate(project.created_at, true)}</span>
-                </div>
-                {project.updated_at && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Updated</span>
-                    <span className="text-white">{formatDate(project.updated_at, true)}</span>
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
         </div>
 
