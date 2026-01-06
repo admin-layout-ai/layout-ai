@@ -1,5 +1,5 @@
 // frontend/components/Questionnaire.tsx
-// Questionnaire with customizable submit button
+// Questionnaire with compact multi-column layout
 
 'use client';
 
@@ -74,12 +74,14 @@ export default function Questionnaire({
     onComplete(formData);
   };
 
-  const SelectButton = ({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: React.ReactNode }) => (
+  const SelectButton = ({ selected, onClick, children, compact = false }: { selected: boolean; onClick: () => void; children: React.ReactNode; compact?: boolean }) => (
     <button
       type="button"
       onClick={onClick}
-      className={`flex-1 py-3 px-4 rounded-lg border-2 font-medium transition-all ${
-        selected ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+      className={`${compact ? 'px-3 py-2 text-sm' : 'px-4 py-2.5'} rounded-lg border-2 font-medium transition-all ${
+        selected 
+          ? 'border-blue-600 bg-blue-50 text-blue-700' 
+          : 'border-gray-200 text-gray-600 hover:border-blue-400'
       }`}
     >
       {children}
@@ -87,24 +89,24 @@ export default function Questionnaire({
   );
 
   const ToggleSwitch = ({ label, checked, onChange, description }: { label: string; checked: boolean; onChange: (checked: boolean) => void; description?: string }) => (
-    <label className="flex items-center justify-between p-4 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-400 transition">
+    <label className="flex items-center justify-between p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-400 transition">
       <div>
-        <span className="font-medium text-gray-900">{label}</span>
-        {description && <p className="text-sm text-gray-500 mt-0.5">{description}</p>}
+        <span className="font-medium text-gray-900 text-sm">{label}</span>
+        {description && <p className="text-xs text-gray-500 mt-0.5">{description}</p>}
       </div>
       <div className="relative">
         <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="sr-only" />
-        <div className={`w-11 h-6 rounded-full transition-colors ${checked ? 'bg-blue-600' : 'bg-gray-200'}`}>
-          <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
+        <div className={`w-10 h-5 rounded-full transition-colors ${checked ? 'bg-blue-600' : 'bg-gray-200'}`}>
+          <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
         </div>
       </div>
     </label>
   );
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
+    <div className="max-w-4xl mx-auto p-6">
       {/* Progress Bar */}
-      <div className="mb-8">
+      <div className="mb-6">
         <div className="flex justify-between items-center mb-2">
           {[1, 2, 3].map((s) => (
             <div key={s} className={`h-2 flex-1 mx-1 rounded-full transition-colors ${s <= step ? 'bg-blue-600' : 'bg-gray-200'}`} />
@@ -120,69 +122,74 @@ export default function Questionnaire({
         </div>
       </div>
 
-      {/* Step 1: Basic Requirements */}
+      {/* Step 1: Basic Requirements - Grid Layout */}
       {step === 1 && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Basic Requirements</h2>
-            <p className="text-gray-600">Tell us about your ideal home layout</p>
+            <h2 className="text-xl font-bold text-gray-900 mb-1">Basic Requirements</h2>
+            <p className="text-gray-600 text-sm">Tell us about your ideal home layout</p>
           </div>
           
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3">
-              <Home className="w-4 h-4 text-blue-600" /> How many bedrooms?
-            </label>
-            <div className="flex gap-2">
-              {[2, 3, 4, 5, 6].map((num) => (
-                <SelectButton key={num} selected={formData.bedrooms === num} onClick={() => setFormData({ ...formData, bedrooms: num })}>
-                  {num}
-                </SelectButton>
-              ))}
+          {/* Row 1: Bedrooms & Bathrooms */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                <Home className="w-4 h-4 text-blue-600" /> Bedrooms
+              </label>
+              <div className="flex gap-2">
+                {[2, 3, 4, 5, 6].map((num) => (
+                  <SelectButton key={num} selected={formData.bedrooms === num} onClick={() => setFormData({ ...formData, bedrooms: num })} compact>
+                    {num}
+                  </SelectButton>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                <Bath className="w-4 h-4 text-blue-600" /> Bathrooms
+              </label>
+              <div className="flex gap-2 flex-wrap">
+                {[1, 1.5, 2, 2.5, 3, 3.5].map((num) => (
+                  <SelectButton key={num} selected={formData.bathrooms === num} onClick={() => setFormData({ ...formData, bathrooms: num })} compact>
+                    {num}
+                  </SelectButton>
+                ))}
+              </div>
             </div>
           </div>
 
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3">
-              <Bath className="w-4 h-4 text-blue-600" /> How many bathrooms?
-            </label>
-            <div className="flex gap-2">
-              {[1, 1.5, 2, 2.5, 3, 3.5].map((num) => (
-                <SelectButton key={num} selected={formData.bathrooms === num} onClick={() => setFormData({ ...formData, bathrooms: num })}>
-                  {num}
-                </SelectButton>
-              ))}
+          {/* Row 2: Living Areas & Garage */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                <Sofa className="w-4 h-4 text-blue-600" /> Living Areas
+              </label>
+              <div className="flex gap-2">
+                {[1, 2, 3].map((num) => (
+                  <SelectButton key={num} selected={formData.living_areas === num} onClick={() => setFormData({ ...formData, living_areas: num })} compact>
+                    {num}
+                  </SelectButton>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                <Car className="w-4 h-4 text-blue-600" /> Garage Spaces
+              </label>
+              <div className="flex gap-2">
+                {[0, 1, 2, 3].map((num) => (
+                  <SelectButton key={num} selected={formData.garage_spaces === num} onClick={() => setFormData({ ...formData, garage_spaces: num })} compact>
+                    {num === 0 ? 'None' : num}
+                  </SelectButton>
+                ))}
+              </div>
             </div>
           </div>
 
+          {/* Row 3: Storeys */}
           <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3">
-              <Sofa className="w-4 h-4 text-blue-600" /> Living areas
-            </label>
-            <div className="flex gap-2">
-              {[1, 2, 3].map((num) => (
-                <SelectButton key={num} selected={formData.living_areas === num} onClick={() => setFormData({ ...formData, living_areas: num })}>
-                  {num}
-                </SelectButton>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3">
-              <Car className="w-4 h-4 text-blue-600" /> Garage spaces
-            </label>
-            <div className="flex gap-2">
-              {[0, 1, 2, 3].map((num) => (
-                <SelectButton key={num} selected={formData.garage_spaces === num} onClick={() => setFormData({ ...formData, garage_spaces: num })}>
-                  {num === 0 ? 'None' : num}
-                </SelectButton>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3">
-              <Building2 className="w-4 h-4 text-blue-600" /> Number of storeys
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+              <Building2 className="w-4 h-4 text-blue-600" /> Number of Storeys
             </label>
             <div className="flex gap-2">
               {[1, 2].map((num) => (
@@ -193,170 +200,177 @@ export default function Questionnaire({
             </div>
           </div>
 
-          <div className="flex gap-4 pt-4">
+          <div className="flex gap-4 pt-2">
             {onCancel && (
-              <button type="button" onClick={onCancel} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg hover:bg-gray-200 transition font-medium">
+              <button type="button" onClick={onCancel} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg hover:bg-gray-200 transition font-medium">
                 <ArrowLeft className="w-4 h-4 inline mr-2" /> Back
               </button>
             )}
-            <button type="button" onClick={handleNext} className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2">
+            <button type="button" onClick={handleNext} className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2">
               Continue <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>
       )}
 
-      {/* Step 2: Preferences */}
+      {/* Step 2: Preferences - Grid Layout */}
       {step === 2 && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Design Preferences</h2>
-            <p className="text-gray-600">Customize your home style and features</p>
+            <h2 className="text-xl font-bold text-gray-900 mb-1">Design Preferences</h2>
+            <p className="text-gray-600 text-sm">Customize your home style and features</p>
           </div>
           
+          {/* Design Style */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">Design Style</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Design Style</label>
             <select
               value={formData.style}
               onChange={(e) => setFormData({ ...formData, style: e.target.value })}
-              className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:ring-0 transition bg-white"
+              className="w-full md:w-1/2 px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none text-gray-900"
             >
               <option value="modern">Modern</option>
-              <option value="traditional">Traditional</option>
-              <option value="coastal">Coastal</option>
-              <option value="hamptons">Hamptons</option>
               <option value="contemporary">Contemporary</option>
+              <option value="traditional">Traditional</option>
+              <option value="hamptons">Hamptons</option>
+              <option value="farmhouse">Farmhouse</option>
               <option value="minimalist">Minimalist</option>
             </select>
           </div>
 
-          <div className="space-y-3">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Additional Features</label>
-            <ToggleSwitch label="Open plan living" description="Combined kitchen, dining and living area" checked={formData.open_plan} onChange={(checked) => setFormData({ ...formData, open_plan: checked })} />
-            <ToggleSwitch label="Home office" description="Dedicated workspace or study" checked={formData.home_office} onChange={(checked) => setFormData({ ...formData, home_office: checked })} />
-            <ToggleSwitch label="Outdoor entertainment" description="Alfresco, patio or deck area" checked={formData.outdoor_entertainment} onChange={(checked) => setFormData({ ...formData, outdoor_entertainment: checked })} />
+          {/* Toggle Options - Grid Layout */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <ToggleSwitch 
+              label="Open Plan Living" 
+              checked={formData.open_plan} 
+              onChange={(checked) => setFormData({ ...formData, open_plan: checked })}
+              description="Kitchen flows to living"
+            />
+            <ToggleSwitch 
+              label="Outdoor Entertainment" 
+              checked={formData.outdoor_entertainment} 
+              onChange={(checked) => setFormData({ ...formData, outdoor_entertainment: checked })}
+              description="Alfresco/covered patio"
+            />
+            <ToggleSwitch 
+              label="Home Office" 
+              checked={formData.home_office} 
+              onChange={(checked) => setFormData({ ...formData, home_office: checked })}
+              description="Dedicated workspace"
+            />
           </div>
 
-          <div className="flex gap-4 pt-4">
-            <button type="button" onClick={handleBack} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg hover:bg-gray-200 transition font-medium flex items-center justify-center gap-2">
-              <ArrowLeft className="w-4 h-4" /> Back
+          <div className="flex gap-4 pt-2">
+            <button type="button" onClick={handleBack} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg hover:bg-gray-200 transition font-medium">
+              <ArrowLeft className="w-4 h-4 inline mr-2" /> Back
             </button>
-            <button type="button" onClick={handleNext} className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2">
+            <button type="button" onClick={handleNext} className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2">
               Continue <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>
       )}
 
-      {/* Step 3: Review */}
+      {/* Step 3: Review - Compact Grid */}
       {step === 3 && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Review Your Requirements</h2>
-            <p className="text-gray-600">Confirm your selections before saving</p>
+            <h2 className="text-xl font-bold text-gray-900 mb-1">Review Your Project</h2>
+            <p className="text-gray-600 text-sm">Confirm your selections before saving</p>
           </div>
-          
-          {/* Project Details */}
+
+          {/* Project Details Summary */}
           {projectDetails && (
-            <div className="bg-gray-50 rounded-xl p-5 space-y-4">
-              <h3 className="font-semibold text-gray-900">Project Details</h3>
-              <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-blue-600" /> Project Details
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                 <div>
-                  <span className="text-gray-500">Name</span>
+                  <p className="text-gray-500">Project</p>
                   <p className="font-medium text-gray-900">{projectDetails.name}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Land Size</span>
-                  <p className="font-medium text-gray-900">
-                    {projectDetails.land_width}m × {projectDetails.land_depth}m ({(projectDetails.land_width * projectDetails.land_depth).toFixed(0)} m²)
-                  </p>
-                </div>
-                {projectDetails.lot_dp && (
-                  <div>
-                    <span className="text-gray-500">Lot#/DP</span>
-                    <p className="font-medium text-gray-900">{projectDetails.lot_dp}</p>
-                  </div>
-                )}
-                <div>
-                  <span className="text-gray-500">Suburb</span>
-                  <p className="font-medium text-gray-900">{projectDetails.suburb}</p>
+                  <p className="text-gray-500">Location</p>
+                  <p className="font-medium text-gray-900">{projectDetails.suburb}, {projectDetails.state}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Location</span>
-                  <p className="font-medium text-gray-900">{projectDetails.state} {projectDetails.postcode}</p>
+                  <p className="text-gray-500">Land Size</p>
+                  <p className="font-medium text-gray-900">{projectDetails.land_width}m × {projectDetails.land_depth}m</p>
                 </div>
-                {projectDetails.street_address && (
-                  <div className="col-span-2">
-                    <span className="text-gray-500 flex items-center gap-1"><MapPin className="w-3 h-3" /> Address</span>
-                    <p className="font-medium text-gray-900">{projectDetails.street_address}, {projectDetails.suburb}</p>
-                  </div>
-                )}
                 {projectDetails.council && (
-                  <div className="col-span-2">
-                    <span className="text-gray-500">Local Council</span>
-                    <p className="font-medium text-green-700">{projectDetails.council}</p>
-                  </div>
-                )}
-                {projectDetails.contourFileName && (
-                  <div className="col-span-2">
-                    <span className="text-gray-500 flex items-center gap-1"><FileText className="w-3 h-3" /> Contour Plan</span>
-                    <p className="font-medium text-blue-700">{projectDetails.contourFileName}</p>
+                  <div>
+                    <p className="text-gray-500">Council</p>
+                    <p className="font-medium text-gray-900">{projectDetails.council}</p>
                   </div>
                 )}
               </div>
+              {projectDetails.contourFileName && (
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <p className="text-sm text-gray-500 flex items-center gap-1">
+                    <FileText className="w-4 h-4" /> {projectDetails.contourFileName}
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Requirements Summary */}
-          <div className="bg-gray-50 rounded-xl p-5 space-y-4">
-            <h3 className="font-semibold text-gray-900">Building Requirements</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex justify-between py-2 border-b border-gray-200">
-                <span className="text-gray-600">Bedrooms</span>
-                <span className="font-semibold text-gray-900">{formData.bedrooms}</span>
+          {/* Requirements Summary - Grid */}
+          <div className="bg-blue-50 rounded-lg p-4">
+            <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Home className="w-4 h-4 text-blue-600" /> Building Requirements
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+              <div className="bg-white rounded-lg p-2 text-center">
+                <p className="text-gray-500 text-xs">Bedrooms</p>
+                <p className="font-bold text-lg text-blue-600">{formData.bedrooms}</p>
               </div>
-              <div className="flex justify-between py-2 border-b border-gray-200">
-                <span className="text-gray-600">Bathrooms</span>
-                <span className="font-semibold text-gray-900">{formData.bathrooms}</span>
+              <div className="bg-white rounded-lg p-2 text-center">
+                <p className="text-gray-500 text-xs">Bathrooms</p>
+                <p className="font-bold text-lg text-blue-600">{formData.bathrooms}</p>
               </div>
-              <div className="flex justify-between py-2 border-b border-gray-200">
-                <span className="text-gray-600">Living Areas</span>
-                <span className="font-semibold text-gray-900">{formData.living_areas}</span>
+              <div className="bg-white rounded-lg p-2 text-center">
+                <p className="text-gray-500 text-xs">Living</p>
+                <p className="font-bold text-lg text-blue-600">{formData.living_areas}</p>
               </div>
-              <div className="flex justify-between py-2 border-b border-gray-200">
-                <span className="text-gray-600">Garage</span>
-                <span className="font-semibold text-gray-900">{formData.garage_spaces === 0 ? 'None' : `${formData.garage_spaces} car`}</span>
+              <div className="bg-white rounded-lg p-2 text-center">
+                <p className="text-gray-500 text-xs">Garage</p>
+                <p className="font-bold text-lg text-blue-600">{formData.garage_spaces}</p>
               </div>
-              <div className="flex justify-between py-2 border-b border-gray-200">
-                <span className="text-gray-600">Storeys</span>
-                <span className="font-semibold text-gray-900">{formData.storeys === 1 ? 'Single' : 'Double'}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-gray-200">
-                <span className="text-gray-600">Style</span>
-                <span className="font-semibold text-gray-900 capitalize">{formData.style}</span>
+              <div className="bg-white rounded-lg p-2 text-center">
+                <p className="text-gray-500 text-xs">Storeys</p>
+                <p className="font-bold text-lg text-blue-600">{formData.storeys}</p>
               </div>
             </div>
-
-            <div className="pt-2">
-              <span className="text-gray-600 text-sm">Features:</span>
-              <div className="flex flex-wrap gap-2 mt-2">
-                {formData.open_plan && <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm"><Check className="w-3 h-3" /> Open Plan</span>}
-                {formData.home_office && <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm"><Check className="w-3 h-3" /> Home Office</span>}
-                {formData.outdoor_entertainment && <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm"><Check className="w-3 h-3" /> Outdoor Entertainment</span>}
-                {!formData.open_plan && !formData.home_office && !formData.outdoor_entertainment && <span className="text-gray-500 text-sm">No additional features selected</span>}
-              </div>
+            
+            {/* Preferences Row */}
+            <div className="mt-3 pt-3 border-t border-blue-100 flex flex-wrap gap-2">
+              <span className="px-2 py-1 bg-white rounded text-xs font-medium text-gray-700 capitalize">{formData.style}</span>
+              {formData.open_plan && <span className="px-2 py-1 bg-green-100 rounded text-xs font-medium text-green-700">Open Plan</span>}
+              {formData.outdoor_entertainment && <span className="px-2 py-1 bg-green-100 rounded text-xs font-medium text-green-700">Outdoor Entertainment</span>}
+              {formData.home_office && <span className="px-2 py-1 bg-green-100 rounded text-xs font-medium text-green-700">Home Office</span>}
             </div>
           </div>
 
-          <div className="flex gap-4 pt-4">
-            <button type="button" onClick={handleBack} disabled={isSubmitting} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg hover:bg-gray-200 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50">
-              <ArrowLeft className="w-4 h-4" /> Back
+          <div className="flex gap-4 pt-2">
+            <button type="button" onClick={handleBack} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg hover:bg-gray-200 transition font-medium">
+              <ArrowLeft className="w-4 h-4 inline mr-2" /> Back
             </button>
-            <button type="button" onClick={handleSubmit} disabled={isSubmitting} className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+            <button 
+              type="button" 
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition font-medium flex items-center justify-center gap-2"
+            >
               {isSubmitting ? (
-                <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving...</>
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Saving...
+                </>
               ) : (
-                submitButtonText
+                <>
+                  <Check className="w-4 h-4" /> {submitButtonText}
+                </>
               )}
             </button>
           </div>

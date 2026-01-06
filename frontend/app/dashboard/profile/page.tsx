@@ -373,7 +373,7 @@ export default function ProfilePage() {
 
       {/* Success Message */}
       {success && (
-        <div className="mb-6 bg-green-500/20 border border-green-500/30 rounded-lg p-4 flex items-center gap-3 max-w-7xl">
+        <div className="mb-6 bg-green-500/20 border border-green-500/30 rounded-lg p-4 flex items-center gap-3 max-w-6xl">
           <Check className="w-5 h-5 text-green-400" />
           <span className="text-green-400">{success}</span>
         </div>
@@ -381,14 +381,14 @@ export default function ProfilePage() {
 
       {/* Error Message */}
       {error && (
-        <div className="mb-6 bg-red-500/20 border border-red-500/30 rounded-lg p-4 flex items-center gap-3 max-w-7xl">
+        <div className="mb-6 bg-red-500/20 border border-red-500/30 rounded-lg p-4 flex items-center gap-3 max-w-6xl">
           <AlertCircle className="w-5 h-5 text-red-400" />
           <span className="text-red-400">{error}</span>
         </div>
       )}
 
-      {/* Profile Card - Landscape Layout */}
-      <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden max-w-7xl">
+      {/* Profile Card - Landscape Layout - Wider */}
+      <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden max-w-6xl">
         {/* Profile Header */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6">
           <div className="flex items-center gap-4">
@@ -409,62 +409,62 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Form Content - Two Column Layout */}
-        <div className="p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Form Content - Two Column Layout - More Compact */}
+        <div className="p-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Left Column - Personal Details */}
-            <div className="space-y-5">
+            <div className="space-y-3">
               <h3 className="text-lg font-semibold text-white border-b border-white/10 pb-2">Personal Details</h3>
               
-              {/* Full Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
-                  <UserIcon className="w-4 h-4 inline mr-2" />
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Enter your full name"
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
+              {/* Full Name & Phone - Same Row */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-1">
+                    <UserIcon className="w-4 h-4 inline mr-1" />
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Your full name"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-1">
+                    <Phone className="w-4 h-4 inline mr-1" />
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="Phone number"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                </div>
               </div>
 
               {/* Email (Read-only) */}
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
-                  <Mail className="w-4 h-4 inline mr-2" />
+                <label className="block text-sm font-medium text-gray-400 mb-1">
+                  <Mail className="w-4 h-4 inline mr-1" />
                   Email Address
-                  <span className="ml-2 text-xs text-gray-500">(Cannot be changed)</span>
+                  <span className="ml-1 text-xs text-gray-500">(Cannot be changed)</span>
                 </label>
                 <input
                   type="email"
                   value={profile?.email || ''}
                   disabled
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-gray-400 cursor-not-allowed"
-                />
-              </div>
-
-              {/* Phone */}
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
-                  <Phone className="w-4 h-4 inline mr-2" />
-                  Phone Number
-                </label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="Enter your phone number"
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-gray-400 cursor-not-allowed text-sm"
                 />
               </div>
 
               {/* Address with Autocomplete */}
               <div className="relative" ref={addressInputRef}>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
-                  <MapPin className="w-4 h-4 inline mr-2" />
+                <label className="block text-sm font-medium text-gray-400 mb-1">
+                  <MapPin className="w-4 h-4 inline mr-1" />
                   Address
                 </label>
                 <div className="relative">
@@ -473,24 +473,24 @@ export default function ProfilePage() {
                     value={address}
                     onChange={(e) => handleAddressChange(e.target.value)}
                     onFocus={() => address.length >= 2 && setShowAddressSuggestions(true)}
-                    placeholder="Start typing your address (e.g. 123 George Street Sydney)"
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
+                    placeholder="Start typing your address"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10 text-sm"
                   />
                   {isLoadingAddress ? (
-                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 animate-spin" />
+                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
                   ) : (
-                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                   )}
                 </div>
                 
                 {/* Address Suggestions Dropdown */}
                 {showAddressSuggestions && addressSuggestions.length > 0 && (
-                  <div className="absolute z-20 w-full mt-1 bg-slate-800 border border-white/20 rounded-lg shadow-2xl max-h-60 overflow-auto">
+                  <div className="absolute z-20 w-full mt-1 bg-slate-800 border border-white/20 rounded-lg shadow-2xl max-h-48 overflow-auto">
                     {addressSuggestions.map((suggestion) => (
                       <button
                         key={suggestion.place_id}
                         onClick={() => selectAddress(suggestion)}
-                        className="w-full px-4 py-3 text-left text-white hover:bg-blue-600/30 transition flex items-center gap-2 border-b border-white/5 last:border-0"
+                        className="w-full px-3 py-2 text-left text-white hover:bg-blue-600/30 transition flex items-center gap-2 border-b border-white/5 last:border-0"
                       >
                         <MapPin className="w-4 h-4 text-blue-400 flex-shrink-0" />
                         <span className="text-sm">{suggestion.description}</span>
@@ -498,99 +498,109 @@ export default function ProfilePage() {
                     ))}
                   </div>
                 )}
-                <p className="text-xs text-gray-500 mt-1">
-                  Type a street number, street name, or suburb to see suggestions
-                </p>
               </div>
             </div>
 
             {/* Right Column - Builder Details */}
-            <div className="space-y-5">
+            <div className="space-y-3">
               <h3 className="text-lg font-semibold text-white border-b border-white/10 pb-2">Business Details</h3>
               
               {/* Is Builder Toggle */}
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
-                  <HardHat className="w-4 h-4 inline mr-2" />
+                <label className="block text-sm font-medium text-gray-400 mb-1">
+                  <HardHat className="w-4 h-4 inline mr-1" />
                   Are you a licensed builder?
                 </label>
                 <div 
                   onClick={() => setIsBuilder(!isBuilder)}
-                  className={`relative inline-flex h-12 w-full cursor-pointer items-center rounded-lg border transition-colors ${
+                  className={`relative inline-flex h-10 w-full cursor-pointer items-center rounded-lg border transition-colors ${
                     isBuilder 
                       ? 'bg-blue-600/20 border-blue-500' 
                       : 'bg-white/5 border-white/10'
                   }`}
                 >
-                  <div className="flex items-center justify-between w-full px-4">
+                  <div className="flex items-center justify-between w-full px-3">
                     <span className={`text-sm ${isBuilder ? 'text-blue-400' : 'text-gray-400'}`}>
                       {isBuilder ? 'Yes, I am a licensed builder' : 'No, I am not a builder'}
                     </span>
-                    <div className={`w-12 h-6 rounded-full transition-colors relative ${
+                    <div className={`w-10 h-5 rounded-full transition-colors relative ${
                       isBuilder ? 'bg-blue-500' : 'bg-white/20'
                     }`}>
-                      <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                        isBuilder ? 'translate-x-7' : 'translate-x-1'
+                      <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                        isBuilder ? 'translate-x-5' : 'translate-x-0.5'
                       }`} />
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Company Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
-                  <Building2 className="w-4 h-4 inline mr-2" />
-                  Company Name {!isBuilder && <span className="text-gray-500">(Optional)</span>}
-                </label>
-                <input
-                  type="text"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  placeholder="Enter your company name"
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              {/* Builder-specific fields */}
-              {isBuilder && (
-                <>
-                  {/* ABN/ACN */}
+              {/* Company Name & ABN - Same Row when builder */}
+              {isBuilder ? (
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">
-                      <FileText className="w-4 h-4 inline mr-2" />
+                    <label className="block text-sm font-medium text-gray-400 mb-1">
+                      <Building2 className="w-4 h-4 inline mr-1" />
+                      Company Name
+                    </label>
+                    <input
+                      type="text"
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
+                      placeholder="Company name"
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">
+                      <FileText className="w-4 h-4 inline mr-1" />
                       ABN / ACN
                     </label>
                     <input
                       type="text"
                       value={abnAcn}
                       onChange={handleAbnAcnChange}
-                      placeholder="XX XXX XXX XXX (ABN) or XXX XXX XXX (ACN)"
+                      placeholder="ABN or ACN"
                       maxLength={14}
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Enter your 11-digit ABN or 9-digit ACN
-                    </p>
                   </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-1">
+                    <Building2 className="w-4 h-4 inline mr-1" />
+                    Company Name <span className="text-gray-500 text-xs">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder="Company name"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                </div>
+              )}
 
-                  {/* Builder Logo Upload */}
+              {/* Builder-specific fields */}
+              {isBuilder && (
+                <>
+                  {/* Builder Logo Upload - Compact */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">
-                      <Upload className="w-4 h-4 inline mr-2" />
+                    <label className="block text-sm font-medium text-gray-400 mb-1">
+                      <Upload className="w-4 h-4 inline mr-1" />
                       Company Logo
                     </label>
                     
                     {builderLogoUrl ? (
-                      <div className="flex items-center gap-4">
-                        <div className="w-20 h-20 bg-white/5 rounded-lg border border-white/10 overflow-hidden">
+                      <div className="flex items-center gap-3">
+                        <div className="w-16 h-16 bg-white/5 rounded-lg border border-white/10 overflow-hidden">
                           <img 
                             src={builderLogoUrl} 
                             alt="Company Logo" 
                             className="w-full h-full object-contain"
                           />
                         </div>
-                        <div className="flex flex-col gap-2">
+                        <div className="flex flex-col gap-1">
                           <button
                             onClick={() => fileInputRef.current?.click()}
                             className="text-blue-400 hover:text-blue-300 text-sm transition"
@@ -627,10 +637,10 @@ export default function ProfilePage() {
                 </>
               )}
 
-              {/* Account Info */}
-              <div className="bg-white/5 rounded-lg p-4 mt-4">
-                <h4 className="text-sm font-medium text-gray-400 mb-3">Account Information</h4>
-                <div className="grid grid-cols-2 gap-3 text-sm">
+              {/* Account Info - More Compact */}
+              <div className="bg-white/5 rounded-lg p-3">
+                <h4 className="text-sm font-medium text-gray-400 mb-2">Account Information</h4>
+                <div className="grid grid-cols-4 gap-2 text-xs">
                   <div>
                     <p className="text-gray-500">Status</p>
                     <p className={`font-medium ${profile?.is_active ? 'text-green-400' : 'text-red-400'}`}>
@@ -638,28 +648,28 @@ export default function ProfilePage() {
                     </p>
                   </div>
                   <div>
-                    <p className="text-gray-500">Subscription</p>
+                    <p className="text-gray-500">Plan</p>
                     <p className="text-white font-medium capitalize">{profile?.subscription_tier || 'Free'}</p>
                   </div>
                   <div>
                     <p className="text-gray-500">Member Since</p>
-                    <p className="text-white text-xs">{formatDate(profile?.created_at)}</p>
+                    <p className="text-white">{formatDate(profile?.created_at)}</p>
                   </div>
                   <div>
-                    <p className="text-gray-500">Last Updated</p>
-                    <p className="text-white text-xs">{formatDate(profile?.updated_at)}</p>
+                    <p className="text-gray-500">Updated</p>
+                    <p className="text-white">{formatDate(profile?.updated_at)}</p>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Save Button - Full Width */}
-          <div className="mt-6 pt-6 border-t border-white/10">
+          {/* Save Button - Full Width - More Compact */}
+          <div className="mt-4 pt-4 border-t border-white/10">
             <button
               onClick={handleSave}
               disabled={isSaving || isUploadingLogo}
-              className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSaving || isUploadingLogo ? (
                 <>
