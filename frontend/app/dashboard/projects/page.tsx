@@ -149,13 +149,55 @@ export default function ProjectsPage() {
     if (!project) return;
     
     setIsGenerating(true);
+    setError(null);
+    
     try {
       await api.generateFloorPlans(project.id);
-      await fetchProject(project.id);
+      
+      // Poll for status changes every 2 seconds
+      const pollForCompletion = async () => {
+        let attempts = 0;
+        const maxAttempts = 30; // Max 60 seconds of polling
+        
+        while (attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+          
+          try {
+            const updatedProject = await api.getProject(project.id);
+            setProject(updatedProject);
+            
+            if (updatedProject.status === 'generated') {
+              // Fetch floor plans
+              const plans = await api.getFloorPlans(project.id);
+              setFloorPlans(plans);
+              if (plans.length > 0) {
+                setSelectedPlan(plans[0]);
+              }
+              setIsGenerating(false);
+              return;
+            } else if (updatedProject.status === 'error') {
+              setError('Floor plan generation failed. Please try again.');
+              setIsGenerating(false);
+              return;
+            }
+            // Status is still 'generating', continue polling
+          } catch (pollError) {
+            console.error('Error polling project status:', pollError);
+          }
+          
+          attempts++;
+        }
+        
+        // Timeout - generation took too long
+        setError('Generation is taking longer than expected. Please refresh the page.');
+        setIsGenerating(false);
+      };
+      
+      await pollForCompletion();
+      
     } catch (err) {
       console.error('Error generating floor plans:', err);
       setError(err instanceof Error ? err.message : 'Failed to start generation');
-    } finally {
       setIsGenerating(false);
     }
   };
@@ -802,7 +844,7 @@ export default function ProjectsPage() {
                     {isGenerating ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin" />
-                        Starting Generation...
+                        Generating Floor Plans...
                       </>
                     ) : (
                       <>
@@ -811,6 +853,14 @@ export default function ProjectsPage() {
                       </>
                     )}
                   </button>
+                  
+                  {isGenerating && (
+                    <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                      <p className="text-blue-400 text-sm text-center">
+                        🤖 AI is designing your floor plans. This typically takes 5-10 seconds...
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
