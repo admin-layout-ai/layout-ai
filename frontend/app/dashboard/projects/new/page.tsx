@@ -9,7 +9,7 @@ import { ArrowLeft, ArrowRight, Upload, Home, Check, Info, X, FileText } from 'l
 import { useAuth } from '@/contexts/AuthContext';
 import Questionnaire from '@/components/Questionnaire';
 import api from '@/lib/api';
-import { AUSTRALIAN_STATES, lookupCouncil, isValidAustralianPostcode } from '@/lib/australianCouncils';
+import { AUSTRALIAN_STATES, lookupCouncil } from '@/lib/australianCouncils';
 
 type Step = 'details' | 'upload' | 'questionnaire';
 
@@ -78,16 +78,7 @@ export default function NewProjectPage() {
       council = lookupCouncil(projectData.state, value);
     }
     setProjectData(prev => ({ ...prev, postcode: value, council }));
-    
-    if (value.length === 4 && projectData.state) {
-      if (!isValidAustralianPostcode(projectData.state, value)) {
-        setPostcodeError(`Invalid postcode for ${projectData.state}`);
-      } else {
-        setPostcodeError(null);
-      }
-    } else {
-      setPostcodeError(null);
-    }
+    setPostcodeError(value.length === 4 || value.length === 0 ? null : 'Postcode must be 4 digits');
   };
 
   const handleStateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -95,11 +86,6 @@ export default function NewProjectPage() {
     let council = '';
     if (projectData.postcode.length === 4 && newState) {
       council = lookupCouncil(newState, projectData.postcode);
-      if (!isValidAustralianPostcode(newState, projectData.postcode)) {
-        setPostcodeError(`Invalid postcode for ${newState}`);
-      } else {
-        setPostcodeError(null);
-      }
     }
     setProjectData(prev => ({ ...prev, state: newState, council }));
   };
