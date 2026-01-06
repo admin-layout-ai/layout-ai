@@ -13,8 +13,11 @@ class User(Base):
     full_name = Column(String(255))
     company_name = Column(String(255))
     phone = Column(String(50))
+    address = Column(String(500))  # NEW: User address
     is_active = Column(Boolean, default=True)
     is_builder = Column(Boolean, default=False)
+    abn_acn = Column(String(20))  # NEW: ABN (11 digits) or ACN (9 digits)
+    builder_logo_url = Column(String(500))  # NEW: Builder company logo URL
     subscription_tier = Column(String(50), default="free")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

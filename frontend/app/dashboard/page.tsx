@@ -1,19 +1,44 @@
 // frontend/app/dashboard/page.tsx
-// Dashboard page - calls backend to create/sync user on first login
+// Dashboard page - with welcome modal for new users
 
 'use client';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { Plus, Home, FolderOpen, Clock, Bell, MapPin, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import api, { Project } from '@/lib/api';
+import { 
+  Plus, Home, FolderOpen, Clock, Bell, MapPin, CheckCircle, 
+  Loader2, AlertCircle, User, Mail, Phone, Building2, HardHat,
+  MapPinIcon, X, Sparkles, Save
+} from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import api, { Project, User as ApiUser } from '@/lib/api';
 
 interface DashboardStats {
   total: number;
   generated: number;
   plans: number;
 }
+
+// Australian suburbs for address autocomplete
+const AUSTRALIAN_SUBURBS: Record<string, { state: string; postcode: string }[]> = {
+  'sydney': [{ state: 'NSW', postcode: '2000' }],
+  'melbourne': [{ state: 'VIC', postcode: '3000' }],
+  'brisbane': [{ state: 'QLD', postcode: '4000' }],
+  'perth': [{ state: 'WA', postcode: '6000' }],
+  'adelaide': [{ state: 'SA', postcode: '5000' }],
+  'hobart': [{ state: 'TAS', postcode: '7000' }],
+  'darwin': [{ state: 'NT', postcode: '0800' }],
+  'canberra': [{ state: 'ACT', postcode: '2600' }],
+  'parramatta': [{ state: 'NSW', postcode: '2150' }],
+  'newcastle': [{ state: 'NSW', postcode: '2300' }],
+  'gold coast': [{ state: 'QLD', postcode: '4217' }],
+  'geelong': [{ state: 'VIC', postcode: '3220' }],
+};
+
+const AUSTRALIAN_STREETS = [
+  'George Street', 'Pitt Street', 'King Street', 'Collins Street', 
+  'Bourke Street', 'Queen Street', 'Hay Street', 'Murray Street'
+];
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -27,6 +52,35 @@ export default function DashboardPage() {
     plans: 0
   });
 
+  // Welcome modal state
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [profileData, setProfileData] = useState<ApiUser | null>(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  
+  // Welcome form fields
+  const [formFullName, setFormFullName] = useState('');
+  const [formPhone, setFormPhone] = useState('');
+  const [formAddress, setFormAddress] = useState('');
+  const [formCompanyName, setFormCompanyName] = useState('');
+  const [formIsBuilder, setFormIsBuilder] = useState(false);
+  
+  // Address autocomplete
+  const [addressSuggestions, setAddressSuggestions] = useState<{id: string; text: string}[]>([]);
+  const [showAddressSuggestions, setShowAddressSuggestions] = useState(false);
+  const addressRef = useRef<HTMLDivElement>(null);
+
+  // Close address suggestions on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (addressRef.current && !addressRef.current.contains(e.target as Node)) {
+        setShowAddressSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   // Sync user with backend on first load
   useEffect(() => {
     syncUserWithBackend();
@@ -34,10 +88,10 @@ export default function DashboardPage() {
 
   // Load projects after user is synced
   useEffect(() => {
-    if (userSynced) {
+    if (userSynced && !showWelcomeModal) {
       loadDashboardData();
     }
-  }, [userSynced]);
+  }, [userSynced, showWelcomeModal]);
 
   const syncUserWithBackend = async () => {
     try {
@@ -49,7 +103,6 @@ export default function DashboardPage() {
         return;
       }
 
-      // Check if API URL is configured
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       if (!apiUrl) {
         console.warn('API URL not configured, skipping user sync');
@@ -68,47 +121,168 @@ export default function DashboardPage() {
       });
 
       if (response.ok) {
-        const userData = await response.json();
+        const userData: ApiUser = await response.json();
         console.log('User synced with backend:', userData);
+        setProfileData(userData);
         
-        // Update local storage with synced user data
-        const currentUserInfo = localStorage.getItem('user_info');
-        if (currentUserInfo) {
-          const localUser = JSON.parse(currentUserInfo);
-          // Merge backend data with local data
-          const mergedUser = {
-            ...localUser,
-            dbId: userData.id,  // Store the database ID
-            email: userData.email || localUser.email,
-            name: userData.name || localUser.name,
-          };
-          localStorage.setItem('user_info', JSON.stringify(mergedUser));
+        // Check if this is a new user (profile incomplete)
+        const isNewUser = isProfileIncomplete(userData);
+        
+        if (isNewUser) {
+          // Pre-fill form with any existing data
+          setFormFullName(userData.full_name || '');
+          setFormPhone(userData.phone || '');
+          setFormAddress(userData.address || '');
+          setFormCompanyName(userData.company_name || '');
+          setFormIsBuilder(userData.is_builder || false);
+          
+          // Show welcome modal
+          setShowWelcomeModal(true);
+          setLoading(false);
+        } else {
+          // Update local storage
+          const currentUserInfo = localStorage.getItem('user_info');
+          if (currentUserInfo) {
+            const localUser = JSON.parse(currentUserInfo);
+            const mergedUser = {
+              ...localUser,
+              dbId: userData.id,
+              email: userData.email || localUser.email,
+              name: userData.full_name || localUser.name,
+            };
+            localStorage.setItem('user_info', JSON.stringify(mergedUser));
+          }
+          
+          setUserSynced(true);
         }
-        
-        setUserSynced(true);
       } else if (response.status === 401) {
         console.error('Unauthorized - token may be expired');
-        // Redirect to login
         router.push('/auth/signin');
       } else {
         console.error('Failed to sync user:', response.status);
-        setUserSynced(true); // Continue anyway
+        setUserSynced(true);
       }
     } catch (error) {
       console.error('Error syncing user with backend:', error);
-      setUserSynced(true); // Continue anyway to show dashboard
+      setUserSynced(true);
+    } finally {
+      if (!showWelcomeModal) {
+        setLoading(false);
+      }
+    }
+  };
+
+  // Check if profile is incomplete (new user)
+  const isProfileIncomplete = (userData: ApiUser): boolean => {
+    // User is considered new if they don't have a full name set
+    // or if the full name looks auto-generated
+    const hasValidName = userData.full_name && 
+      userData.full_name !== 'New User' && 
+      userData.full_name !== 'unknown' &&
+      !userData.full_name.startsWith('user_');
+    
+    // Also check if they have an address (optional but indicates completion)
+    const hasAddress = !!userData.address;
+    
+    // Profile is incomplete if no valid name
+    return !hasValidName;
+  };
+
+  // Generate address suggestions
+  const generateAddressSuggestions = (query: string) => {
+    if (query.length < 2) {
+      setAddressSuggestions([]);
+      return;
+    }
+    
+    const lowerQuery = query.toLowerCase();
+    const suggestions: {id: string; text: string}[] = [];
+    const numberMatch = query.match(/^(\d+)\s*/);
+    const streetNumber = numberMatch ? numberMatch[1] : '';
+    
+    Object.entries(AUSTRALIAN_SUBURBS).forEach(([suburb, locations]) => {
+      if (suburb.includes(lowerQuery) || lowerQuery.includes(suburb.substring(0, 3))) {
+        locations.forEach(loc => {
+          AUSTRALIAN_STREETS.slice(0, 2).forEach((street, idx) => {
+            const num = streetNumber || String((idx + 1) * 10 + Math.floor(Math.random() * 90));
+            suggestions.push({
+              id: `${suburb}-${idx}`,
+              text: `${num} ${street}, ${suburb.charAt(0).toUpperCase() + suburb.slice(1)} ${loc.state} ${loc.postcode}`
+            });
+          });
+        });
+      }
+    });
+    
+    setAddressSuggestions(suggestions.slice(0, 5));
+    setShowAddressSuggestions(suggestions.length > 0);
+  };
+
+  const handleAddressChange = (value: string) => {
+    setFormAddress(value);
+    generateAddressSuggestions(value);
+  };
+
+  const selectAddress = (address: string) => {
+    setFormAddress(address);
+    setShowAddressSuggestions(false);
+  };
+
+  // Save welcome profile
+  const handleSaveWelcomeProfile = async () => {
+    if (!formFullName.trim()) {
+      setProfileError('Please enter your full name');
+      return;
+    }
+
+    setIsSavingProfile(true);
+    setProfileError(null);
+
+    try {
+      const updateData = {
+        full_name: formFullName.trim(),
+        phone: formPhone.trim() || null,
+        address: formAddress.trim() || null,
+        company_name: formCompanyName.trim() || null,
+        is_builder: formIsBuilder,
+      };
+
+      const updatedProfile = await api.updateUserProfile(updateData);
+      setProfileData(updatedProfile);
+      
+      // Update local storage
+      const currentUserInfo = localStorage.getItem('user_info');
+      if (currentUserInfo) {
+        const localUser = JSON.parse(currentUserInfo);
+        const mergedUser = {
+          ...localUser,
+          dbId: updatedProfile.id,
+          email: updatedProfile.email,
+          name: updatedProfile.full_name,
+        };
+        localStorage.setItem('user_info', JSON.stringify(mergedUser));
+      }
+
+      // Close modal and load dashboard
+      setShowWelcomeModal(false);
+      setUserSynced(true);
+      setLoading(true);
+      await loadDashboardData();
+    } catch (err) {
+      console.error('Error saving profile:', err);
+      setProfileError(err instanceof Error ? err.message : 'Failed to save profile');
+    } finally {
+      setIsSavingProfile(false);
     }
   };
 
   const loadDashboardData = async () => {
     try {
-      // Use the api client to fetch projects
       const response = await api.getProjects(1, 50);
       const projectList = response.projects || [];
       
       setProjects(projectList);
       
-      // Calculate stats from projects - check for both 'completed' and 'generated' status
       const generatedCount = projectList.filter((p: Project) => 
         p.status === 'generated' || p.status === 'completed'
       ).length;
@@ -116,7 +290,7 @@ export default function DashboardPage() {
       setStats({
         total: projectList.length,
         generated: generatedCount,
-        plans: generatedCount * 3 // Assuming 3 plans per generated project
+        plans: generatedCount * 3
       });
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
@@ -136,10 +310,12 @@ export default function DashboardPage() {
     return 'Good evening';
   };
 
-  // Get display name with proper fallbacks
   const getDisplayName = () => {
+    if (profileData?.full_name && profileData.full_name !== 'New User' && profileData.full_name !== 'unknown') {
+      return profileData.full_name.split(' ')[0];
+    }
     if (user?.name && user.name !== 'User' && user.name !== 'unknown') {
-      return user.name.split(' ')[0]; // First name only
+      return user.name.split(' ')[0];
     }
     if (user?.email) {
       return user.email.split('@')[0];
@@ -186,139 +362,304 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6 relative">
       
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
-            <Home className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-white">
-              {getGreeting()}, {getDisplayName()}!
-            </h1>
-            <p className="text-gray-400 text-sm">
-              {stats.total} active project{stats.total !== 1 ? 's' : ''}
-            </p>
+      {/* Welcome Modal Overlay */}
+      {showWelcomeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Backdrop with blur */}
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          
+          {/* Modal */}
+          <div className="relative bg-slate-800 rounded-2xl shadow-2xl border border-white/10 w-full max-w-lg mx-4 overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-center">
+              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Sparkles className="w-8 h-8 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">Welcome to Layout AI! 🎉</h2>
+              <p className="text-blue-100 text-sm">
+                Let's set up your profile to get started with AI-powered floor plans
+              </p>
+            </div>
+
+            {/* Form */}
+            <div className="p-6 space-y-4">
+              {profileError && (
+                <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-3 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-400" />
+                  <span className="text-red-400 text-sm">{profileError}</span>
+                </div>
+              )}
+
+              {/* Full Name - Required */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1.5">
+                  <User className="w-4 h-4 inline mr-1.5" />
+                  Full Name <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formFullName}
+                  onChange={(e) => setFormFullName(e.target.value)}
+                  placeholder="Enter your full name"
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  autoFocus
+                />
+              </div>
+
+              {/* Phone */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1.5">
+                  <Phone className="w-4 h-4 inline mr-1.5" />
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={formPhone}
+                  onChange={(e) => setFormPhone(e.target.value)}
+                  placeholder="Enter your phone number"
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Address with Autocomplete */}
+              <div className="relative" ref={addressRef}>
+                <label className="block text-sm font-medium text-gray-300 mb-1.5">
+                  <MapPinIcon className="w-4 h-4 inline mr-1.5" />
+                  Address
+                </label>
+                <input
+                  type="text"
+                  value={formAddress}
+                  onChange={(e) => handleAddressChange(e.target.value)}
+                  onFocus={() => formAddress.length >= 2 && generateAddressSuggestions(formAddress)}
+                  placeholder="Start typing your address"
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                
+                {showAddressSuggestions && addressSuggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-slate-700 border border-white/10 rounded-lg shadow-xl max-h-48 overflow-auto">
+                    {addressSuggestions.map((suggestion) => (
+                      <button
+                        key={suggestion.id}
+                        onClick={() => selectAddress(suggestion.text)}
+                        className="w-full px-4 py-2.5 text-left text-white hover:bg-blue-600/30 transition text-sm flex items-center gap-2"
+                      >
+                        <MapPinIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        {suggestion.text}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Is Builder Toggle */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1.5">
+                  <HardHat className="w-4 h-4 inline mr-1.5" />
+                  Are you a licensed builder?
+                </label>
+                <div 
+                  onClick={() => setFormIsBuilder(!formIsBuilder)}
+                  className={`cursor-pointer flex items-center justify-between w-full rounded-lg border p-3 transition ${
+                    formIsBuilder 
+                      ? 'bg-blue-600/20 border-blue-500' 
+                      : 'bg-white/5 border-white/10'
+                  }`}
+                >
+                  <span className={`text-sm ${formIsBuilder ? 'text-blue-400' : 'text-gray-400'}`}>
+                    {formIsBuilder ? 'Yes, I am a licensed builder' : 'No, I am not a builder'}
+                  </span>
+                  <div className={`w-10 h-5 rounded-full transition-colors relative ${
+                    formIsBuilder ? 'bg-blue-500' : 'bg-white/20'
+                  }`}>
+                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                      formIsBuilder ? 'translate-x-5' : 'translate-x-0.5'
+                    }`} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Company Name - Show if builder */}
+              {formIsBuilder && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1.5">
+                    <Building2 className="w-4 h-4 inline mr-1.5" />
+                    Company Name
+                  </label>
+                  <input
+                    type="text"
+                    value={formCompanyName}
+                    onChange={(e) => setFormCompanyName(e.target.value)}
+                    placeholder="Enter your company name"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 pb-6">
+              <button
+                onClick={handleSaveWelcomeProfile}
+                disabled={isSavingProfile || !formFullName.trim()}
+                className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSavingProfile ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-5 h-5" />
+                    Get Started
+                  </>
+                )}
+              </button>
+              <p className="text-center text-gray-500 text-xs mt-3">
+                You can update these details later in your profile settings
+              </p>
+            </div>
           </div>
         </div>
-        <button className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center hover:bg-white/20 transition">
-          <Bell className="w-5 h-5 text-gray-300" />
+      )}
+
+      {/* Dashboard Content - Blurred when modal is open */}
+      <div className={showWelcomeModal ? 'filter blur-sm pointer-events-none' : ''}>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
+              <Home className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-white">
+                {getGreeting()}, {getDisplayName()}!
+              </h1>
+              <p className="text-gray-400 text-sm">
+                {stats.total} active project{stats.total !== 1 ? 's' : ''}
+              </p>
+            </div>
+          </div>
+          <button className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center hover:bg-white/20 transition">
+            <Bell className="w-5 h-5 text-gray-300" />
+          </button>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 text-center">
+            <p className="text-3xl font-bold text-white">{stats.total}</p>
+            <p className="text-sm text-gray-400">Projects</p>
+          </div>
+          <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 text-center">
+            <p className="text-3xl font-bold text-white">{stats.generated}</p>
+            <p className="text-sm text-gray-400">Generated</p>
+          </div>
+          <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 text-center">
+            <p className="text-3xl font-bold text-white">{stats.plans}</p>
+            <p className="text-sm text-gray-400">Plans</p>
+          </div>
+        </div>
+
+        {/* Create New Project Button */}
+        <button
+          onClick={handleCreateProject}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl p-4 mb-6 flex items-center justify-center gap-2 transition font-medium"
+        >
+          <Plus className="w-5 h-5" />
+          Create New Project
         </button>
-      </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
-        <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 text-center">
-          <p className="text-3xl font-bold text-white">{stats.total}</p>
-          <p className="text-sm text-gray-400">Projects</p>
-        </div>
-        <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 text-center">
-          <p className="text-3xl font-bold text-white">{stats.generated}</p>
-          <p className="text-sm text-gray-400">Generated</p>
-        </div>
-        <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 text-center">
-          <p className="text-3xl font-bold text-white">{stats.plans}</p>
-          <p className="text-sm text-gray-400">Plans</p>
-        </div>
-      </div>
+        {/* Recent Projects */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-gray-400 text-sm font-medium">Recent Projects</h2>
+            {projects.length > 0 && (
+              <button 
+                onClick={() => router.push('/dashboard/projects')}
+                className="text-blue-400 text-sm hover:text-blue-300 transition"
+              >
+                View all
+              </button>
+            )}
+          </div>
 
-      {/* Create New Project Button */}
-      <button
-        onClick={handleCreateProject}
-        className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl p-4 mb-6 flex items-center justify-center gap-2 transition font-medium"
-      >
-        <Plus className="w-5 h-5" />
-        Create New Project
-      </button>
-
-      {/* Recent Projects */}
-      <div className="mb-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-gray-400 text-sm font-medium">Recent Projects</h2>
-          {projects.length > 0 && (
-            <button 
-              onClick={() => router.push('/dashboard/projects')}
-              className="text-blue-400 text-sm hover:text-blue-300 transition"
-            >
-              View all
-            </button>
+          {loading ? (
+            <div className="bg-white/5 backdrop-blur-sm rounded-xl p-8 border border-white/10 text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-3"></div>
+              <p className="text-gray-400 text-sm">Loading...</p>
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="bg-white/5 backdrop-blur-sm rounded-xl p-8 border border-white/10 text-center">
+              <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Home className="w-8 h-8 text-gray-500" />
+              </div>
+              <h3 className="text-white font-medium mb-2">No projects yet</h3>
+              <p className="text-gray-400 text-sm mb-4">
+                Create your first floor plan project
+              </p>
+              <button
+                onClick={handleCreateProject}
+                className="inline-flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-sm"
+              >
+                <Plus className="w-4 h-4" />
+                Create Project
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {projects.slice(0, 5).map((project) => (
+                <button
+                  key={project.id}
+                  onClick={() => router.push(`/dashboard/projects/${project.id}`)}
+                  className="w-full bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 hover:border-blue-500/50 hover:bg-white/10 transition text-left"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-white font-medium">{project.name}</span>
+                    {getStatusBadge(project.status)}
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-gray-500">
+                    {(project.suburb || project.state) && (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        {project.suburb ? `${project.suburb}, ${project.state}` : `${project.state} ${project.postcode}`}
+                      </span>
+                    )}
+                    {project.created_at && (
+                      <span>{formatDate(project.created_at)}</span>
+                    )}
+                    {project.land_area && (
+                      <span>{project.land_area.toFixed(0)} m²</span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
-        {loading ? (
-          <div className="bg-white/5 backdrop-blur-sm rounded-xl p-8 border border-white/10 text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-3"></div>
-            <p className="text-gray-400 text-sm">Loading...</p>
-          </div>
-        ) : projects.length === 0 ? (
-          <div className="bg-white/5 backdrop-blur-sm rounded-xl p-8 border border-white/10 text-center">
-            <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Home className="w-8 h-8 text-gray-500" />
-            </div>
-            <h3 className="text-white font-medium mb-2">No projects yet</h3>
-            <p className="text-gray-400 text-sm mb-4">
-              Create your first floor plan project
-            </p>
-            <button
-              onClick={handleCreateProject}
-              className="inline-flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-sm"
-            >
-              <Plus className="w-4 h-4" />
-              Create Project
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {projects.slice(0, 5).map((project) => (
-              <button
-                key={project.id}
-                onClick={() => router.push(`/dashboard/projects/${project.id}`)}
-                className="w-full bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 hover:border-blue-500/50 hover:bg-white/10 transition text-left"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-white font-medium">{project.name}</span>
-                  {getStatusBadge(project.status)}
-                </div>
-                <div className="flex items-center gap-4 text-xs text-gray-500">
-                  {(project.suburb || project.state) && (
-                    <span className="flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
-                      {project.suburb ? `${project.suburb}, ${project.state}` : `${project.state} ${project.postcode}`}
-                    </span>
-                  )}
-                  {project.created_at && (
-                    <span>{formatDate(project.created_at)}</span>
-                  )}
-                  {project.land_area && (
-                    <span>{project.land_area.toFixed(0)} m²</span>
-                  )}
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Quick Links */}
-      <div className="grid grid-cols-2 gap-4 mt-6">
-        <button
-          onClick={() => router.push('/dashboard/projects')}
-          className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 hover:border-blue-500/50 hover:bg-white/10 transition text-left"
-        >
-          <FolderOpen className="w-5 h-5 text-purple-400 mb-2" />
-          <p className="text-white text-sm font-medium">All Projects</p>
-          <p className="text-gray-500 text-xs">{stats.total} total</p>
-        </button>
-        <button
-          onClick={() => router.push('/dashboard/profile')}
-          className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 hover:border-blue-500/50 hover:bg-white/10 transition text-left"
-        >
-          <Clock className="w-5 h-5 text-green-400 mb-2" />
-          <p className="text-white text-sm font-medium">Account</p>
-          <p className="text-gray-500 text-xs">View profile</p>
-        </button>
+        {/* Quick Links */}
+        <div className="grid grid-cols-2 gap-4 mt-6">
+          <button
+            onClick={() => router.push('/dashboard/projects')}
+            className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 hover:border-blue-500/50 hover:bg-white/10 transition text-left"
+          >
+            <FolderOpen className="w-5 h-5 text-purple-400 mb-2" />
+            <p className="text-white text-sm font-medium">All Projects</p>
+            <p className="text-gray-500 text-xs">{stats.total} total</p>
+          </button>
+          <button
+            onClick={() => router.push('/dashboard/profile')}
+            className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 hover:border-blue-500/50 hover:bg-white/10 transition text-left"
+          >
+            <Clock className="w-5 h-5 text-green-400 mb-2" />
+            <p className="text-white text-sm font-medium">Account</p>
+            <p className="text-gray-500 text-xs">View profile</p>
+          </button>
+        </div>
       </div>
     </div>
   );
