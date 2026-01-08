@@ -1,8 +1,7 @@
 # backend/app/services/openai_floor_plan_generator.py
 """
 Azure OpenAI-powered floor plan generator.
-Uses GPT-4 with RAG (Retrieval Augmented Generation) to generate
-intelligent floor plans based on training data and project requirements.
+Generates a single, professional floor plan based on project requirements.
 """
 
 import os
@@ -17,13 +16,13 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAIFloorPlanGenerator:
-    """Generate floor plans using Azure OpenAI GPT-4."""
+    """Generate professional floor plans using Azure OpenAI GPT-4."""
     
     def __init__(self):
         # Azure OpenAI configuration
         self.endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
         self.api_key = os.getenv("AZURE_OPENAI_KEY")
-        self.deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4-floorplan")
+        self.deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4.1")
         self.api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
         
         # Azure Blob Storage for training data
@@ -37,23 +36,32 @@ class OpenAIFloorPlanGenerator:
                 api_key=self.api_key,
                 api_version=self.api_version
             )
+            logger.info(f"OpenAI client initialized with deployment: {self.deployment}")
         else:
             self.client = None
             logger.warning("Azure OpenAI credentials not configured")
         
         # Initialize blob client
+        self.blob_service = None
         if self.blob_connection_string:
-            self.blob_service = BlobServiceClient.from_connection_string(
-                self.blob_connection_string
-            )
+            try:
+                self.blob_service = BlobServiceClient.from_connection_string(
+                    self.blob_connection_string
+                )
+            except Exception as e:
+                logger.warning(f"Could not initialize blob service: {e}")
         
         # Cache for training examples
         self._training_data_cache = None
     
     def load_training_data(self) -> List[Dict[str, Any]]:
-        """Load training examples from blob storage for RAG."""
+        """Load training examples from blob storage for context."""
         if self._training_data_cache is not None:
             return self._training_data_cache
+        
+        if not self.blob_service:
+            logger.warning("Blob service not available, using empty training data")
+            return []
         
         try:
             container_client = self.blob_service.get_container_client(self.training_container)
@@ -69,160 +77,154 @@ class OpenAIFloorPlanGenerator:
             logger.warning(f"Could not load training data: {e}")
             return []
     
-    def find_similar_examples(
-        self,
-        project_data: Dict[str, Any],
-        max_examples: int = 3
-    ) -> List[Dict[str, Any]]:
-        """
-        Find training examples most similar to the current project.
-        Uses simple similarity scoring based on requirements match.
-        """
-        training_data = self.load_training_data()
-        if not training_data:
-            return []
-        
-        def similarity_score(example: Dict[str, Any]) -> float:
-            """Calculate similarity score between project and training example."""
-            example_input = example.get("input", {})
-            score = 0.0
-            
-            # Bedroom match (most important)
-            if example_input.get("bedrooms") == project_data.get("bedrooms"):
-                score += 3.0
-            elif abs(example_input.get("bedrooms", 0) - project_data.get("bedrooms", 0)) == 1:
-                score += 1.5
-            
-            # Land size similarity
-            example_area = (example_input.get("land_width", 0) * 
-                          example_input.get("land_depth", 0))
-            project_area = (project_data.get("land_width", 0) * 
-                          project_data.get("land_depth", 0))
-            if example_area > 0 and project_area > 0:
-                area_ratio = min(example_area, project_area) / max(example_area, project_area)
-                score += area_ratio * 2.0
-            
-            # Garage match
-            if example_input.get("garage_spaces") == project_data.get("garage_spaces"):
-                score += 1.0
-            
-            # Storeys match
-            if example_input.get("storeys") == project_data.get("storeys"):
-                score += 1.5
-            
-            # Style match
-            if example_input.get("style", "").lower() == project_data.get("style", "").lower():
-                score += 0.5
-            
-            return score
-        
-        # Sort by similarity and return top matches
-        scored_examples = [(ex, similarity_score(ex)) for ex in training_data]
-        scored_examples.sort(key=lambda x: x[1], reverse=True)
-        
-        return [ex[0] for ex in scored_examples[:max_examples]]
-    
     def build_system_prompt(self) -> str:
-        """Build the system prompt for floor plan generation."""
-        return """You are an expert Australian residential architect AI assistant specializing in floor plan design.
+        """Build the system prompt for professional floor plan generation."""
+        return """You are an expert Australian residential architect AI specializing in creating detailed, buildable floor plans.
 
-Your task is to generate detailed, buildable floor plans that comply with Australian building standards (NCC) and council requirements.
+Your task is to generate ONE comprehensive floor plan that:
+1. Follows Australian Building Code (NCC) requirements
+2. Maximizes functionality and flow
+3. Positions rooms logically based on Australian home design principles
+4. Includes all necessary rooms with realistic dimensions
 
-When generating floor plans, you MUST:
-1. Follow Australian room size minimums (bedrooms min 9m², living areas min 12m², etc.)
-2. Position rooms logically (wet areas grouped, bedrooms away from living, garage accessible)
-3. Ensure proper circulation (hallways, entries)
-4. Consider natural light and ventilation
-5. Include all required rooms based on specifications
-6. Provide realistic dimensions that fit within the land constraints
+CRITICAL DESIGN PRINCIPLES:
+- Garage should be at the front, accessible from the street
+- Entry/foyer should connect garage to living areas
+- Living areas (family, dining, kitchen) should flow together as open plan
+- Kitchen should have butler's pantry access if space allows
+- Bedrooms should be grouped together, away from living areas
+- Master suite should have ensuite and walk-in robe
+- Wet areas (bathrooms, laundry) should be grouped for plumbing efficiency
+- Outdoor areas (alfresco, patio) should connect to living/dining
+- Consider traffic flow and minimize hallway space
 
-Output format MUST be valid JSON with this structure:
+ROOM SIZE GUIDELINES (Australian standards):
+- Master Bedroom: 16-25m² (plus ensuite 6-10m², WIR 4-8m²)
+- Secondary Bedrooms: 10-14m²
+- Living/Family: 20-35m²
+- Kitchen: 12-20m²
+- Dining: 12-18m²
+- Home Theatre: 15-25m²
+- Double Garage: 36-42m²
+- Laundry: 4-8m²
+- Bathrooms: 5-9m²
+- Study/Office: 9-15m²
+- Butler's Pantry: 4-8m²
+- Alfresco: 15-30m²
+
+OUTPUT FORMAT - You MUST return valid JSON with this exact structure:
 {
-    "variant_name": "string - descriptive name",
-    "description": "string - brief description of the design",
+    "design_name": "string - descriptive name for this design",
+    "description": "string - brief description of design philosophy",
+    "land_utilization": {
+        "building_width": number,
+        "building_depth": number,
+        "building_footprint": number,
+        "land_coverage_percent": number
+    },
     "rooms": [
         {
-            "type": "string - room type (bedroom, bathroom, living, kitchen, garage, etc.)",
-            "name": "string - room name (Master Bedroom, Bedroom 2, etc.)",
-            "width": number - width in meters,
-            "depth": number - depth in meters,
-            "area": number - area in m²,
-            "x": number - x position from origin,
-            "y": number - y position from origin,
-            "floor": number - 0 for ground, 1 for first floor
+            "id": "string - unique room ID like 'garage_01'",
+            "type": "string - room type",
+            "name": "string - display name",
+            "width": number (meters),
+            "depth": number (meters),
+            "area": number (m²),
+            "x": number (meters from left edge),
+            "y": number (meters from front edge),
+            "floor": number (0=ground, 1=first),
+            "connections": ["array of room IDs this room connects to"],
+            "features": ["array of features like 'island bench', 'fireplace', etc."],
+            "windows": [{"wall": "north/south/east/west", "width": number}],
+            "doors": [{"to": "room_id or 'exterior'", "type": "standard/sliding/double"}]
         }
     ],
-    "total_area": number - total building area in m²,
-    "living_area": number - living areas total in m²,
-    "building_width": number - overall building width,
-    "building_depth": number - overall building depth,
-    "compliant": boolean - NCC compliance status,
-    "compliance_notes": "string - any compliance notes",
-    "design_notes": "string - key design decisions explained"
+    "circulation": {
+        "hallways": [
+            {"from": "room_id", "to": "room_id", "width": number}
+        ],
+        "stairs": [] // for two-storey only
+    },
+    "summary": {
+        "total_area": number,
+        "living_area": number,
+        "bedroom_count": number,
+        "bathroom_count": number,
+        "garage_spaces": number,
+        "outdoor_area": number
+    },
+    "compliance": {
+        "ncc_compliant": true,
+        "notes": ["array of compliance notes"]
+    }
 }
 
-Room positioning rules:
-- Use x,y coordinates where (0,0) is the front-left corner
-- x increases to the right, y increases towards the back
-- Leave 0.3-0.5m gaps between rooms for walls
-- Garage typically at front
-- Living areas should flow together if open_plan is true
-- Master bedroom should have ensuite and WIR access"""
+Position rooms using x,y coordinates where (0,0) is front-left corner of building envelope.
+- x increases to the right
+- y increases towards the back of the lot
+- Leave appropriate gaps for walls (typically 0.1m internal, 0.2m external)"""
 
-    def build_user_prompt(
-        self,
-        project_data: Dict[str, Any],
-        similar_examples: List[Dict[str, Any]]
-    ) -> str:
-        """Build the user prompt with project requirements and examples."""
+    def build_user_prompt(self, project_data: Dict[str, Any], training_examples: List[Dict]) -> str:
+        """Build the user prompt with project requirements and reference examples."""
         
-        # Format similar examples for context
-        examples_text = ""
-        if similar_examples:
-            examples_text = "\n\nHere are some similar floor plan examples for reference:\n"
-            for i, ex in enumerate(similar_examples, 1):
-                ex_input = ex.get("input", {})
-                ex_output = ex.get("output", {})
-                examples_text += f"""
-Example {i}: {ex_input.get('bedrooms', '?')} bed, {ex_input.get('bathrooms', '?')} bath on {ex_input.get('land_width', '?')}m x {ex_input.get('land_depth', '?')}m
-Rooms: {len(ex_output.get('rooms', []))} total, {ex_output.get('total_area', '?')}m² total area
+        # Format reference example if available
+        reference_text = ""
+        if training_examples:
+            best_example = training_examples[0]  # Use most relevant
+            ex_output = best_example.get("output", {})
+            room_summary = []
+            for room in ex_output.get("rooms", [])[:10]:  # First 10 rooms
+                room_summary.append(f"  - {room.get('name')}: {room.get('width')}m x {room.get('depth')}m")
+            
+            reference_text = f"""
+
+REFERENCE DESIGN (use as inspiration for layout approach):
+A similar {best_example.get('input', {}).get('bedrooms', '?')} bedroom design included:
+{chr(10).join(room_summary)}
+Total area: {ex_output.get('total_area', '?')}m²
 """
         
-        # Build the main prompt
-        prompt = f"""Please generate a floor plan for the following project:
+        prompt = f"""Generate a detailed floor plan for this project:
 
 PROJECT REQUIREMENTS:
-- Land Size: {project_data.get('land_width', 15)}m wide x {project_data.get('land_depth', 30)}m deep
-- Land Area: {project_data.get('land_area', 450)}m²
-- Bedrooms: {project_data.get('bedrooms', 4)}
-- Bathrooms: {project_data.get('bathrooms', 2)} (including ensuites)
-- Garage Spaces: {project_data.get('garage_spaces', 2)}
-- Storeys: {project_data.get('storeys', 1)}
-- Style: {project_data.get('style', 'modern')}
-- Open Plan Living: {'Yes' if project_data.get('open_plan', True) else 'No'}
-- Outdoor Entertainment Area: {'Yes' if project_data.get('outdoor_entertainment', False) else 'No'}
-- Home Office: {'Yes' if project_data.get('home_office', False) else 'No'}
-- Location: {project_data.get('suburb', 'Sydney')}, {project_data.get('state', 'NSW')}
-- Council: {project_data.get('council', 'Local Council')}
-{examples_text}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Land Size: {project_data.get('land_width', 18)}m (width) × {project_data.get('land_depth', 30)}m (depth)
+Land Area: {project_data.get('land_area', 540)}m²
+Location: {project_data.get('suburb', 'Sydney')}, {project_data.get('state', 'NSW')}
+Council: {project_data.get('council', 'Local Council')}
 
-Generate a practical, buildable floor plan that maximizes the use of space while maintaining good flow and natural light. The building footprint should typically use 50-70% of the land width and 40-60% of the land depth, leaving room for setbacks and outdoor space.
+REQUIRED SPACES:
+• Bedrooms: {project_data.get('bedrooms', 4)}
+• Bathrooms: {project_data.get('bathrooms', 2.5)} (including ensuites)
+• Garage: {project_data.get('garage_spaces', 2)} car spaces
+• Storeys: {project_data.get('storeys', 1)}
+• Style: {project_data.get('style', 'modern')}
 
-Respond with ONLY the JSON output, no additional text."""
+DESIGN PREFERENCES:
+• Open Plan Living: {'Yes - combine family/dining/kitchen' if project_data.get('open_plan', True) else 'No - separate rooms'}
+• Outdoor Entertainment: {'Yes - include alfresco area' if project_data.get('outdoor_entertainment', True) else 'No'}
+• Home Office/Study: {'Yes - dedicated study room' if project_data.get('home_office', True) else 'No'}
+{reference_text}
+DESIGN CONSTRAINTS:
+• Building should use approximately 60-70% of land width
+• Front setback: minimum 4.5m (for garage and entry)
+• Side setbacks: minimum 0.9m each side
+• Rear setback: minimum 3m
+• Maximum building footprint: ~{int(project_data.get('land_area', 540) * 0.5)}m² per floor
+
+Generate ONE comprehensive floor plan optimized for Australian family living.
+Ensure all rooms connect logically and the design maximizes natural light and flow.
+
+Return ONLY the JSON output, no additional text or markdown."""
 
         return prompt
     
-    def generate_floor_plan(
-        self,
-        project_data: Dict[str, Any],
-        variant_style: str = "balanced"
-    ) -> Optional[Dict[str, Any]]:
+    def generate_floor_plan(self, project_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
-        Generate a single floor plan variant using Azure OpenAI.
+        Generate a single professional floor plan using Azure OpenAI.
         
         Args:
             project_data: Project requirements dictionary
-            variant_style: "compact", "balanced", or "spacious"
         
         Returns:
             Floor plan layout dictionary or None if generation fails
@@ -232,30 +234,17 @@ Respond with ONLY the JSON output, no additional text."""
             return None
         
         try:
-            # Find similar examples for RAG
-            similar_examples = self.find_similar_examples(project_data)
+            # Load training examples for context
+            training_examples = self.load_training_data()
             
-            # Modify project data based on variant style
-            modified_data = project_data.copy()
-            if variant_style == "compact":
-                modified_data["_style_note"] = "Focus on efficiency and minimal footprint"
-            elif variant_style == "spacious":
-                modified_data["_style_note"] = "Maximize room sizes and add luxury features"
+            # Find most relevant example
+            relevant_examples = self._find_similar_examples(project_data, training_examples)
             
             # Build prompts
             system_prompt = self.build_system_prompt()
-            user_prompt = self.build_user_prompt(modified_data, similar_examples)
+            user_prompt = self.build_user_prompt(project_data, relevant_examples)
             
-            # Add variant-specific instruction
-            if variant_style == "compact":
-                user_prompt += "\n\nDesign a COMPACT variant with efficient use of space and smaller room sizes."
-            elif variant_style == "spacious":
-                user_prompt += "\n\nDesign a SPACIOUS/LUXURY variant with generous room sizes and premium features."
-            else:
-                user_prompt += "\n\nDesign a BALANCED variant with comfortable room sizes and good proportions."
-            
-            # Call Azure OpenAI
-            logger.info(f"Calling Azure OpenAI for {variant_style} floor plan...")
+            logger.info(f"Calling Azure OpenAI ({self.deployment}) for floor plan generation...")
             
             response = self.client.chat.completions.create(
                 model=self.deployment,
@@ -264,7 +253,7 @@ Respond with ONLY the JSON output, no additional text."""
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.7,
-                max_tokens=4000,
+                max_tokens=8000,
                 response_format={"type": "json_object"}
             )
             
@@ -273,16 +262,18 @@ Respond with ONLY the JSON output, no additional text."""
             floor_plan = json.loads(content)
             
             # Add metadata
-            floor_plan["variant_style"] = variant_style
             floor_plan["generated_at"] = datetime.utcnow().isoformat()
-            floor_plan["model"] = self.deployment
-            floor_plan["tokens_used"] = {
-                "prompt": response.usage.prompt_tokens,
-                "completion": response.usage.completion_tokens,
-                "total": response.usage.total_tokens
+            floor_plan["ai_model"] = self.deployment
+            floor_plan["generation_metadata"] = {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "total_tokens": response.usage.total_tokens
             }
             
-            logger.info(f"Successfully generated {variant_style} floor plan with {len(floor_plan.get('rooms', []))} rooms")
+            # Validate and fix the floor plan
+            floor_plan = self._validate_and_fix(floor_plan, project_data)
+            
+            logger.info(f"Successfully generated floor plan with {len(floor_plan.get('rooms', []))} rooms")
             
             return floor_plan
             
@@ -291,30 +282,82 @@ Respond with ONLY the JSON output, no additional text."""
             return None
         except Exception as e:
             logger.error(f"Error generating floor plan: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
-    def generate_floor_plan_variants(
+    def _find_similar_examples(
         self,
         project_data: Dict[str, Any],
-        num_variants: int = 3
+        training_data: List[Dict]
     ) -> List[Dict[str, Any]]:
-        """
-        Generate multiple floor plan variants.
+        """Find training examples most similar to the current project."""
+        if not training_data:
+            return []
         
-        Returns list of floor plan dictionaries.
-        """
-        variants = []
-        variant_styles = ["compact", "balanced", "spacious"][:num_variants]
+        def similarity_score(example: Dict) -> float:
+            ex_input = example.get("input", {})
+            score = 0.0
+            
+            # Bedroom match (most important)
+            bed_diff = abs(ex_input.get("bedrooms", 0) - project_data.get("bedrooms", 4))
+            score += max(0, 5 - bed_diff * 2)
+            
+            # Storey match
+            if ex_input.get("storeys") == project_data.get("storeys"):
+                score += 3
+            
+            # Land size similarity
+            ex_area = ex_input.get("land_area", 0)
+            proj_area = project_data.get("land_area", 450)
+            if ex_area > 0 and proj_area > 0:
+                ratio = min(ex_area, proj_area) / max(ex_area, proj_area)
+                score += ratio * 2
+            
+            return score
         
-        for style in variant_styles:
-            floor_plan = self.generate_floor_plan(project_data, style)
-            if floor_plan:
-                variants.append(floor_plan)
+        sorted_examples = sorted(training_data, key=similarity_score, reverse=True)
+        return sorted_examples[:2]
+    
+    def _validate_and_fix(
+        self,
+        floor_plan: Dict[str, Any],
+        project_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Validate the generated floor plan and fix common issues."""
         
-        return variants
+        rooms = floor_plan.get("rooms", [])
+        
+        # Ensure all rooms have required fields
+        for room in rooms:
+            if "area" not in room and "width" in room and "depth" in room:
+                room["area"] = round(room["width"] * room["depth"], 1)
+            if "floor" not in room:
+                room["floor"] = 0
+            if "id" not in room:
+                room["id"] = f"{room.get('type', 'room')}_{rooms.index(room):02d}"
+        
+        # Calculate summary if missing
+        if "summary" not in floor_plan:
+            total_area = sum(r.get("area", 0) for r in rooms)
+            living_types = ["living", "family", "kitchen", "dining", "kitchen_dining", "open_plan"]
+            living_area = sum(r.get("area", 0) for r in rooms if r.get("type") in living_types)
+            bedroom_count = sum(1 for r in rooms if r.get("type") == "bedroom")
+            bathroom_types = ["bathroom", "ensuite", "powder"]
+            bathroom_count = sum(1 for r in rooms if r.get("type") in bathroom_types)
+            
+            floor_plan["summary"] = {
+                "total_area": round(total_area, 1),
+                "living_area": round(living_area, 1),
+                "bedroom_count": bedroom_count,
+                "bathroom_count": bathroom_count,
+                "garage_spaces": project_data.get("garage_spaces", 2),
+                "outdoor_area": sum(r.get("area", 0) for r in rooms if r.get("type") in ["alfresco", "patio", "balcony"])
+            }
+        
+        return floor_plan
 
 
-# Factory function for easy instantiation
 def create_openai_generator() -> Optional[OpenAIFloorPlanGenerator]:
     """Create and return an OpenAI floor plan generator if configured."""
     generator = OpenAIFloorPlanGenerator()

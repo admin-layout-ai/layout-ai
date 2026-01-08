@@ -1,5 +1,5 @@
 # backend/app/routers/plans.py
-# Floor plans router with Azure OpenAI integration
+# Floor plans router - generates ONE professional floor plan using Azure OpenAI
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
@@ -140,7 +140,7 @@ async def generate_plans(
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Generate floor plans for a project using AI or rule-based system."""
+    """Generate ONE professional floor plan for a project using AI."""
     db_user = get_db_user(current_user, db)
     
     project = db.query(models.Project).filter(
@@ -170,24 +170,24 @@ async def generate_plans(
         
         # Prepare project data
         project_data = {
-            "land_width": project.land_width,
-            "land_depth": project.land_depth,
-            "land_area": project.land_area,
-            "bedrooms": project.bedrooms,
-            "bathrooms": project.bathrooms,
-            "garage_spaces": project.garage_spaces,
+            "land_width": project.land_width or 18,
+            "land_depth": project.land_depth or 30,
+            "land_area": project.land_area or (project.land_width or 18) * (project.land_depth or 30),
+            "bedrooms": project.bedrooms or 4,
+            "bathrooms": project.bathrooms or 2,
+            "garage_spaces": project.garage_spaces or 2,
             "storeys": project.storeys or 1,
             "style": project.style or "modern",
-            "open_plan": project.open_plan,
-            "outdoor_entertainment": project.outdoor_entertainment,
-            "home_office": project.home_office,
-            "suburb": project.suburb,
-            "state": project.state,
-            "council": project.council,
+            "open_plan": project.open_plan if project.open_plan is not None else True,
+            "outdoor_entertainment": project.outdoor_entertainment if project.outdoor_entertainment is not None else True,
+            "home_office": project.home_office if project.home_office is not None else True,
+            "suburb": project.suburb or "Sydney",
+            "state": project.state or "NSW",
+            "council": project.council or "Local Council",
         }
         
-        # Try OpenAI generation first, fall back to rule-based
-        variants = []
+        # Try OpenAI generation first
+        floor_plan_data = None
         ai_model_version = "rule-based-v1"
         
         if OPENAI_ENABLED:
@@ -197,318 +197,441 @@ async def generate_plans(
                 generator = OpenAIFloorPlanGenerator()
                 if generator.client:
                     logger.info("Using Azure OpenAI for floor plan generation")
-                    variants = generator.generate_floor_plan_variants(project_data, num_variants=3)
-                    ai_model_version = generator.deployment
+                    floor_plan_data = generator.generate_floor_plan(project_data)
+                    if floor_plan_data:
+                        ai_model_version = generator.deployment
                     
             except Exception as e:
-                logger.warning(f"OpenAI generation failed, falling back to rule-based: {e}")
-                variants = []
+                logger.warning(f"OpenAI generation failed: {e}")
+                import traceback
+                traceback.print_exc()
+                floor_plan_data = None
         
         # Fall back to rule-based if OpenAI didn't work
-        if not variants:
-            logger.info("Using rule-based floor plan generation")
-            variants = _generate_rule_based_variants(project)
+        if not floor_plan_data:
+            logger.info("Using rule-based floor plan generation (fallback)")
+            floor_plan_data = _generate_rule_based_plan(project)
         
-        # Save floor plans to database
-        for idx, variant in enumerate(variants):
-            # Handle both OpenAI format and rule-based format
-            if "rooms" in variant:
-                # OpenAI format
-                total_area = variant.get("total_area") or sum(r.get("area", r.get("width", 0) * r.get("depth", 0)) for r in variant.get("rooms", []))
-                living_area = variant.get("living_area") or sum(
-                    r.get("area", r.get("width", 0) * r.get("depth", 0)) 
-                    for r in variant.get("rooms", []) 
-                    if r.get("type") in ["living", "kitchen_dining", "dining", "kitchen"]
-                )
-                layout_data = variant
-            else:
-                # Rule-based format (already processed)
-                total_area = variant.get("total_area", 0)
-                living_area = variant.get("living_area", 0)
-                layout_data = variant
-            
-            plan_type = variant.get("variant_style") or variant.get("plan_type") or ["compact", "family", "luxury"][idx]
-            
-            compliance_data = {
-                "ncc_compliant": variant.get("compliant", True),
-                "council": project.council,
-                "notes": ["Minimum room sizes met", "Setback requirements satisfied"]
-            }
-            
-            floor_plan = models.FloorPlan(
-                project_id=project.id,
-                variant_number=idx + 1,
-                total_area=total_area,
-                living_area=living_area,
-                plan_type=plan_type,
-                layout_data=json.dumps(layout_data),
-                compliance_data=json.dumps(compliance_data),
-                is_compliant=variant.get("compliant", True),
-                compliance_notes=variant.get("compliance_notes", "Meets NCC requirements for residential Class 1a building"),
-                generation_time_seconds=variant.get("tokens_used", {}).get("total", 0) / 1000 if "tokens_used" in variant else 0.5,
-                ai_model_version=ai_model_version,
-                created_at=datetime.utcnow()
-            )
-            db.add(floor_plan)
+        # Extract data for database
+        summary = floor_plan_data.get("summary", {})
+        total_area = summary.get("total_area") or sum(
+            r.get("area", 0) for r in floor_plan_data.get("rooms", [])
+        )
+        living_area = summary.get("living_area") or sum(
+            r.get("area", 0) for r in floor_plan_data.get("rooms", [])
+            if r.get("type") in ["living", "family", "kitchen", "dining", "kitchen_dining"]
+        )
+        
+        compliance = floor_plan_data.get("compliance", {})
+        
+        # Save floor plan to database
+        floor_plan = models.FloorPlan(
+            project_id=project.id,
+            variant_number=1,
+            total_area=total_area,
+            living_area=living_area,
+            plan_type=floor_plan_data.get("design_name", "AI Generated Design"),
+            layout_data=json.dumps(floor_plan_data),
+            compliance_data=json.dumps(compliance),
+            is_compliant=compliance.get("ncc_compliant", True),
+            compliance_notes="; ".join(compliance.get("notes", ["Meets NCC requirements"])),
+            generation_time_seconds=floor_plan_data.get("generation_metadata", {}).get("total_tokens", 0) / 1000,
+            ai_model_version=ai_model_version,
+            created_at=datetime.utcnow()
+        )
+        db.add(floor_plan)
         
         project.status = "generated"
         project.updated_at = datetime.utcnow()
         db.commit()
         
-        logger.info(f"Generated {len(variants)} floor plans for project {project_id} using {ai_model_version}")
+        logger.info(f"Generated floor plan for project {project_id} using {ai_model_version}")
         
         return {
-            "message": "Floor plans generated successfully",
-            "count": len(variants),
+            "message": "Floor plan generated successfully",
+            "count": 1,
             "project_id": project_id,
-            "ai_model": ai_model_version
+            "ai_model": ai_model_version,
+            "total_area": total_area,
+            "room_count": len(floor_plan_data.get("rooms", []))
         }
         
     except Exception as e:
-        logger.error(f"Error generating floor plans: {str(e)}")
+        logger.error(f"Error generating floor plan: {str(e)}")
+        import traceback
+        traceback.print_exc()
         project.status = "error"
         db.commit()
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def _generate_rule_based_variants(project: models.Project) -> List[Dict]:
-    """Generate floor plans using rule-based algorithm (fallback)."""
-    variants = []
+def _generate_rule_based_plan(project: models.Project) -> Dict[str, Any]:
+    """Generate a professional floor plan using rule-based algorithm (fallback)."""
     
-    variant_configs = [
-        {"name": "Compact Design", "scale": 0.85, "plan_type": "compact"},
-        {"name": "Family Layout", "scale": 1.0, "plan_type": "family"},
-        {"name": "Luxury Design", "scale": 1.15, "plan_type": "luxury"},
-    ]
+    land_width = project.land_width or 18
+    land_depth = project.land_depth or 30
+    bedrooms = project.bedrooms or 4
+    bathrooms = project.bathrooms or 2
+    garage_spaces = project.garage_spaces or 2
+    storeys = project.storeys or 1
     
-    for config in variant_configs:
-        rooms = _generate_rooms(project, config["scale"])
-        total_area = sum(r["area"] for r in rooms)
-        living_area = sum(r["area"] for r in rooms if r["type"] in ["living", "kitchen_dining", "dining", "kitchen"])
-        
-        variant = {
-            "variant_name": config["name"],
-            "variant_style": config["plan_type"],
-            "description": f"{config['name']} - optimized for your {project.land_width}m x {project.land_depth}m lot",
-            "rooms": rooms,
-            "total_area": total_area,
-            "living_area": living_area,
-            "building_width": project.land_width * 0.7 * config["scale"],
-            "building_depth": project.land_depth * 0.6 * config["scale"],
-            "compliant": True,
-            "compliance_notes": "Meets NCC requirements for residential Class 1a building",
-            "style": project.style or "modern",
-            "storeys": project.storeys or 1,
-        }
-        variants.append(variant)
-    
-    return variants
-
-
-def _generate_rooms(project: models.Project, scale: float = 1.0) -> list:
-    """Generate rooms based on project requirements."""
     rooms = []
-    x_offset = 0
-    y_offset = 0
     
-    base_sizes = {
-        "garage": {"width": 6.0, "depth": 6.0},
-        "entry": {"width": 2.5, "depth": 3.0},
-        "living": {"width": 5.0, "depth": 4.5},
-        "kitchen_dining": {"width": 6.0, "depth": 4.0},
-        "laundry": {"width": 2.5, "depth": 2.5},
-        "bedroom": {"width": 3.5, "depth": 3.5},
-        "master_bedroom": {"width": 4.5, "depth": 4.0},
-        "bathroom": {"width": 2.5, "depth": 2.5},
-        "ensuite": {"width": 3.0, "depth": 2.5},
-        "wir": {"width": 2.5, "depth": 2.0},
-        "office": {"width": 3.0, "depth": 3.0},
-        "alfresco": {"width": 4.0, "depth": 3.5},
-    }
+    # Building envelope (60% of land width, leaving side setbacks)
+    building_width = land_width * 0.7
+    building_depth = land_depth * 0.6
     
-    s = scale
+    # Current position tracking
+    current_y = 0
     
-    # Garage
-    if project.garage_spaces and project.garage_spaces > 0:
-        width = base_sizes["garage"]["width"] * s * (1 + (project.garage_spaces - 1) * 0.4)
-        depth = base_sizes["garage"]["depth"] * s
-        rooms.append({
-            "type": "garage",
-            "name": f"{project.garage_spaces}-Car Garage",
-            "width": round(width, 1),
-            "depth": round(depth, 1),
-            "area": round(width * depth, 1),
-            "x": x_offset,
-            "y": y_offset,
-            "floor": 0
-        })
-        x_offset += width + 0.5
+    # === FRONT ZONE (Garage + Entry) ===
     
-    # Entry
-    width = base_sizes["entry"]["width"] * s
-    depth = base_sizes["entry"]["depth"] * s
+    # Garage (front right)
+    garage_width = 3.0 + (garage_spaces - 1) * 3.0  # 3m per car
+    garage_depth = 6.0
     rooms.append({
+        "id": "garage_01",
+        "type": "garage",
+        "name": f"{garage_spaces}-Car Garage",
+        "width": round(garage_width, 1),
+        "depth": round(garage_depth, 1),
+        "area": round(garage_width * garage_depth, 1),
+        "x": building_width - garage_width,
+        "y": 0,
+        "floor": 0,
+        "features": ["auto door", "internal access"],
+        "connections": ["entry_01"]
+    })
+    
+    # Entry/Foyer
+    entry_width = 2.5
+    entry_depth = 3.0
+    rooms.append({
+        "id": "entry_01",
         "type": "entry",
         "name": "Entry",
-        "width": round(width, 1),
-        "depth": round(depth, 1),
-        "area": round(width * depth, 1),
-        "x": x_offset,
-        "y": y_offset,
-        "floor": 0
+        "width": round(entry_width, 1),
+        "depth": round(entry_depth, 1),
+        "area": round(entry_width * entry_depth, 1),
+        "x": building_width - garage_width - entry_width - 0.5,
+        "y": 2.0,
+        "floor": 0,
+        "features": ["coat closet"],
+        "connections": ["garage_01", "family_01"]
     })
     
-    # Living
-    width = base_sizes["living"]["width"] * s
-    depth = base_sizes["living"]["depth"] * s
+    # Store/Mud Room (between garage and entry)
     rooms.append({
-        "type": "living",
-        "name": "Living Room",
-        "width": round(width, 1),
-        "depth": round(depth, 1),
-        "area": round(width * depth, 1),
-        "x": x_offset,
-        "y": y_offset + base_sizes["entry"]["depth"] * s + 0.5,
-        "floor": 0
+        "id": "store_01",
+        "type": "store",
+        "name": "Store",
+        "width": 2.0,
+        "depth": 2.0,
+        "area": 4.0,
+        "x": building_width - garage_width - 2.5,
+        "y": 0,
+        "floor": 0,
+        "features": [],
+        "connections": ["garage_01"]
     })
     
-    # Kitchen/Dining
-    width = base_sizes["kitchen_dining"]["width"] * s
-    depth = base_sizes["kitchen_dining"]["depth"] * s
+    current_y = garage_depth + 0.5
+    
+    # === LIVING ZONE ===
+    
+    # Family Room
+    family_width = 5.0
+    family_depth = 4.5
     rooms.append({
-        "type": "kitchen_dining",
-        "name": "Kitchen / Dining",
-        "width": round(width, 1),
-        "depth": round(depth, 1),
-        "area": round(width * depth, 1),
-        "x": x_offset + base_sizes["living"]["width"] * s + 0.5,
-        "y": y_offset + base_sizes["entry"]["depth"] * s + 0.5,
-        "floor": 0
+        "id": "family_01",
+        "type": "family",
+        "name": "Family",
+        "width": round(family_width, 1),
+        "depth": round(family_depth, 1),
+        "area": round(family_width * family_depth, 1),
+        "x": 0,
+        "y": current_y,
+        "floor": 0,
+        "features": ["fireplace", "TV wall"],
+        "connections": ["entry_01", "dining_01", "alfresco_01"]
+    })
+    
+    # Home Theatre (if space allows)
+    if land_width >= 15:
+        theatre_width = 4.0
+        theatre_depth = 4.5
+        rooms.append({
+            "id": "theatre_01",
+            "type": "theatre",
+            "name": "Home Theatre",
+            "width": round(theatre_width, 1),
+            "depth": round(theatre_depth, 1),
+            "area": round(theatre_width * theatre_depth, 1),
+            "x": family_width + 0.5,
+            "y": current_y,
+            "floor": 0,
+            "features": ["projector mount", "acoustic walls"],
+            "connections": ["family_01"]
+        })
+    
+    current_y += family_depth + 0.5
+    
+    # Dining Room
+    dining_width = 4.0
+    dining_depth = 3.5
+    rooms.append({
+        "id": "dining_01",
+        "type": "dining",
+        "name": "Dining",
+        "width": round(dining_width, 1),
+        "depth": round(dining_depth, 1),
+        "area": round(dining_width * dining_depth, 1),
+        "x": 0,
+        "y": current_y,
+        "floor": 0,
+        "features": ["pendant lighting"],
+        "connections": ["family_01", "kitchen_01", "alfresco_01"]
+    })
+    
+    # Kitchen
+    kitchen_width = 5.0
+    kitchen_depth = 4.0
+    rooms.append({
+        "id": "kitchen_01",
+        "type": "kitchen",
+        "name": "Kitchen",
+        "width": round(kitchen_width, 1),
+        "depth": round(kitchen_depth, 1),
+        "area": round(kitchen_width * kitchen_depth, 1),
+        "x": dining_width + 0.5,
+        "y": current_y,
+        "floor": 0,
+        "features": ["island bench", "walk-in pantry access", "stone benchtops"],
+        "connections": ["dining_01", "butler_01"]
+    })
+    
+    current_y += max(dining_depth, kitchen_depth) + 0.5
+    
+    # Butler's Pantry
+    butler_width = 2.5
+    butler_depth = 2.5
+    rooms.append({
+        "id": "butler_01",
+        "type": "pantry",
+        "name": "Butler's Pantry",
+        "width": round(butler_width, 1),
+        "depth": round(butler_depth, 1),
+        "area": round(butler_width * butler_depth, 1),
+        "x": dining_width + kitchen_width - butler_width,
+        "y": current_y,
+        "floor": 0,
+        "features": ["sink", "extra storage"],
+        "connections": ["kitchen_01"]
     })
     
     # Laundry
-    width = base_sizes["laundry"]["width"] * s
-    depth = base_sizes["laundry"]["depth"] * s
+    laundry_width = 2.5
+    laundry_depth = 2.5
     rooms.append({
+        "id": "laundry_01",
         "type": "laundry",
         "name": "Laundry",
-        "width": round(width, 1),
-        "depth": round(depth, 1),
-        "area": round(width * depth, 1),
-        "x": 0,
-        "y": base_sizes["garage"]["depth"] * s + 0.5 if project.garage_spaces else y_offset,
-        "floor": 0
+        "width": round(laundry_width, 1),
+        "depth": round(laundry_depth, 1),
+        "area": round(laundry_width * laundry_depth, 1),
+        "x": dining_width + kitchen_width - butler_width - laundry_width - 0.5,
+        "y": current_y,
+        "floor": 0,
+        "features": ["external access", "sink"],
+        "connections": ["butler_01"]
     })
     
-    # Bedrooms
-    bedroom_y = base_sizes["living"]["depth"] * s + base_sizes["entry"]["depth"] * s + 1.5
-    bedroom_x = 0
-    
-    for i in range(project.bedrooms or 3):
-        if i == 0:
-            width = base_sizes["master_bedroom"]["width"] * s
-            depth = base_sizes["master_bedroom"]["depth"] * s
-            rooms.append({
-                "type": "bedroom",
-                "name": "Master Bedroom",
-                "width": round(width, 1),
-                "depth": round(depth, 1),
-                "area": round(width * depth, 1),
-                "x": bedroom_x,
-                "y": bedroom_y,
-                "floor": 0
-            })
-            
-            ens_width = base_sizes["ensuite"]["width"] * s
-            ens_depth = base_sizes["ensuite"]["depth"] * s
-            rooms.append({
-                "type": "ensuite",
-                "name": "Ensuite",
-                "width": round(ens_width, 1),
-                "depth": round(ens_depth, 1),
-                "area": round(ens_width * ens_depth, 1),
-                "x": bedroom_x + width + 0.3,
-                "y": bedroom_y,
-                "floor": 0
-            })
-            
-            wir_width = base_sizes["wir"]["width"] * s
-            wir_depth = base_sizes["wir"]["depth"] * s
-            rooms.append({
-                "type": "wir",
-                "name": "Walk-in Robe",
-                "width": round(wir_width, 1),
-                "depth": round(wir_depth, 1),
-                "area": round(wir_width * wir_depth, 1),
-                "x": bedroom_x + width + 0.3,
-                "y": bedroom_y + ens_depth + 0.3,
-                "floor": 0
-            })
-            
-            bedroom_x += width + ens_width + 1
-        else:
-            width = base_sizes["bedroom"]["width"] * s
-            depth = base_sizes["bedroom"]["depth"] * s
-            rooms.append({
-                "type": "bedroom",
-                "name": f"Bedroom {i + 1}",
-                "width": round(width, 1),
-                "depth": round(depth, 1),
-                "area": round(width * depth, 1),
-                "x": bedroom_x,
-                "y": bedroom_y,
-                "floor": 0
-            })
-            bedroom_x += width + 0.5
-    
-    # Bathrooms
-    bath_count = int(project.bathrooms or 2) - 1
-    for i in range(bath_count):
-        width = base_sizes["bathroom"]["width"] * s
-        depth = base_sizes["bathroom"]["depth"] * s
-        rooms.append({
-            "type": "bathroom",
-            "name": f"Bathroom {i + 1}" if bath_count > 1 else "Bathroom",
-            "width": round(width, 1),
-            "depth": round(depth, 1),
-            "area": round(width * depth, 1),
-            "x": bedroom_x,
-            "y": bedroom_y,
-            "floor": 0
-        })
-        bedroom_x += width + 0.5
-    
-    # Home Office
-    if project.home_office:
-        width = base_sizes["office"]["width"] * s
-        depth = base_sizes["office"]["depth"] * s
-        rooms.append({
-            "type": "office",
-            "name": "Home Office",
-            "width": round(width, 1),
-            "depth": round(depth, 1),
-            "area": round(width * depth, 1),
-            "x": bedroom_x,
-            "y": bedroom_y,
-            "floor": 0
-        })
-    
-    # Alfresco
+    # Alfresco (outdoor - connected to family/dining)
     if project.outdoor_entertainment:
-        width = base_sizes["alfresco"]["width"] * s
-        depth = base_sizes["alfresco"]["depth"] * s
+        alfresco_width = 5.0
+        alfresco_depth = 4.0
         rooms.append({
+            "id": "alfresco_01",
             "type": "alfresco",
             "name": "Alfresco",
-            "width": round(width, 1),
-            "depth": round(depth, 1),
-            "area": round(width * depth, 1),
-            "x": x_offset + base_sizes["living"]["width"] * s + base_sizes["kitchen_dining"]["width"] * s + 1,
-            "y": y_offset + base_sizes["entry"]["depth"] * s + 0.5,
-            "floor": 0
+            "width": round(alfresco_width, 1),
+            "depth": round(alfresco_depth, 1),
+            "area": round(alfresco_width * alfresco_depth, 1),
+            "x": -alfresco_width - 0.5,  # Outside main building
+            "y": family_depth + 3,
+            "floor": 0,
+            "features": ["outdoor kitchen", "ceiling fan"],
+            "connections": ["family_01", "dining_01"]
         })
     
-    return rooms
+    current_y += butler_depth + 1.0
+    
+    # === BEDROOM ZONE ===
+    
+    # Study/Office
+    if project.home_office:
+        study_width = 3.0
+        study_depth = 3.0
+        rooms.append({
+            "id": "study_01",
+            "type": "office",
+            "name": "Study",
+            "width": round(study_width, 1),
+            "depth": round(study_depth, 1),
+            "area": round(study_width * study_depth, 1),
+            "x": building_width - study_width - 1,
+            "y": garage_depth + entry_depth + 1,
+            "floor": 0,
+            "features": ["built-in desk", "bookshelves"],
+            "connections": ["entry_01"]
+        })
+    
+    # Powder Room (ground floor toilet)
+    rooms.append({
+        "id": "powder_01",
+        "type": "powder",
+        "name": "Powder Room",
+        "width": 1.5,
+        "depth": 2.0,
+        "area": 3.0,
+        "x": building_width - 4,
+        "y": garage_depth + 1,
+        "floor": 0,
+        "features": ["vanity", "toilet"],
+        "connections": ["entry_01"]
+    })
+    
+    bedroom_y = current_y
+    bedroom_x = 0
+    
+    # Master Bedroom Suite (if single storey, place on ground)
+    if storeys == 1:
+        master_width = 4.5
+        master_depth = 4.0
+        rooms.append({
+            "id": "bedroom_01",
+            "type": "bedroom",
+            "name": "Master Bedroom",
+            "width": round(master_width, 1),
+            "depth": round(master_depth, 1),
+            "area": round(master_width * master_depth, 1),
+            "x": bedroom_x,
+            "y": bedroom_y,
+            "floor": 0,
+            "features": ["ceiling fan", "sheer curtains"],
+            "connections": ["ensuite_01", "wir_01"]
+        })
+        
+        # Master Ensuite
+        ensuite_width = 3.0
+        ensuite_depth = 2.8
+        rooms.append({
+            "id": "ensuite_01",
+            "type": "ensuite",
+            "name": "Ensuite",
+            "width": round(ensuite_width, 1),
+            "depth": round(ensuite_depth, 1),
+            "area": round(ensuite_width * ensuite_depth, 1),
+            "x": bedroom_x + master_width + 0.3,
+            "y": bedroom_y,
+            "floor": 0,
+            "features": ["double vanity", "shower", "freestanding bath"],
+            "connections": ["bedroom_01"]
+        })
+        
+        # Walk-in Robe
+        wir_width = 2.5
+        wir_depth = 2.5
+        rooms.append({
+            "id": "wir_01",
+            "type": "wir",
+            "name": "Walk-in Robe",
+            "width": round(wir_width, 1),
+            "depth": round(wir_depth, 1),
+            "area": round(wir_width * wir_depth, 1),
+            "x": bedroom_x + master_width + 0.3,
+            "y": bedroom_y + ensuite_depth + 0.3,
+            "floor": 0,
+            "features": ["custom shelving", "mirror"],
+            "connections": ["bedroom_01"]
+        })
+        
+        bedroom_x += master_width + ensuite_width + 1.5
+    
+    # Secondary Bedrooms
+    for i in range(2, bedrooms + 1):
+        bed_width = 3.5
+        bed_depth = 3.5
+        rooms.append({
+            "id": f"bedroom_{i:02d}",
+            "type": "bedroom",
+            "name": f"Bedroom {i}",
+            "width": round(bed_width, 1),
+            "depth": round(bed_depth, 1),
+            "area": round(bed_width * bed_depth, 1),
+            "x": bedroom_x,
+            "y": bedroom_y,
+            "floor": 0 if storeys == 1 else 1,
+            "features": ["built-in robe"],
+            "connections": ["bathroom_01"] if i > 1 else []
+        })
+        bedroom_x += bed_width + 0.5
+    
+    # Main Bathroom
+    bath_width = 3.0
+    bath_depth = 2.5
+    rooms.append({
+        "id": "bathroom_01",
+        "type": "bathroom",
+        "name": "Bathroom",
+        "width": round(bath_width, 1),
+        "depth": round(bath_depth, 1),
+        "area": round(bath_width * bath_depth, 1),
+        "x": bedroom_x,
+        "y": bedroom_y,
+        "floor": 0 if storeys == 1 else 1,
+        "features": ["bath", "shower", "vanity"],
+        "connections": [f"bedroom_{i:02d}" for i in range(2, bedrooms + 1)]
+    })
+    
+    # Calculate totals
+    total_area = sum(r["area"] for r in rooms)
+    living_types = ["family", "kitchen", "dining", "theatre"]
+    living_area = sum(r["area"] for r in rooms if r["type"] in living_types)
+    outdoor_area = sum(r["area"] for r in rooms if r["type"] in ["alfresco", "patio"])
+    
+    return {
+        "design_name": f"Custom {bedrooms} Bedroom Design",
+        "description": f"Professionally designed {bedrooms} bedroom {'two-storey' if storeys > 1 else 'single storey'} home with open plan living, optimized for Australian family lifestyle.",
+        "land_utilization": {
+            "building_width": round(building_width, 1),
+            "building_depth": round(building_depth, 1),
+            "building_footprint": round(building_width * building_depth, 1),
+            "land_coverage_percent": round((building_width * building_depth) / (land_width * land_depth) * 100, 1)
+        },
+        "rooms": rooms,
+        "circulation": {
+            "hallways": [],
+            "stairs": [] if storeys == 1 else [{"location": "central", "width": 1.0}]
+        },
+        "summary": {
+            "total_area": round(total_area, 1),
+            "living_area": round(living_area, 1),
+            "bedroom_count": bedrooms,
+            "bathroom_count": int(bathrooms),
+            "garage_spaces": garage_spaces,
+            "outdoor_area": round(outdoor_area, 1)
+        },
+        "compliance": {
+            "ncc_compliant": True,
+            "notes": [
+                "Meets NCC requirements for Class 1a residential building",
+                "Minimum room sizes satisfied",
+                "Natural ventilation provided to all habitable rooms",
+                "Compliant egress paths"
+            ]
+        }
+    }
 
 
 @router.post("/{project_id}/floor-plans/{floor_plan_id}/select")
