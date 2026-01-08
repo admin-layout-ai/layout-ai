@@ -245,7 +245,7 @@ export default function PlansPage({ params }: PageProps) {
     
     try {
       setRegenerating(true);
-      await api.generateFloorPlan(projectId);
+      await api.generateFloorPlans(projectId);
       await loadData();
     } catch (err) {
       console.error('Regeneration failed:', err);
