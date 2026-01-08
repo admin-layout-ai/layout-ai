@@ -22,7 +22,7 @@ import {
   Layers
 } from 'lucide-react';
 import api, { Project, FloorPlan } from '@/lib/api';
-import FloorPlanRenderer from '@/components/FloorPlanRenderer';
+import FloorPlanCanvas from '@/components/FloorPlanCanvas';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -412,7 +412,7 @@ export default function PlansPage({ params }: PageProps) {
                 {/* Canvas */}
                 <div className="h-[600px] overflow-auto bg-gray-100">
                   {layoutData ? (
-                    <FloorPlanRenderer
+                    <FloorPlanCanvas
                       layoutData={layoutData}
                       selectedFloor={selectedFloor}
                       showDimensions={showDimensions}
