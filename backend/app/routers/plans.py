@@ -472,9 +472,9 @@ async def download_floor_plan_pdf(
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Download floor plan as professional PDF."""
+    """Download floor plan as professional CAD-quality PDF."""
     from fastapi.responses import Response
-    from ..services.pdf_generator import generate_floor_plan_pdf
+    from ..services.cad_generator import generate_cad_floor_plan_pdf
     
     db_user = get_db_user(current_user, db)
     
@@ -513,7 +513,7 @@ async def download_floor_plan_pdf(
     
     # Generate PDF
     try:
-        pdf_bytes = generate_floor_plan_pdf(layout_data, project.name, project_details)
+        pdf_bytes = generate_cad_floor_plan_pdf(layout_data, project.name, project_details)
     except Exception as e:
         logger.error(f"PDF generation failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate PDF")
