@@ -5,7 +5,6 @@ from typing import Optional, List
 from pydantic import BaseModel, validator
 from datetime import datetime
 import logging
-import json
 import traceback
 
 from ..database import get_db
@@ -139,15 +138,16 @@ class GenerateResponse(BaseModel):
 
 
 # =============================================================================
-# Background task for floor plan generation
+# Background task - delegates to plans module for AI generation
 # =============================================================================
 
 def generate_floor_plans_task(project_id: int, db_session_factory):
     """
-    Background task to generate floor plans.
-    This runs asynchronously after the API returns.
+    Background task to generate floor plan.
+    Delegates to the plans module which handles OpenAI integration.
     """
     from ..database import SessionLocal
+    from . import plans  # Import plans router module
     
     db = SessionLocal()
     try:
@@ -158,12 +158,13 @@ def generate_floor_plans_task(project_id: int, db_session_factory):
         
         logger.info(f"Starting floor plan generation for project {project_id}")
         
-        # Generate floor plans
-        _create_floor_plans(db, project)
-        logger.info(f"Successfully generated floor plans for project {project_id}")
+        # Call the plans module's generation function
+        plans.create_floor_plan_for_project(db, project)
+        
+        logger.info(f"Successfully generated floor plan for project {project_id}")
             
     except Exception as e:
-        logger.error(f"Error generating floor plans for project {project_id}: {str(e)}")
+        logger.error(f"Error generating floor plan for project {project_id}: {str(e)}")
         logger.error(traceback.format_exc())
         try:
             project = db.query(models.Project).filter(models.Project.id == project_id).first()
@@ -177,282 +178,8 @@ def generate_floor_plans_task(project_id: int, db_session_factory):
         db.close()
 
 
-def _create_floor_plans(db: Session, project: models.Project):
-    """Create floor plans based on project requirements."""
-    logger.info(f"Creating floor plans for project {project.id}")
-    
-    # Delete any existing floor plans for this project first
-    try:
-        existing = db.query(models.FloorPlan).filter(models.FloorPlan.project_id == project.id).all()
-        for plan in existing:
-            db.delete(plan)
-        db.commit()
-        logger.info(f"Deleted {len(existing)} existing floor plans")
-    except Exception as e:
-        logger.warning(f"Could not delete existing plans: {e}")
-        db.rollback()
-    
-    # Calculate areas based on land size
-    land_area = project.land_area or (project.land_width or 15) * (project.land_depth or 30)
-    building_coverage = 0.5  # 50% site coverage
-    building_area = land_area * building_coverage
-    
-    # Create 3 variant floor plans
-    variants = [
-        {
-            "name": "Compact Design",
-            "description": "Efficient use of space with open plan living",
-            "total_area": round(building_area * 0.85, 1),
-            "living_area": round(building_area * 0.6, 1),
-            "plan_type": "compact",
-        },
-        {
-            "name": "Family Layout",
-            "description": "Spacious family home with separate living zones",
-            "total_area": round(building_area * 1.0, 1),
-            "living_area": round(building_area * 0.65, 1),
-            "plan_type": "family",
-        },
-        {
-            "name": "Luxury Design",
-            "description": "Premium layout with additional features",
-            "total_area": round(building_area * 1.15, 1),
-            "living_area": round(building_area * 0.7, 1),
-            "plan_type": "luxury",
-        },
-    ]
-    
-    for idx, variant in enumerate(variants):
-        rooms = _generate_rooms(project, idx)
-        
-        layout_data = {
-            "variant_name": variant["name"],
-            "description": variant["description"],
-            "rooms": rooms,
-            "total_area": variant["total_area"],
-            "living_area": variant["living_area"],
-            "building_width": round(project.land_width * 0.7, 1) if project.land_width else 12,
-            "building_depth": round(project.land_depth * 0.6, 1) if project.land_depth else 18,
-            "compliant": True,
-            "compliance_notes": "Meets NCC requirements for residential Class 1a building",
-            "style": project.style or "modern",
-            "storeys": project.storeys or 1,
-        }
-        
-        compliance_data = {
-            "ncc_compliant": True,
-            "council": project.council,
-            "notes": [
-                "Minimum room sizes met",
-                "Setback requirements satisfied",
-                "Building coverage within limits"
-            ]
-        }
-        
-        # Create FloorPlan with all fields from the model
-        floor_plan = models.FloorPlan(
-            project_id=project.id,
-            variant_number=idx + 1,
-            total_area=variant["total_area"],
-            living_area=variant["living_area"],
-            plan_type=variant["plan_type"],
-            layout_data=json.dumps(layout_data),
-            compliance_data=json.dumps(compliance_data),
-            is_compliant=True,
-            compliance_notes="Meets NCC requirements for residential Class 1a building",
-            generation_time_seconds=0.5,
-            ai_model_version="rule-based-v1",
-            created_at=datetime.utcnow()
-        )
-            
-        db.add(floor_plan)
-        logger.info(f"Created floor plan variant {idx + 1}: {variant['name']}")
-    
-    project.status = "generated"
-    project.updated_at = datetime.utcnow()
-    db.commit()
-    
-    logger.info(f"Successfully created 3 floor plans for project {project.id}")
-
-
-def _generate_rooms(project: models.Project, variant_idx: int) -> List[dict]:
-    """Generate room layouts based on project requirements."""
-    rooms = []
-    scale = 1 + (variant_idx * 0.15)  # Each variant is slightly larger
-    
-    current_y = 0
-    
-    # Garage at front
-    if project.garage_spaces:
-        garage_width = project.garage_spaces * 3
-        garage_depth = 6
-        rooms.append({
-            "type": "garage",
-            "name": f"{project.garage_spaces}-Car Garage",
-            "area": round(garage_width * garage_depth, 1),
-            "width": garage_width,
-            "depth": garage_depth,
-            "x": 0,
-            "y": current_y,
-            "floor": 1
-        })
-    
-    # Entry
-    rooms.append({
-        "type": "entry",
-        "name": "Entry",
-        "area": round(4 * scale, 1),
-        "width": 2,
-        "depth": round(2 * scale, 1),
-        "x": (project.garage_spaces or 0) * 3,
-        "y": current_y,
-        "floor": 1
-    })
-    
-    current_y = 6
-    
-    # Living area
-    living_width = round(5 * scale, 1)
-    living_depth = 5
-    rooms.append({
-        "type": "living",
-        "name": "Living Room",
-        "area": round(living_width * living_depth, 1),
-        "width": living_width,
-        "depth": living_depth,
-        "x": 0,
-        "y": current_y,
-        "floor": 1
-    })
-    
-    # Kitchen/Dining
-    if project.open_plan:
-        kd_width = round(6 * scale, 1)
-        kd_depth = 5
-        rooms.append({
-            "type": "kitchen_dining",
-            "name": "Kitchen & Dining",
-            "area": round(kd_width * kd_depth, 1),
-            "width": kd_width,
-            "depth": kd_depth,
-            "x": living_width,
-            "y": current_y,
-            "floor": 1
-        })
-    else:
-        rooms.append({
-            "type": "kitchen",
-            "name": "Kitchen",
-            "area": round(15 * scale, 1),
-            "width": 4,
-            "depth": round(4 * scale, 1),
-            "x": living_width,
-            "y": current_y,
-            "floor": 1
-        })
-        rooms.append({
-            "type": "dining",
-            "name": "Dining Room",
-            "area": round(15 * scale, 1),
-            "width": 4,
-            "depth": round(4 * scale, 1),
-            "x": living_width + 4,
-            "y": current_y,
-            "floor": 1
-        })
-    
-    # Laundry
-    rooms.append({
-        "type": "laundry",
-        "name": "Laundry",
-        "area": round(6 * scale, 1),
-        "width": 2.5,
-        "depth": round(2.5 * scale, 1),
-        "x": 12,
-        "y": current_y,
-        "floor": 1
-    })
-    
-    current_y = 11
-    
-    # Bedrooms
-    bed_x = 0
-    for i in range(project.bedrooms or 3):
-        is_master = i == 0
-        bed_width = round((4 if is_master else 3.5) * scale, 1)
-        bed_depth = round((4 if is_master else 3.5) * scale, 1)
-        rooms.append({
-            "type": "bedroom",
-            "name": "Master Bedroom" if is_master else f"Bedroom {i + 1}",
-            "area": round(bed_width * bed_depth, 1),
-            "width": bed_width,
-            "depth": bed_depth,
-            "x": bed_x,
-            "y": current_y,
-            "floor": 1
-        })
-        bed_x += bed_width
-    
-    # Bathrooms
-    for i in range(int(project.bathrooms or 2)):
-        is_ensuite = i == 0
-        bath_width = round((3 if is_ensuite else 2.5) * scale, 1)
-        bath_depth = round((2.5 if is_ensuite else 2) * scale, 1)
-        rooms.append({
-            "type": "bathroom",
-            "name": "Ensuite" if is_ensuite else f"Bathroom",
-            "area": round(bath_width * bath_depth, 1),
-            "width": bath_width,
-            "depth": bath_depth,
-            "x": bed_x,
-            "y": current_y,
-            "floor": 1
-        })
-        bed_x += bath_width
-    
-    # Walk-in Robe
-    rooms.append({
-        "type": "wir",
-        "name": "Walk-in Robe",
-        "area": round(4 * scale, 1),
-        "width": 2,
-        "depth": round(2 * scale, 1),
-        "x": 4,
-        "y": current_y + 4,
-        "floor": 1
-    })
-    
-    # Optional: Home Office
-    if project.home_office:
-        rooms.append({
-            "type": "office",
-            "name": "Home Office",
-            "area": round(10 * scale, 1),
-            "width": 3,
-            "depth": round(3.5 * scale, 1),
-            "x": 12,
-            "y": current_y,
-            "floor": 1
-        })
-    
-    # Optional: Alfresco
-    if project.outdoor_entertainment:
-        rooms.append({
-            "type": "alfresco",
-            "name": "Alfresco",
-            "area": round(20 * scale, 1),
-            "width": 5,
-            "depth": round(4 * scale, 1),
-            "x": 4,
-            "y": current_y + 8,
-            "floor": 1
-        })
-    
-    return rooms
-
-
 # =============================================================================
-# Endpoints
+# CRUD ENDPOINTS
 # =============================================================================
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
@@ -462,24 +189,9 @@ async def create_project(
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    logger.info(f"Creating project for user: {current_user.id}")
-    
-    db_user = db.query(models.User).filter(
-        models.User.azure_ad_id == current_user.id
-    ).first()
-    
+    db_user = db.query(models.User).filter(models.User.azure_ad_id == current_user.id).first()
     if not db_user:
-        raise HTTPException(status_code=404, detail="User not found. Please sign in again.")
-    
-    project_count = db.query(models.Project).filter(models.Project.user_id == db_user.id).count()
-    tier_limits = {"free": 2, "basic": 10, "professional": 50, "enterprise": -1}
-    limit = tier_limits.get(db_user.subscription_tier, 2)
-    
-    if limit != -1 and project_count >= limit:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Project limit reached. Your {db_user.subscription_tier} plan allows {limit} projects."
-        )
+        raise HTTPException(status_code=404, detail="User not found. Please complete your profile first.")
     
     land_area = project_data.land_area
     if not land_area and project_data.land_width and project_data.land_depth:
@@ -633,7 +345,7 @@ async def generate_floor_plans_endpoint(
 ):
     """
     Trigger floor plan generation for a project.
-    Generation happens in the background - the status will change to 'generated' when done.
+    Generates ONE professional floor plan using AI (Azure OpenAI) or rule-based system.
     """
     db_user = db.query(models.User).filter(models.User.azure_ad_id == current_user.id).first()
     if not db_user:
@@ -649,7 +361,7 @@ async def generate_floor_plans_endpoint(
     
     # Check if already generating
     if project.status == "generating":
-        raise HTTPException(status_code=400, detail="Floor plans are already being generated")
+        raise HTTPException(status_code=400, detail="Floor plan is already being generated")
     
     # Allow regeneration - delete existing plans first
     if project.status == "generated":
@@ -671,7 +383,7 @@ async def generate_floor_plans_endpoint(
     project.updated_at = datetime.utcnow()
     db.commit()
     
-    # Add background task to generate floor plans
+    # Add background task to generate floor plan (delegates to plans module)
     background_tasks.add_task(generate_floor_plans_task, project_id, None)
     
     logger.info(f"Floor plan generation triggered for project: {project_id}")
@@ -679,7 +391,8 @@ async def generate_floor_plans_endpoint(
     return GenerateResponse(
         message="Floor plan generation started. This typically takes a few seconds.",
         project_id=project_id,
-        status="generating"
+        status="generating",
+        floor_plans_count=1
     )
 
 
