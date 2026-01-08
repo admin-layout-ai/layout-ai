@@ -1,7 +1,9 @@
 # backend/app/routers/plans.py
 # Floor plans router - Uses Azure OpenAI with ALL project details from dbo.projects
+# ENHANCED: Now renders CAD-quality PDF/PNG and saves to Azure Blob Storage
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response, RedirectResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
@@ -10,6 +12,8 @@ from openai import AzureOpenAI
 import json
 import logging
 import os
+import re
+import io
 
 from .. import models
 from ..database import get_db
@@ -24,6 +28,20 @@ AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
 AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4.1")
 AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
+
+# Azure Blob Storage Configuration
+AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+AZURE_STORAGE_ACCOUNT = os.getenv("AZURE_STORAGE_ACCOUNT", "layoutaistorage")
+FLOOR_PLANS_CONTAINER = "floor-plans"
+
+
+def sanitize_path(name: str) -> str:
+    """Sanitize a string for use in file/blob paths."""
+    if not name:
+        return "unknown"
+    sanitized = re.sub(r'[^\w\s-]', '', name)
+    sanitized = re.sub(r'[\s]+', '_', sanitized)
+    return sanitized[:50]
 
 
 class FloorPlanResponse(BaseModel):
@@ -60,6 +78,105 @@ def get_db_user(current_user: AuthenticatedUser, db: Session) -> models.User:
 
 
 # =============================================================================
+# AZURE BLOB STORAGE HELPERS
+# =============================================================================
+
+def get_blob_service():
+    """Get Azure Blob Service client."""
+    if not AZURE_STORAGE_CONNECTION_STRING:
+        return None
+    try:
+        from azure.storage.blob import BlobServiceClient
+        return BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
+    except Exception as e:
+        logger.warning(f"Could not create blob service: {e}")
+        return None
+
+
+def upload_to_blob(data: bytes, blob_name: str, content_type: str) -> Optional[str]:
+    """Upload data to blob storage and return public URL."""
+    blob_service = get_blob_service()
+    if not blob_service:
+        return None
+    
+    try:
+        from azure.storage.blob import ContentSettings
+        
+        container_client = blob_service.get_container_client(FLOOR_PLANS_CONTAINER)
+        
+        # Ensure container exists
+        try:
+            if not container_client.exists():
+                container_client.create_container(public_access='blob')
+        except:
+            pass
+        
+        blob_client = container_client.get_blob_client(blob_name)
+        blob_client.upload_blob(
+            data,
+            overwrite=True,
+            content_settings=ContentSettings(content_type=content_type)
+        )
+        
+        url = f"https://{AZURE_STORAGE_ACCOUNT}.blob.core.windows.net/{FLOOR_PLANS_CONTAINER}/{blob_name}"
+        return url
+    except Exception as e:
+        logger.error(f"Failed to upload blob {blob_name}: {e}")
+        return None
+
+
+def pdf_to_png(pdf_bytes: bytes, dpi: int = 150) -> Optional[bytes]:
+    """Convert PDF to PNG image."""
+    # Try PyMuPDF first
+    try:
+        import fitz
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        page = doc[0]
+        mat = fitz.Matrix(dpi/72, dpi/72)
+        pix = page.get_pixmap(matrix=mat)
+        png_bytes = pix.tobytes("png")
+        doc.close()
+        return png_bytes
+    except ImportError:
+        logger.warning("PyMuPDF not available")
+    except Exception as e:
+        logger.warning(f"PyMuPDF conversion failed: {e}")
+    
+    # Try pdf2image
+    try:
+        from pdf2image import convert_from_bytes
+        images = convert_from_bytes(pdf_bytes, dpi=dpi, first_page=1, last_page=1)
+        if images:
+            img_buffer = io.BytesIO()
+            images[0].save(img_buffer, format='PNG', optimize=True)
+            img_buffer.seek(0)
+            return img_buffer.getvalue()
+    except ImportError:
+        logger.warning("pdf2image not available")
+    except Exception as e:
+        logger.warning(f"pdf2image conversion failed: {e}")
+    
+    return None
+
+
+def create_thumbnail(png_bytes: bytes, max_size: int = 400) -> Optional[bytes]:
+    """Create thumbnail from PNG."""
+    try:
+        from PIL import Image
+        img = Image.open(io.BytesIO(png_bytes))
+        ratio = min(max_size / img.width, max_size / img.height)
+        new_size = (int(img.width * ratio), int(img.height * ratio))
+        img.thumbnail(new_size, Image.Resampling.LANCZOS)
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG', optimize=True)
+        buffer.seek(0)
+        return buffer.getvalue()
+    except Exception as e:
+        logger.warning(f"Thumbnail creation failed: {e}")
+        return None
+
+
+# =============================================================================
 # OPENAI FLOOR PLAN GENERATION - Uses ALL dbo.projects fields
 # =============================================================================
 
@@ -86,6 +203,8 @@ CRITICAL RULES:
 4. All rooms must have realistic, buildable dimensions
 5. Follow Australian Building Code (NCC/BCA) requirements
 6. Consider land slope, orientation, and street frontage in design
+7. Rooms MUST share walls - NO GAPS between adjacent rooms
+8. Use x,y coordinates in METERS from front-left corner (0,0)
 
 AUSTRALIAN ROOM SIZE STANDARDS:
 - Master Bedroom: 14-20m² (minimum 10m² by BCA)
@@ -115,6 +234,12 @@ DESIGN PRINCIPLES:
 - Consider land slope for split-level if needed
 - BAL rating affects materials and design if in bushfire zone
 
+DOOR SPECIFICATIONS (include for each room):
+- "doors": [{"to": "room_id", "type": "single/double/sliding/bifold/garage", "wall": "north/south/east/west", "position": 0.5}]
+
+WINDOW SPECIFICATIONS (include for external walls):
+- "windows": [{"wall": "north/south/east/west", "width": 1500, "position": 0.5}]
+
 OUTPUT FORMAT - Return ONLY valid JSON:
 {
     "design_name": "string",
@@ -130,6 +255,8 @@ OUTPUT FORMAT - Return ONLY valid JSON:
             "x": number,
             "y": number,
             "floor": 0 or 1,
+            "doors": [...],
+            "windows": [...],
             "features": ["list"]
         }
     ],
@@ -252,12 +379,17 @@ DESIGN INSTRUCTIONS
    - Master bedroom with ensuite and walk-in robe
    - Main bathroom accessible to other bedrooms
 
-3. CONSIDER:
+3. POSITIONING:
+   - Use x,y coordinates in meters from front-left corner (0,0)
+   - Rooms MUST share walls - adjacent rooms have matching edge coordinates
+   - NO gaps between rooms
+
+4. CONSIDER:
    - Land slope: {project.land_slope or 'Flat'} - {"may need split level design" if project.land_slope and project.land_slope.lower() not in ['flat', 'level', 'none'] else "standard slab construction"}
    - Orientation: {project.orientation or 'North'} - position living areas for natural light
    - BAL Rating: {project.bal_rating or 'None'} - {"design must comply with bushfire requirements" if project.bal_rating and project.bal_rating != 'None' else "standard construction"}
 
-4. STYLE: {project.style or 'Modern'}
+5. STYLE: {project.style or 'Modern'}
    - {"Clean lines, large windows, open spaces" if (project.style or '').lower() in ['modern', 'contemporary'] else ""}
    - {"Traditional proportions, separate rooms" if (project.style or '').lower() in ['traditional', 'classic', 'federation'] else ""}
    - {"Relaxed indoor-outdoor flow" if (project.style or '').lower() in ['coastal', 'hamptons'] else ""}
@@ -342,6 +474,13 @@ def generate_floor_plan_with_openai(project: models.Project) -> Dict[str, Any]:
             room["area"] = round(room["width"] * room["depth"], 1)
         if "floor" not in room:
             room["floor"] = 0
+        if "doors" not in room:
+            room["doors"] = []
+        if "windows" not in room:
+            room["windows"] = []
+    
+    # Fix room gaps by snapping edges
+    floor_plan = _fix_room_gaps(floor_plan)
     
     room_count = len(floor_plan.get("rooms", []))
     total_area = sum(r.get("area", 0) for r in floor_plan.get("rooms", []))
@@ -350,15 +489,147 @@ def generate_floor_plan_with_openai(project: models.Project) -> Dict[str, Any]:
     return floor_plan
 
 
+def _fix_room_gaps(floor_plan: Dict[str, Any]) -> Dict[str, Any]:
+    """Fix gaps between rooms by snapping edges to grid."""
+    rooms = floor_plan.get("rooms", [])
+    if len(rooms) < 2:
+        return floor_plan
+    
+    snap_tolerance = 0.5
+    
+    # Collect all unique coordinates
+    x_coords = set()
+    y_coords = set()
+    for room in rooms:
+        x, y = room.get("x", 0), room.get("y", 0)
+        w, d = room.get("width", 0), room.get("depth", 0)
+        x_coords.update([x, x + w])
+        y_coords.update([y, y + d])
+    
+    x_coords = sorted(x_coords)
+    y_coords = sorted(y_coords)
+    
+    def snap(value, grid):
+        for g in grid:
+            if abs(value - g) < snap_tolerance:
+                return g
+        return value
+    
+    for room in rooms:
+        room["x"] = snap(room.get("x", 0), x_coords)
+        room["y"] = snap(room.get("y", 0), y_coords)
+        
+        right = room["x"] + room.get("width", 0)
+        bottom = room["y"] + room.get("depth", 0)
+        
+        snapped_right = snap(right, x_coords)
+        snapped_bottom = snap(bottom, y_coords)
+        
+        if snapped_right != right:
+            room["width"] = round(snapped_right - room["x"], 1)
+        if snapped_bottom != bottom:
+            room["depth"] = round(snapped_bottom - room["y"], 1)
+        
+        room["area"] = round(room["width"] * room["depth"], 1)
+    
+    floor_plan["rooms"] = rooms
+    return floor_plan
+
+
+# =============================================================================
+# CAD RENDERING AND FILE STORAGE
+# =============================================================================
+
+def render_and_save_floor_plan(
+    floor_plan_data: Dict[str, Any],
+    project: models.Project,
+    user: models.User,
+    plan_id: int
+) -> Dict[str, str]:
+    """
+    Render floor plan as CAD PDF/PNG and save to blob storage.
+    
+    Path: floor-plans/{User Name}/{Project Name}/{Plan - plan_id}/
+    
+    Returns dict with pdf_url, png_url, thumbnail_url
+    """
+    rendered_images = {}
+    
+    try:
+        from ..services.cad_generator import generate_cad_floor_plan_pdf
+    except ImportError as e:
+        logger.warning(f"CAD generator not available: {e}")
+        return rendered_images
+    
+    # Build folder path
+    user_name = user.display_name or user.email or f"user_{user.id}"
+    project_name = project.name or f"project_{project.id}"
+    
+    user_folder = sanitize_path(user_name)
+    project_folder = sanitize_path(project_name)
+    plan_folder = f"Plan_{plan_id}"
+    
+    base_path = f"{user_folder}/{project_folder}/{plan_folder}"
+    
+    logger.info(f"Rendering floor plan to: {FLOOR_PLANS_CONTAINER}/{base_path}/")
+    
+    # Project details for title block
+    project_details = {
+        'street_address': project.street_address,
+        'suburb': project.suburb,
+        'state': project.state,
+        'postcode': project.postcode,
+        'council': project.council,
+    }
+    
+    # Generate PDF
+    try:
+        pdf_bytes = generate_cad_floor_plan_pdf(floor_plan_data, project.name, project_details)
+        
+        # Upload PDF
+        pdf_blob_name = f"{base_path}/floor_plan.pdf"
+        pdf_url = upload_to_blob(pdf_bytes, pdf_blob_name, "application/pdf")
+        if pdf_url:
+            rendered_images["pdf"] = pdf_url
+            logger.info(f"Uploaded PDF: {pdf_url}")
+        
+        # Convert to PNG
+        png_bytes = pdf_to_png(pdf_bytes)
+        if png_bytes:
+            png_blob_name = f"{base_path}/floor_plan.png"
+            png_url = upload_to_blob(png_bytes, png_blob_name, "image/png")
+            if png_url:
+                rendered_images["png"] = png_url
+                logger.info(f"Uploaded PNG: {png_url}")
+            
+            # Create thumbnail
+            thumb_bytes = create_thumbnail(png_bytes)
+            if thumb_bytes:
+                thumb_blob_name = f"{base_path}/floor_plan_thumb.png"
+                thumb_url = upload_to_blob(thumb_bytes, thumb_blob_name, "image/png")
+                if thumb_url:
+                    rendered_images["thumbnail"] = thumb_url
+                    logger.info(f"Uploaded thumbnail: {thumb_url}")
+    
+    except Exception as e:
+        logger.error(f"Failed to render floor plan: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    return rendered_images
+
+
 # =============================================================================
 # MAIN FUNCTION - Called by projects.py
 # =============================================================================
 
-def create_floor_plan_for_project(db: Session, project: models.Project) -> models.FloorPlan:
+def create_floor_plan_for_project(db: Session, project: models.Project, user: models.User = None) -> models.FloorPlan:
     """
     Create a floor plan for a project using Azure OpenAI.
     Called by projects.py background task.
     Uses ALL fields from dbo.projects table.
+    
+    NEW: Also renders CAD PDF/PNG and saves to blob storage.
     """
     logger.info(f"Creating AI floor plan for project {project.id}")
     
@@ -405,12 +676,12 @@ def create_floor_plan_for_project(db: Session, project: models.Project) -> model
         "notes": ["AI-generated design based on project requirements"]
     })
     
-    # Create FloorPlan record
     # Truncate plan_type to 50 chars to fit database column
     design_name = floor_plan_data.get("design_name", f"{project.bedrooms} Bed {project.style or 'Modern'}")
     if len(design_name) > 50:
         design_name = design_name[:47] + "..."
     
+    # Create FloorPlan record first to get ID
     floor_plan = models.FloorPlan(
         project_id=project.id,
         variant_number=1,
@@ -427,6 +698,28 @@ def create_floor_plan_for_project(db: Session, project: models.Project) -> model
     )
     
     db.add(floor_plan)
+    db.flush()  # Get the ID
+    
+    plan_id = floor_plan.id
+    logger.info(f"Created floor plan record with ID: {plan_id}")
+    
+    # Get user if not provided
+    if not user:
+        user = db.query(models.User).filter(models.User.id == project.user_id).first()
+    
+    # Render CAD PDF/PNG and save to blob storage
+    if user:
+        rendered_images = render_and_save_floor_plan(floor_plan_data, project, user, plan_id)
+        
+        # Update floor plan with URLs
+        floor_plan.pdf_url = rendered_images.get("pdf")
+        floor_plan.preview_image_url = rendered_images.get("png")
+        
+        # Also store in layout_data
+        floor_plan_data["rendered_images"] = rendered_images
+        floor_plan.layout_data = json.dumps(floor_plan_data)
+        
+        logger.info(f"Floor plan {plan_id} - PDF: {floor_plan.pdf_url}, Image: {floor_plan.preview_image_url}")
     
     project.status = "generated"
     project.updated_at = datetime.utcnow()
@@ -473,9 +766,6 @@ async def download_floor_plan_pdf(
     db: Session = Depends(get_db)
 ):
     """Download floor plan as professional CAD-quality PDF."""
-    from fastapi.responses import Response
-    from ..services.cad_generator import generate_cad_floor_plan_pdf
-    
     db_user = get_db_user(current_user, db)
     
     # Verify project ownership
@@ -496,7 +786,11 @@ async def download_floor_plan_pdf(
     if not floor_plan:
         raise HTTPException(status_code=404, detail="Floor plan not found")
     
-    # Parse layout data
+    # If we have a stored PDF URL, redirect to it
+    if floor_plan.pdf_url:
+        return RedirectResponse(url=floor_plan.pdf_url)
+    
+    # Otherwise generate on-demand
     try:
         layout_data = json.loads(floor_plan.layout_data) if floor_plan.layout_data else {}
     except:
@@ -513,13 +807,14 @@ async def download_floor_plan_pdf(
     
     # Generate PDF
     try:
+        from ..services.cad_generator import generate_cad_floor_plan_pdf
         pdf_bytes = generate_cad_floor_plan_pdf(layout_data, project.name, project_details)
     except Exception as e:
         logger.error(f"PDF generation failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate PDF")
     
     # Return PDF file
-    filename = f"{project.name.replace(' ', '_')}_Floor_Plan.pdf"
+    filename = f"{sanitize_path(project.name)}_Floor_Plan.pdf"
     
     return Response(
         content=pdf_bytes,
@@ -530,13 +825,46 @@ async def download_floor_plan_pdf(
     )
 
 
+@router.get("/{project_id}/plans/{plan_id}/image")
+async def get_floor_plan_image(
+    project_id: int,
+    plan_id: int,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get rendered PNG image for a floor plan."""
+    db_user = get_db_user(current_user, db)
+    
+    project = db.query(models.Project).filter(
+        models.Project.id == project_id,
+        models.Project.user_id == db_user.id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    floor_plan = db.query(models.FloorPlan).filter(
+        models.FloorPlan.id == plan_id,
+        models.FloorPlan.project_id == project_id
+    ).first()
+    
+    if not floor_plan:
+        raise HTTPException(status_code=404, detail="Floor plan not found")
+    
+    # Redirect to stored image
+    if floor_plan.preview_image_url:
+        return RedirectResponse(url=floor_plan.preview_image_url)
+    
+    raise HTTPException(status_code=404, detail="No image available")
+
+
 @router.get("/{plan_id}/preview")
 async def get_plan_preview(
     plan_id: int,
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get floor plan preview data."""
+    """Get floor plan preview data including rendered image URLs."""
     db_user = get_db_user(current_user, db)
     
     floor_plan = db.query(models.FloorPlan).filter(
@@ -555,11 +883,18 @@ async def get_plan_preview(
         raise HTTPException(status_code=403, detail="Access denied")
     
     layout_data = None
+    rendered_images = {}
+    
     if floor_plan.layout_data:
         try:
             layout_data = json.loads(floor_plan.layout_data)
+            rendered_images = layout_data.get("rendered_images", {})
         except:
             pass
+    
+    # Use database URLs if available
+    pdf_url = floor_plan.pdf_url or rendered_images.get("pdf")
+    preview_url = floor_plan.preview_image_url or rendered_images.get("png")
     
     return {
         "id": floor_plan.id,
@@ -572,5 +907,13 @@ async def get_plan_preview(
         "compliance_notes": floor_plan.compliance_notes,
         "layout_data": floor_plan.layout_data,
         "layout": layout_data,
+        "pdf_url": pdf_url,
+        "preview_image_url": preview_url,
+        "thumbnail_url": rendered_images.get("thumbnail"),
+        "rendered_images": {
+            "pdf": pdf_url,
+            "png": preview_url,
+            "thumbnail": rendered_images.get("thumbnail")
+        },
         "created_at": floor_plan.created_at,
     }

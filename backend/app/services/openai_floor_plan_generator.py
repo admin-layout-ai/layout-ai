@@ -1,22 +1,37 @@
 # backend/app/services/openai_floor_plan_generator.py
 """
-Azure OpenAI-powered floor plan generator.
-Generates a single, professional floor plan based on project requirements.
+Azure OpenAI-powered floor plan generator with integrated CAD rendering.
+Generates professional floor plans and renders them as CAD-quality images.
+
+File Storage Path: floor-plans/{User Name}/{Project Name}/{Plan - plan_id}/
 """
 
 import os
+import io
 import json
 import logging
+import uuid
+import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from openai import AzureOpenAI
-from azure.storage.blob import BlobServiceClient
+from azure.storage.blob import BlobServiceClient, ContentSettings
 
 logger = logging.getLogger(__name__)
 
 
+def sanitize_path(name: str) -> str:
+    """Sanitize a string for use in file/blob paths."""
+    if not name:
+        return "unknown"
+    # Replace spaces with underscores, remove special characters
+    sanitized = re.sub(r'[^\w\s-]', '', name)
+    sanitized = re.sub(r'[\s]+', '_', sanitized)
+    return sanitized[:50]  # Limit length
+
+
 class OpenAIFloorPlanGenerator:
-    """Generate professional floor plans using Azure OpenAI GPT-4."""
+    """Generate professional floor plans using Azure OpenAI GPT-4 with CAD rendering."""
     
     def __init__(self):
         # Azure OpenAI configuration
@@ -25,9 +40,11 @@ class OpenAIFloorPlanGenerator:
         self.deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4.1")
         self.api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
         
-        # Azure Blob Storage for training data
+        # Azure Blob Storage
         self.blob_connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
         self.training_container = "training-data"
+        self.output_container = "floor-plans"
+        self.storage_account_name = os.getenv("AZURE_STORAGE_ACCOUNT", "layoutaistorage")
         
         # Initialize OpenAI client
         if self.endpoint and self.api_key:
@@ -48,203 +65,202 @@ class OpenAIFloorPlanGenerator:
                 self.blob_service = BlobServiceClient.from_connection_string(
                     self.blob_connection_string
                 )
+                self._ensure_container_exists(self.output_container)
             except Exception as e:
                 logger.warning(f"Could not initialize blob service: {e}")
         
-        # Cache for training examples
         self._training_data_cache = None
     
+    def _ensure_container_exists(self, container_name: str):
+        """Ensure blob container exists with public access."""
+        try:
+            container_client = self.blob_service.get_container_client(container_name)
+            if not container_client.exists():
+                container_client.create_container(public_access='blob')
+                logger.info(f"Created container: {container_name}")
+        except Exception as e:
+            logger.warning(f"Could not create container {container_name}: {e}")
+    
     def load_training_data(self) -> List[Dict[str, Any]]:
-        """Load training examples from blob storage for context."""
+        """Load training examples from blob storage."""
         if self._training_data_cache is not None:
             return self._training_data_cache
         
         if not self.blob_service:
-            logger.warning("Blob service not available, using empty training data")
             return []
         
         try:
             container_client = self.blob_service.get_container_client(self.training_container)
             blob_client = container_client.get_blob_client("processed/training_data.json")
-            
             content = blob_client.download_blob().readall()
             self._training_data_cache = json.loads(content)
-            
             logger.info(f"Loaded {len(self._training_data_cache)} training examples")
             return self._training_data_cache
-            
         except Exception as e:
             logger.warning(f"Could not load training data: {e}")
             return []
     
     def build_system_prompt(self) -> str:
-        """Build the system prompt for professional floor plan generation."""
-        return """You are an expert Australian residential architect AI specializing in creating detailed, buildable floor plans.
+        """Build the system prompt for floor plan generation."""
+        return """You are an expert Australian residential architect AI. Generate buildable floor plans with PRECISE room positioning.
 
-Your task is to generate ONE comprehensive floor plan that:
-1. Follows Australian Building Code (NCC) requirements
-2. Maximizes functionality and flow
-3. Positions rooms logically based on Australian home design principles
-4. Includes all necessary rooms with realistic dimensions
+CRITICAL POSITIONING RULES:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. ROOMS MUST SHARE WALLS - Adjacent rooms share a common wall edge. NO GAPS between rooms.
+2. Use a GRID SYSTEM - Position rooms on a grid where edges align perfectly.
+3. Coordinates are in METERS from the front-left corner (0,0).
+4. x increases RIGHT, y increases toward BACK of lot.
 
-CRITICAL DESIGN PRINCIPLES:
-- Garage should be at the front, accessible from the street
-- Entry/foyer should connect garage to living areas
-- Living areas (family, dining, kitchen) should flow together as open plan
-- Kitchen should have butler's pantry access if space allows
-- Bedrooms should be grouped together, away from living areas
-- Master suite should have ensuite and walk-in robe
-- Wet areas (bathrooms, laundry) should be grouped for plumbing efficiency
-- Outdoor areas (alfresco, patio) should connect to living/dining
-- Consider traffic flow and minimize hallway space
+BUILDING LAYOUT ZONES (front to back):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ZONE 1 (y: 0-7m) - FRONT: Garage, Entry, Study
+ZONE 2 (y: 7-15m) - LIVING: Family, Kitchen, Dining, Pantry
+ZONE 3 (y: 12-22m) - BEDROOMS: Master Suite, Secondary Bedrooms, Bathroom, Laundry
+ZONE 4 (y: 18-25m) - REAR: Alfresco
 
-ROOM SIZE GUIDELINES (Australian standards):
-- Master Bedroom: 16-25m² (plus ensuite 6-10m², WIR 4-8m²)
-- Secondary Bedrooms: 10-14m²
-- Living/Family: 20-35m²
-- Kitchen: 12-20m²
-- Dining: 12-18m²
-- Home Theatre: 15-25m²
-- Double Garage: 36-42m²
-- Laundry: 4-8m²
-- Bathrooms: 5-9m²
-- Study/Office: 9-15m²
-- Butler's Pantry: 4-8m²
-- Alfresco: 15-30m²
+ROOM SIZE STANDARDS (Australian):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Double Garage: 6.0m × 6.0m
+• Entry/Foyer: 2.0m × 2.5m
+• Open Plan Living: 6.0m × 5.0m
+• Kitchen: 4.0m × 4.0m
+• Dining: 4.0m × 3.5m
+• Pantry: 2.0m × 2.5m
+• Master Bedroom: 4.0m × 4.5m
+• Master Ensuite: 3.0m × 2.5m
+• Walk-in Robe: 2.5m × 2.5m
+• Bedroom 2-4: 3.5m × 3.2m
+• Main Bathroom: 3.0m × 2.5m
+• Laundry: 2.5m × 2.0m
+• Study: 3.0m × 3.0m
+• Alfresco: 5.0m × 4.0m
 
-OUTPUT FORMAT - You MUST return valid JSON with this exact structure:
+DOOR SPECIFICATIONS:
+Include doors with: "doors": [{"to": "room_id", "type": "single/double/sliding/bifold/garage", "wall": "north/south/east/west", "position": 0.3}]
+
+WINDOW SPECIFICATIONS:
+Include windows on EXTERNAL walls: "windows": [{"wall": "north/south/east/west", "width": 1500, "position": 0.5}]
+
+OUTPUT JSON STRUCTURE:
 {
-    "design_name": "string - descriptive name for this design",
-    "description": "string - brief description of design philosophy",
-    "land_utilization": {
-        "building_width": number,
-        "building_depth": number,
-        "building_footprint": number,
-        "land_coverage_percent": number
-    },
+    "design_name": "Descriptive name",
+    "description": "Design philosophy",
     "rooms": [
         {
-            "id": "string - unique room ID like 'garage_01'",
-            "type": "string - room type",
-            "name": "string - display name",
-            "width": number (meters),
-            "depth": number (meters),
-            "area": number (m²),
-            "x": number (meters from left edge),
-            "y": number (meters from front edge),
-            "floor": number (0=ground, 1=first),
-            "connections": ["array of room IDs this room connects to"],
-            "features": ["array of features like 'island bench', 'fireplace', etc."],
-            "windows": [{"wall": "north/south/east/west", "width": number}],
-            "doors": [{"to": "room_id or 'exterior'", "type": "standard/sliding/double"}]
+            "id": "garage_01",
+            "type": "garage",
+            "name": "Double Garage",
+            "x": 0, "y": 0,
+            "width": 6.0, "depth": 6.0,
+            "area": 36.0,
+            "floor": 0,
+            "doors": [...],
+            "windows": [...],
+            "features": [...]
         }
     ],
-    "circulation": {
-        "hallways": [
-            {"from": "room_id", "to": "room_id", "width": number}
-        ],
-        "stairs": [] // for two-storey only
-    },
     "summary": {
         "total_area": number,
         "living_area": number,
         "bedroom_count": number,
         "bathroom_count": number,
-        "garage_spaces": number,
-        "outdoor_area": number
-    },
-    "compliance": {
-        "ncc_compliant": true,
-        "notes": ["array of compliance notes"]
+        "garage_spaces": number
     }
-}
+}"""
 
-Position rooms using x,y coordinates where (0,0) is front-left corner of building envelope.
-- x increases to the right
-- y increases towards the back of the lot
-- Leave appropriate gaps for walls (typically 0.1m internal, 0.2m external)"""
-
-    def build_user_prompt(self, project_data: Dict[str, Any], training_examples: List[Dict]) -> str:
-        """Build the user prompt with project requirements and reference examples."""
+    def build_user_prompt(self, project_data: Dict[str, Any]) -> str:
+        """Build the user prompt with project requirements."""
+        land_width = project_data.get('land_width', 18)
+        land_depth = project_data.get('land_depth', 30)
+        land_area = project_data.get('land_area', land_width * land_depth)
+        bedrooms = project_data.get('bedrooms', 4)
         
-        # Format reference example if available
-        reference_text = ""
-        if training_examples:
-            best_example = training_examples[0]  # Use most relevant
-            ex_output = best_example.get("output", {})
-            room_summary = []
-            for room in ex_output.get("rooms", [])[:10]:  # First 10 rooms
-                room_summary.append(f"  - {room.get('name')}: {room.get('width')}m x {room.get('depth')}m")
-            
-            reference_text = f"""
-
-REFERENCE DESIGN (use as inspiration for layout approach):
-A similar {best_example.get('input', {}).get('bedrooms', '?')} bedroom design included:
-{chr(10).join(room_summary)}
-Total area: {ex_output.get('total_area', '?')}m²
-"""
+        building_width = min(land_width - 1.8, land_width * 0.65)
+        building_depth = min(land_depth - 7.5, land_depth * 0.75)
         
-        prompt = f"""Generate a detailed floor plan for this project:
+        room_requirements = [
+            "• 1 × Double Garage (6.0m × 6.0m)",
+            "• 1 × Entry/Foyer",
+            "• 1 × Open Plan Living/Family",
+            "• 1 × Kitchen",
+            "• 1 × Dining Area",
+        ]
+        
+        if project_data.get('home_office', True):
+            room_requirements.append("• 1 × Study/Home Office")
+        
+        room_requirements.extend([
+            "• 1 × Master Bedroom with Ensuite and Walk-in Robe",
+            f"• {bedrooms - 1} × Secondary Bedrooms",
+            "• 1 × Main Bathroom",
+            "• 1 × Laundry",
+        ])
+        
+        if project_data.get('outdoor_entertainment', True):
+            room_requirements.append("• 1 × Alfresco")
+        
+        if bedrooms >= 4:
+            room_requirements.append("• 1 × Walk-in Pantry")
+        
+        return f"""Design a floor plan for this Australian home:
 
-PROJECT REQUIREMENTS:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Land Size: {project_data.get('land_width', 18)}m (width) × {project_data.get('land_depth', 30)}m (depth)
-Land Area: {project_data.get('land_area', 540)}m²
+PROJECT BRIEF:
+Land Size: {land_width}m × {land_depth}m ({land_area}m²)
 Location: {project_data.get('suburb', 'Sydney')}, {project_data.get('state', 'NSW')}
-Council: {project_data.get('council', 'Local Council')}
+Style: {project_data.get('style', 'Modern')} single-storey home
 
-REQUIRED SPACES:
-• Bedrooms: {project_data.get('bedrooms', 4)}
-• Bathrooms: {project_data.get('bathrooms', 2.5)} (including ensuites)
-• Garage: {project_data.get('garage_spaces', 2)} car spaces
-• Storeys: {project_data.get('storeys', 1)}
-• Style: {project_data.get('style', 'modern')}
+BUILDING ENVELOPE:
+• Maximum Width: {building_width:.1f}m
+• Maximum Depth: {building_depth:.1f}m
 
-DESIGN PREFERENCES:
-• Open Plan Living: {'Yes - combine family/dining/kitchen' if project_data.get('open_plan', True) else 'No - separate rooms'}
-• Outdoor Entertainment: {'Yes - include alfresco area' if project_data.get('outdoor_entertainment', True) else 'No'}
-• Home Office/Study: {'Yes - dedicated study room' if project_data.get('home_office', True) else 'No'}
-{reference_text}
-DESIGN CONSTRAINTS:
-• Building should use approximately 60-70% of land width
-• Front setback: minimum 4.5m (for garage and entry)
-• Side setbacks: minimum 0.9m each side
-• Rear setback: minimum 3m
-• Maximum building footprint: ~{int(project_data.get('land_area', 540) * 0.5)}m² per floor
+REQUIRED ROOMS:
+{chr(10).join(room_requirements)}
 
-Generate ONE comprehensive floor plan optimized for Australian family living.
-Ensure all rooms connect logically and the design maximizes natural light and flow.
+LAYOUT REQUIREMENTS:
+1. Garage at FRONT LEFT (x=0, y=0)
+2. Entry connects garage to living
+3. Living/Kitchen/Dining as connected open plan
+4. Bedroom wing SEPARATE from living
+5. Master suite at far end for privacy
+6. Alfresco at REAR connecting to living
 
-Return ONLY the JSON output, no additional text or markdown."""
+CRITICAL: Position rooms so they SHARE WALLS (no gaps).
 
-        return prompt
-    
-    def generate_floor_plan(self, project_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+Return ONLY valid JSON."""
+
+    def generate_floor_plan(
+        self, 
+        project_data: Dict[str, Any],
+        project_id: int = None,
+        plan_id: int = None,
+        user_name: str = None,
+        project_name: str = None,
+        render_image: bool = True
+    ) -> Optional[Dict[str, Any]]:
         """
-        Generate a single professional floor plan using Azure OpenAI.
+        Generate a floor plan and optionally render CAD images.
         
         Args:
-            project_data: Project requirements dictionary
+            project_data: Project requirements
+            project_id: Project ID
+            plan_id: Floor plan ID (for file naming)
+            user_name: User's name (for folder structure)
+            project_name: Project name (for folder structure)
+            render_image: Whether to render CAD PDF/PNG
         
         Returns:
-            Floor plan layout dictionary or None if generation fails
+            Floor plan dict with layout and rendered_images URLs
         """
         if not self.client:
             logger.error("OpenAI client not initialized")
             return None
         
         try:
-            # Load training examples for context
             training_examples = self.load_training_data()
-            
-            # Find most relevant example
-            relevant_examples = self._find_similar_examples(project_data, training_examples)
-            
-            # Build prompts
             system_prompt = self.build_system_prompt()
-            user_prompt = self.build_user_prompt(project_data, relevant_examples)
+            user_prompt = self.build_user_prompt(project_data)
             
-            logger.info(f"Calling Azure OpenAI ({self.deployment}) for floor plan generation...")
+            logger.info(f"Calling Azure OpenAI ({self.deployment})...")
             
             response = self.client.chat.completions.create(
                 model=self.deployment,
@@ -252,12 +268,11 @@ Return ONLY the JSON output, no additional text or markdown."""
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.7,
+                temperature=0.5,
                 max_tokens=8000,
                 response_format={"type": "json_object"}
             )
             
-            # Parse response
             content = response.choices[0].message.content
             floor_plan = json.loads(content)
             
@@ -270,15 +285,34 @@ Return ONLY the JSON output, no additional text or markdown."""
                 "total_tokens": response.usage.total_tokens
             }
             
-            # Validate and fix the floor plan
+            # Validate and fix
             floor_plan = self._validate_and_fix(floor_plan, project_data)
+            floor_plan = self._fix_room_gaps(floor_plan)
             
-            logger.info(f"Successfully generated floor plan with {len(floor_plan.get('rooms', []))} rooms")
+            # Render CAD images with proper path structure
+            if render_image:
+                try:
+                    image_urls = self._render_cad_images(
+                        layout_data=floor_plan,
+                        project_name=project_name or project_data.get('name', 'Floor Plan'),
+                        project_details=project_data,
+                        user_name=user_name,
+                        project_id=project_id,
+                        plan_id=plan_id
+                    )
+                    floor_plan["rendered_images"] = image_urls
+                    logger.info(f"Rendered CAD images: {image_urls}")
+                except Exception as e:
+                    logger.error(f"Failed to render CAD images: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    floor_plan["rendered_images"] = {}
             
+            logger.info(f"Generated floor plan with {len(floor_plan.get('rooms', []))} rooms")
             return floor_plan
             
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse OpenAI response as JSON: {e}")
+            logger.error(f"Failed to parse OpenAI response: {e}")
             return None
         except Exception as e:
             logger.error(f"Error generating floor plan: {e}")
@@ -286,65 +320,170 @@ Return ONLY the JSON output, no additional text or markdown."""
             traceback.print_exc()
             return None
     
-    def _find_similar_examples(
-        self,
-        project_data: Dict[str, Any],
-        training_data: List[Dict]
-    ) -> List[Dict[str, Any]]:
-        """Find training examples most similar to the current project."""
-        if not training_data:
-            return []
+    def _render_cad_images(
+        self, 
+        layout_data: Dict[str, Any],
+        project_name: str,
+        project_details: Dict[str, Any],
+        user_name: str = None,
+        project_id: int = None,
+        plan_id: int = None
+    ) -> Dict[str, str]:
+        """
+        Render floor plan as CAD PDF and PNG, upload to blob storage.
         
-        def similarity_score(example: Dict) -> float:
-            ex_input = example.get("input", {})
-            score = 0.0
-            
-            # Bedroom match (most important)
-            bed_diff = abs(ex_input.get("bedrooms", 0) - project_data.get("bedrooms", 4))
-            score += max(0, 5 - bed_diff * 2)
-            
-            # Storey match
-            if ex_input.get("storeys") == project_data.get("storeys"):
-                score += 3
-            
-            # Land size similarity
-            ex_area = ex_input.get("land_area", 0)
-            proj_area = project_data.get("land_area", 450)
-            if ex_area > 0 and proj_area > 0:
-                ratio = min(ex_area, proj_area) / max(ex_area, proj_area)
-                score += ratio * 2
-            
-            return score
+        Path structure: floor-plans/{User Name}/{Project Name}/{Plan - plan_id}/
         
-        sorted_examples = sorted(training_data, key=similarity_score, reverse=True)
-        return sorted_examples[:2]
+        Returns:
+            Dict with URLs: {"pdf": "...", "png": "...", "thumbnail": "..."}
+        """
+        from .cad_generator import generate_cad_floor_plan_pdf
+        
+        urls = {}
+        
+        if not self.blob_service:
+            logger.warning("Blob service not available")
+            return urls
+        
+        # Build folder path: {User Name}/{Project Name}/{Plan - plan_id}/
+        user_folder = sanitize_path(user_name) if user_name else "unknown_user"
+        project_folder = sanitize_path(project_name) if project_name else f"project_{project_id or 'unknown'}"
+        plan_folder = f"Plan_{plan_id}" if plan_id else f"Plan_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+        
+        base_path = f"{user_folder}/{project_folder}/{plan_folder}"
+        
+        logger.info(f"Saving floor plan files to: {self.output_container}/{base_path}/")
+        
+        # Generate PDF
+        pdf_bytes = generate_cad_floor_plan_pdf(layout_data, project_name, project_details)
+        
+        # Upload PDF
+        pdf_blob_name = f"{base_path}/floor_plan.pdf"
+        pdf_url = self._upload_to_blob(pdf_bytes, pdf_blob_name, "application/pdf")
+        if pdf_url:
+            urls["pdf"] = pdf_url
+            logger.info(f"Uploaded PDF: {pdf_url}")
+        
+        # Convert PDF to PNG
+        try:
+            png_bytes = self._pdf_to_png(pdf_bytes)
+            if png_bytes:
+                # Full size PNG
+                png_blob_name = f"{base_path}/floor_plan.png"
+                png_url = self._upload_to_blob(png_bytes, png_blob_name, "image/png")
+                if png_url:
+                    urls["png"] = png_url
+                    logger.info(f"Uploaded PNG: {png_url}")
+                
+                # Thumbnail
+                thumb_bytes = self._create_thumbnail(png_bytes, max_size=400)
+                if thumb_bytes:
+                    thumb_blob_name = f"{base_path}/floor_plan_thumb.png"
+                    thumb_url = self._upload_to_blob(thumb_bytes, thumb_blob_name, "image/png")
+                    if thumb_url:
+                        urls["thumbnail"] = thumb_url
+                        logger.info(f"Uploaded thumbnail: {thumb_url}")
+        except Exception as e:
+            logger.warning(f"Could not convert PDF to PNG: {e}")
+        
+        return urls
     
-    def _validate_and_fix(
-        self,
-        floor_plan: Dict[str, Any],
-        project_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Validate the generated floor plan and fix common issues."""
+    def _upload_to_blob(self, data: bytes, blob_name: str, content_type: str) -> Optional[str]:
+        """Upload data to blob storage and return public URL."""
+        try:
+            container_client = self.blob_service.get_container_client(self.output_container)
+            blob_client = container_client.get_blob_client(blob_name)
+            
+            blob_client.upload_blob(
+                data,
+                overwrite=True,
+                content_settings=ContentSettings(content_type=content_type)
+            )
+            
+            url = f"https://{self.storage_account_name}.blob.core.windows.net/{self.output_container}/{blob_name}"
+            return url
+            
+        except Exception as e:
+            logger.error(f"Failed to upload blob {blob_name}: {e}")
+            return None
+    
+    def _pdf_to_png(self, pdf_bytes: bytes, dpi: int = 150) -> Optional[bytes]:
+        """Convert PDF to PNG image."""
+        # Try PyMuPDF first
+        try:
+            import fitz
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            page = doc[0]
+            mat = fitz.Matrix(dpi/72, dpi/72)
+            pix = page.get_pixmap(matrix=mat)
+            png_bytes = pix.tobytes("png")
+            doc.close()
+            return png_bytes
+        except ImportError:
+            logger.warning("PyMuPDF not available")
+        except Exception as e:
+            logger.warning(f"PyMuPDF conversion failed: {e}")
         
+        # Try pdf2image
+        try:
+            from pdf2image import convert_from_bytes
+            images = convert_from_bytes(pdf_bytes, dpi=dpi, first_page=1, last_page=1)
+            if images:
+                img_buffer = io.BytesIO()
+                images[0].save(img_buffer, format='PNG', optimize=True)
+                img_buffer.seek(0)
+                return img_buffer.getvalue()
+        except ImportError:
+            logger.warning("pdf2image not available")
+        except Exception as e:
+            logger.warning(f"pdf2image conversion failed: {e}")
+        
+        return None
+    
+    def _create_thumbnail(self, png_bytes: bytes, max_size: int = 400) -> Optional[bytes]:
+        """Create thumbnail from PNG."""
+        try:
+            from PIL import Image
+            img = Image.open(io.BytesIO(png_bytes))
+            ratio = min(max_size / img.width, max_size / img.height)
+            new_size = (int(img.width * ratio), int(img.height * ratio))
+            img.thumbnail(new_size, Image.Resampling.LANCZOS)
+            buffer = io.BytesIO()
+            img.save(buffer, format='PNG', optimize=True)
+            buffer.seek(0)
+            return buffer.getvalue()
+        except Exception as e:
+            logger.warning(f"Thumbnail creation failed: {e}")
+            return None
+    
+    def _validate_and_fix(self, floor_plan: Dict[str, Any], project_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate and fix the generated floor plan."""
         rooms = floor_plan.get("rooms", [])
         
-        # Ensure all rooms have required fields
-        for room in rooms:
+        for i, room in enumerate(rooms):
             if "area" not in room and "width" in room and "depth" in room:
                 room["area"] = round(room["width"] * room["depth"], 1)
             if "floor" not in room:
                 room["floor"] = 0
             if "id" not in room:
-                room["id"] = f"{room.get('type', 'room')}_{rooms.index(room):02d}"
+                room["id"] = f"{room.get('type', 'room')}_{i:02d}"
+            if "x" not in room:
+                room["x"] = 0
+            if "y" not in room:
+                room["y"] = 0
+            if "doors" not in room:
+                room["doors"] = []
+            if "windows" not in room:
+                room["windows"] = []
         
-        # Calculate summary if missing
         if "summary" not in floor_plan:
             total_area = sum(r.get("area", 0) for r in rooms)
-            living_types = ["living", "family", "kitchen", "dining", "kitchen_dining", "open_plan"]
-            living_area = sum(r.get("area", 0) for r in rooms if r.get("type") in living_types)
-            bedroom_count = sum(1 for r in rooms if r.get("type") == "bedroom")
-            bathroom_types = ["bathroom", "ensuite", "powder"]
-            bathroom_count = sum(1 for r in rooms if r.get("type") in bathroom_types)
+            living_types = ["living", "family", "kitchen", "dining"]
+            living_area = sum(r.get("area", 0) for r in rooms 
+                           if any(t in r.get("type", "").lower() for t in living_types))
+            bedroom_count = sum(1 for r in rooms if "bedroom" in r.get("type", "").lower())
+            bathroom_count = sum(1 for r in rooms 
+                               if any(t in r.get("type", "").lower() for t in ["bathroom", "ensuite", "powder"]))
             
             floor_plan["summary"] = {
                 "total_area": round(total_area, 1),
@@ -352,15 +491,58 @@ Return ONLY the JSON output, no additional text or markdown."""
                 "bedroom_count": bedroom_count,
                 "bathroom_count": bathroom_count,
                 "garage_spaces": project_data.get("garage_spaces", 2),
-                "outdoor_area": sum(r.get("area", 0) for r in rooms if r.get("type") in ["alfresco", "patio", "balcony"])
             }
         
+        floor_plan["rooms"] = rooms
+        return floor_plan
+    
+    def _fix_room_gaps(self, floor_plan: Dict[str, Any]) -> Dict[str, Any]:
+        """Fix gaps between rooms by snapping edges."""
+        rooms = floor_plan.get("rooms", [])
+        if len(rooms) < 2:
+            return floor_plan
+        
+        snap_tolerance = 0.5
+        
+        x_coords = set()
+        y_coords = set()
+        for room in rooms:
+            x, y = room.get("x", 0), room.get("y", 0)
+            w, d = room.get("width", 0), room.get("depth", 0)
+            x_coords.update([x, x + w])
+            y_coords.update([y, y + d])
+        
+        x_coords = sorted(x_coords)
+        y_coords = sorted(y_coords)
+        
+        def snap(value, grid):
+            for g in grid:
+                if abs(value - g) < snap_tolerance:
+                    return g
+            return value
+        
+        for room in rooms:
+            room["x"] = snap(room.get("x", 0), x_coords)
+            room["y"] = snap(room.get("y", 0), y_coords)
+            
+            right = room["x"] + room.get("width", 0)
+            bottom = room["y"] + room.get("depth", 0)
+            
+            snapped_right = snap(right, x_coords)
+            snapped_bottom = snap(bottom, y_coords)
+            
+            if snapped_right != right:
+                room["width"] = round(snapped_right - room["x"], 1)
+            if snapped_bottom != bottom:
+                room["depth"] = round(snapped_bottom - room["y"], 1)
+            
+            room["area"] = round(room["width"] * room["depth"], 1)
+        
+        floor_plan["rooms"] = rooms
         return floor_plan
 
 
 def create_openai_generator() -> Optional[OpenAIFloorPlanGenerator]:
     """Create and return an OpenAI floor plan generator if configured."""
     generator = OpenAIFloorPlanGenerator()
-    if generator.client:
-        return generator
-    return None
+    return generator if generator.client else None
