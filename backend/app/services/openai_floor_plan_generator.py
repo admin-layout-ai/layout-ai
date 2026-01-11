@@ -101,72 +101,141 @@ class OpenAIFloorPlanGenerator:
             return []
     
     def build_system_prompt(self) -> str:
-        """Build the system prompt for floor plan generation."""
-        return """You are an expert Australian residential architect AI. Generate buildable floor plans with PRECISE room positioning.
+        """Build the system prompt with EXACT coordinate templates for professional layouts."""
+        return """You are an expert Australian residential architect. Generate floor plans by following the EXACT TEMPLATE COORDINATES below, adjusting only for lot size.
 
-CRITICAL POSITIONING RULES:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. ROOMS MUST SHARE WALLS - Adjacent rooms share a common wall edge. NO GAPS between rooms.
-2. Use a GRID SYSTEM - Position rooms on a grid where edges align perfectly.
-3. Coordinates are in METERS from the front-left corner (0,0).
-4. x increases RIGHT, y increases toward BACK of lot.
+═══════════════════════════════════════════════════════════════════════════════
+MANDATORY LAYOUT TEMPLATE - 4 BEDROOM HOME (~250m²)
+═══════════════════════════════════════════════════════════════════════════════
 
-BUILDING LAYOUT ZONES (front to back):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ZONE 1 (y: 0-7m) - FRONT: Garage, Entry, Study
-ZONE 2 (y: 7-15m) - LIVING: Family, Kitchen, Dining, Pantry
-ZONE 3 (y: 12-22m) - BEDROOMS: Master Suite, Secondary Bedrooms, Bathroom, Laundry
-ZONE 4 (y: 18-25m) - REAR: Alfresco
+Follow this EXACT room placement. Adjust dimensions proportionally for lot size.
 
-ROOM SIZE STANDARDS (Australian):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Double Garage: 6.0m × 6.0m
-• Entry/Foyer: 2.0m × 2.5m
-• Open Plan Living: 6.0m × 5.0m
-• Kitchen: 4.0m × 4.0m
-• Dining: 4.0m × 3.5m
-• Pantry: 2.0m × 2.5m
-• Master Bedroom: 4.0m × 4.5m
-• Master Ensuite: 3.0m × 2.5m
-• Walk-in Robe: 2.5m × 2.5m
-• Bedroom 2-4: 3.5m × 3.2m
-• Main Bathroom: 3.0m × 2.5m
-• Laundry: 2.5m × 2.0m
-• Study: 3.0m × 3.0m
-• Alfresco: 5.0m × 4.0m
+COORDINATE SYSTEM:
+• (0,0) = Front-left corner (street at bottom)
+• X increases to the RIGHT
+• Y increases toward REAR (away from street)
 
-DOOR SPECIFICATIONS:
-Include doors with: "doors": [{"to": "room_id", "type": "single/double/sliding/bifold/garage", "wall": "north/south/east/west", "position": 0.3}]
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           REAR OF LOT (Private)                             │
+│  Y=20 ┌─────────────────────────────────────────────────────────────────┐   │
+│       │                        ALFRESCO                                 │   │
+│       │                    x=5, y=17, w=9, d=3.5                        │   │
+│  Y=17 ├─────────┬───────────────────────────────────────────────────────┤   │
+│       │ MASTER  │                                                       │   │
+│       │  BED    │              FAMILY / MEALS                           │   │
+│       │x=0,y=13 │           x=5, y=10, w=9, d=7                         │   │
+│       │w=5,d=4  │                                                       │   │
+│  Y=13 ├─────────┤                                                       │   │
+│       │   ENS   │                    ┌───────────┐                      │   │
+│       │x=0,y=10.5│                   │  KITCHEN  │                      │   │
+│       │w=3,d=2.5│                    │x=5,y=10   │                      │   │
+│  Y=10.5├────────┤                    │w=4,d=4    │                      │   │
+│       │   WIR   │                    └───────────┘                      │   │
+│       │x=0,y=8.5├────────────────────────────────────────────────────────   │
+│       │w=2.5,d=2│         HALLWAY  x=5, y=6, w=9, d=1.5                 │   │
+│  Y=8.5├─────────┼───────────────────────────────────────────────────────┤   │
+│       │  BED 4  │  BATH   │  BED 3  │  BED 2  │  LOUNGE                 │   │
+│       │x=0,y=5  │x=3.5,y=5│x=6,y=5  │x=9.5,y=5│x=13,y=5                 │   │
+│       │w=3.5,d=3.5│w=2.5 │w=3.5    │w=3.5    │w=4,d=4                   │   │
+│       │         │d=3     │d=3.5    │d=3.5    │                          │   │
+│  Y=5  ├─────────┴─────────┴─────────┴─────────┴─────────────────────────┤   │
+│       │  STUDY  │  ENTRY  │  PORCH  │  L'DRY  │        GARAGE           │   │
+│       │x=0,y=0  │x=3.5,y=0│x=3.5,y=0│x=8,y=0  │     x=11, y=0           │   │
+│       │w=3.5,d=3│w=2.5,d=3│w=2,d=1.5│w=2.5,d=2│     w=6, d=6            │   │
+│  Y=0  └─────────┴─────────┴─────────┴─────────┴─────────────────────────┘   │
+│                           STREET (Front)                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-WINDOW SPECIFICATIONS:
-Include windows on EXTERNAL walls: "windows": [{"wall": "north/south/east/west", "width": 1500, "position": 0.5}]
+═══════════════════════════════════════════════════════════════════════════════
+EXACT ROOM COORDINATES (copy these, adjust proportionally)
+═══════════════════════════════════════════════════════════════════════════════
 
-OUTPUT JSON STRUCTURE:
+FRONT ROW (y=0, street-facing):
+  {"id": "garage_01", "type": "garage", "name": "Double Garage", "x": 11, "y": 0, "width": 6, "depth": 6}
+  {"id": "laundry_01", "type": "laundry", "name": "L'DRY", "x": 8, "y": 0, "width": 2.5, "depth": 2.5}
+  {"id": "porch_01", "type": "porch", "name": "Porch", "x": 5.5, "y": 0, "width": 2, "depth": 1.5}
+  {"id": "entry_01", "type": "entry", "name": "Entry", "x": 5.5, "y": 1.5, "width": 2.5, "depth": 2.5}
+  {"id": "study_01", "type": "study", "name": "Study", "x": 0, "y": 0, "width": 3.5, "depth": 4}
+
+BEDROOM WING (left side, y=4-17):
+  {"id": "bed_02", "type": "bedroom", "name": "Bed 2", "x": 0, "y": 4, "width": 3.5, "depth": 3.5}
+  {"id": "bed_03", "type": "bedroom", "name": "Bed 3", "x": 0, "y": 7.5, "width": 3.5, "depth": 3.5}
+  {"id": "bathroom_01", "type": "bathroom", "name": "Bath", "x": 0, "y": 11, "width": 3, "depth": 2.5}
+  {"id": "bed_04", "type": "bedroom", "name": "Bed 4", "x": 0, "y": 13.5, "width": 3.5, "depth": 3.5}
+
+MASTER SUITE (rear-left corner, y=17+):
+  {"id": "wir_01", "type": "wir", "name": "WIR", "x": 0, "y": 17, "width": 2.5, "depth": 2}
+  {"id": "ensuite_01", "type": "ensuite", "name": "ENS", "x": 2.5, "y": 17, "width": 3, "depth": 2.5}
+  {"id": "master_01", "type": "master_bedroom", "name": "Master Bed", "x": 0, "y": 19, "width": 5, "depth": 4}
+
+LIVING ZONE (right side, y=4-17):
+  {"id": "lounge_01", "type": "lounge", "name": "Lounge", "x": 5.5, "y": 4, "width": 4.5, "depth": 4}
+  {"id": "hallway_01", "type": "hallway", "name": "Hallway", "x": 3.5, "y": 4, "width": 2, "depth": 13}
+  {"id": "kitchen_01", "type": "kitchen", "name": "Kitchen", "x": 10, "y": 6, "width": 4, "depth": 4}
+  {"id": "family_01", "type": "family", "name": "Family / Meals", "x": 5.5, "y": 10, "width": 8.5, "depth": 7}
+  {"id": "pantry_01", "type": "pantry", "name": "WIP", "x": 14, "y": 6, "width": 2, "depth": 2}
+
+OUTDOOR (rear):
+  {"id": "alfresco_01", "type": "alfresco", "name": "Alfresco", "x": 5.5, "y": 17, "width": 8.5, "depth": 4}
+
+═══════════════════════════════════════════════════════════════════════════════
+KEY LAYOUT RULES
+═══════════════════════════════════════════════════════════════════════════════
+
+1. MASTER SUITE must be CONNECTED: WIR → ENS → Master Bed (share walls)
+2. BEDROOM WING on LEFT side, stacked vertically with Bath in middle
+3. LIVING ZONE on RIGHT side: Kitchen→Family→Alfresco flow
+4. HALLWAY runs vertically connecting front to rear
+5. GARAGE at FRONT-RIGHT for street access
+6. STUDY at FRONT-LEFT (quiet, away from living noise)
+7. ALFRESCO at REAR, connected to Family room
+
+═══════════════════════════════════════════════════════════════════════════════
+SCALING FOR DIFFERENT LOT SIZES
+═══════════════════════════════════════════════════════════════════════════════
+
+Base template: 17m wide × 23m deep
+
+For NARROWER lots (14-16m):
+- Reduce Family/Kitchen width by 1-2m
+- Keep bedroom sizes the same
+- Hallway can be 1.2m wide
+
+For WIDER lots (18-20m):
+- Increase Family/Meals width
+- Add Powder room near Entry
+- Larger Alfresco
+
+For SHORTER lots (18-20m deep):
+- Reduce depth of Family/Meals
+- Master suite can be beside (not behind) Family
+- Smaller Alfresco
+
+═══════════════════════════════════════════════════════════════════════════════
+OUTPUT JSON FORMAT
+═══════════════════════════════════════════════════════════════════════════════
+
 {
-    "design_name": "Descriptive name",
-    "description": "Design philosophy",
+    "design_name": "Modern Family Home",
+    "description": "L-shaped 4 bedroom with bedroom wing and open plan living",
     "rooms": [
-        {
-            "id": "garage_01",
-            "type": "garage",
-            "name": "Double Garage",
-            "x": 0, "y": 0,
-            "width": 6.0, "depth": 6.0,
-            "area": 36.0,
-            "floor": 0,
-            "doors": [...],
-            "windows": [...],
-            "features": [...]
-        }
+        {"id": "garage_01", "type": "garage", "name": "Double Garage", "x": 11, "y": 0, "width": 6, "depth": 6, "area": 36, "floor": 0, "doors": [{"wall": "south", "type": "garage", "width": 4800}], "windows": [], "features": []},
+        ... (all rooms with exact coordinates)
     ],
-    "summary": {
-        "total_area": number,
-        "living_area": number,
-        "bedroom_count": number,
-        "bathroom_count": number,
-        "garage_spaces": number
-    }
-}"""
+    "summary": {"total_area": 250, "living_area": 95, "bedroom_count": 4, "bathroom_count": 2, "garage_spaces": 2}
+}
+
+═══════════════════════════════════════════════════════════════════════════════
+CHECKLIST BEFORE RESPONDING
+═══════════════════════════════════════════════════════════════════════════════
+
+☑ Master Suite: WIR + ENS + Bed are ADJACENT (sharing walls)
+☑ Bedroom Wing: Beds 2,3,4 stacked vertically on LEFT with Bath
+☑ Living Zone: Kitchen→Family→Alfresco on RIGHT
+☑ Hallway: Vertical spine connecting Entry to rear
+☑ Garage: Front-right corner
+☑ No overlapping rooms (all edges align perfectly)
+☑ All coordinates are positive numbers"""
 
     def build_user_prompt(self, project_data: Dict[str, Any]) -> str:
         """Build the user prompt with project requirements."""
@@ -458,43 +527,8 @@ Return ONLY valid JSON."""
     
     def _validate_and_fix(self, floor_plan: Dict[str, Any], project_data: Dict[str, Any]) -> Dict[str, Any]:
         """Validate and fix the generated floor plan."""
-        rooms = floor_plan.get("rooms", [])
-        
-        for i, room in enumerate(rooms):
-            if "area" not in room and "width" in room and "depth" in room:
-                room["area"] = round(room["width"] * room["depth"], 1)
-            if "floor" not in room:
-                room["floor"] = 0
-            if "id" not in room:
-                room["id"] = f"{room.get('type', 'room')}_{i:02d}"
-            if "x" not in room:
-                room["x"] = 0
-            if "y" not in room:
-                room["y"] = 0
-            if "doors" not in room:
-                room["doors"] = []
-            if "windows" not in room:
-                room["windows"] = []
-        
-        if "summary" not in floor_plan:
-            total_area = sum(r.get("area", 0) for r in rooms)
-            living_types = ["living", "family", "kitchen", "dining"]
-            living_area = sum(r.get("area", 0) for r in rooms 
-                           if any(t in r.get("type", "").lower() for t in living_types))
-            bedroom_count = sum(1 for r in rooms if "bedroom" in r.get("type", "").lower())
-            bathroom_count = sum(1 for r in rooms 
-                               if any(t in r.get("type", "").lower() for t in ["bathroom", "ensuite", "powder"]))
-            
-            floor_plan["summary"] = {
-                "total_area": round(total_area, 1),
-                "living_area": round(living_area, 1),
-                "bedroom_count": bedroom_count,
-                "bathroom_count": bathroom_count,
-                "garage_spaces": project_data.get("garage_spaces", 2),
-            }
-        
-        floor_plan["rooms"] = rooms
-        return floor_plan
+        # Use comprehensive validation with overlap detection
+        return self._validate_layout(floor_plan, project_data)
     
     def _fix_room_gaps(self, floor_plan: Dict[str, Any]) -> Dict[str, Any]:
         """Fix gaps between rooms by snapping edges."""
@@ -539,6 +573,196 @@ Return ONLY valid JSON."""
             room["area"] = round(room["width"] * room["depth"], 1)
         
         floor_plan["rooms"] = rooms
+        return floor_plan
+    
+    def _detect_overlaps(self, rooms: List[Dict]) -> List[tuple]:
+        """
+        Detect overlapping rooms.
+        Returns list of (room1_idx, room2_idx, overlap_area) tuples.
+        """
+        overlaps = []
+        
+        for i, r1 in enumerate(rooms):
+            x1, y1 = r1.get("x", 0), r1.get("y", 0)
+            w1, h1 = r1.get("width", 0), r1.get("depth", 0)
+            
+            for j, r2 in enumerate(rooms):
+                if j <= i:
+                    continue
+                
+                x2, y2 = r2.get("x", 0), r2.get("y", 0)
+                w2, h2 = r2.get("width", 0), r2.get("depth", 0)
+                
+                # Calculate overlap
+                overlap_x = max(0, min(x1 + w1, x2 + w2) - max(x1, x2))
+                overlap_y = max(0, min(y1 + h1, y2 + h2) - max(y1, y2))
+                overlap_area = overlap_x * overlap_y
+                
+                if overlap_area > 0.01:  # More than 0.01m² overlap
+                    overlaps.append((i, j, overlap_area))
+        
+        return overlaps
+    
+    def _would_overlap(self, x: float, y: float, w: float, h: float, placed_rooms: List[Dict]) -> bool:
+        """Check if a room at (x,y) with size (w,h) would overlap any placed room."""
+        for room in placed_rooms:
+            rx, ry = room.get('x', 0), room.get('y', 0)
+            rw, rh = room.get('width', 0), room.get('depth', 0)
+            
+            overlap_x = max(0, min(x + w, rx + rw) - max(x, rx))
+            overlap_y = max(0, min(y + h, ry + rh) - max(y, ry))
+            
+            if overlap_x > 0.01 and overlap_y > 0.01:
+                return True
+        
+        return False
+    
+    def _resolve_overlaps(self, floor_plan: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Resolve overlapping rooms by repositioning them.
+        Uses a greedy packing algorithm.
+        """
+        rooms = floor_plan.get("rooms", [])
+        if len(rooms) < 2:
+            return floor_plan
+        
+        overlaps = self._detect_overlaps(rooms)
+        
+        if not overlaps:
+            logger.info("No room overlaps detected")
+            return floor_plan
+        
+        logger.warning(f"Detected {len(overlaps)} room overlaps, attempting to resolve...")
+        
+        # Room placement priority (lower = placed first)
+        room_priority = {
+            'garage': 0, 'double_garage': 0,
+            'porch': 1, 'entry': 2, 'foyer': 2,
+            'family': 3, 'living': 3, 'kitchen': 4,
+            'dining': 5, 'theatre': 5,
+            'master_bedroom': 6, 'master': 6,
+            'bedroom': 7, 'bed': 7,
+            'ensuite': 8, 'bathroom': 9, 'wc': 9, 'powder': 9,
+            'wir': 10, 'walk_in_robe': 10,
+            'laundry': 11, 'pantry': 12, 'study': 13, 'office': 13,
+            'alfresco': 14, 'hallway': 15,
+        }
+        
+        # Sort rooms by priority
+        indexed_rooms = [(i, r) for i, r in enumerate(rooms)]
+        indexed_rooms.sort(key=lambda x: (
+            room_priority.get(x[1].get('type', 'room'), 20),
+            -x[1].get('area', 0)
+        ))
+        
+        # Get building bounds
+        all_x = [r.get("x", 0) for r in rooms] + [r.get("x", 0) + r.get("width", 0) for r in rooms]
+        all_y = [r.get("y", 0) for r in rooms] + [r.get("y", 0) + r.get("depth", 0) for r in rooms]
+        max_width = max(all_x) if all_x else 15
+        max_depth = max(all_y) if all_y else 22
+        
+        # Place rooms one by one
+        placed_rooms = []
+        
+        for orig_idx, room in indexed_rooms:
+            room_type = room.get('type', 'room')
+            w = room.get('width', 3)
+            h = room.get('depth', 3)
+            
+            best_pos = (room.get('x', 0), room.get('y', 0))
+            
+            if not self._would_overlap(best_pos[0], best_pos[1], w, h, placed_rooms):
+                room['x'] = best_pos[0]
+                room['y'] = best_pos[1]
+            else:
+                # Find new position using grid search
+                found = False
+                
+                for y in [i * 0.5 for i in range(int(max_depth * 2) + 10)]:
+                    for x in [i * 0.5 for i in range(int(max_width * 2) + 10)]:
+                        if not self._would_overlap(x, y, w, h, placed_rooms):
+                            if x + w <= max_width + 3 and y + h <= max_depth + 3:
+                                room['x'] = x
+                                room['y'] = y
+                                found = True
+                                logger.info(f"Repositioned {room_type} to ({x}, {y})")
+                                break
+                    if found:
+                        break
+                
+                if not found:
+                    logger.warning(f"Could not resolve overlap for {room_type}")
+                    room['x'] = best_pos[0]
+                    room['y'] = best_pos[1]
+            
+            placed_rooms.append(room)
+        
+        # Update areas
+        for room in rooms:
+            room['area'] = round(room.get('width', 0) * room.get('depth', 0), 1)
+        
+        floor_plan['rooms'] = rooms
+        
+        # Verify
+        final_overlaps = self._detect_overlaps(rooms)
+        if final_overlaps:
+            logger.warning(f"Still have {len(final_overlaps)} overlaps after resolution")
+        else:
+            logger.info("All overlaps resolved successfully")
+        
+        return floor_plan
+    
+    def _validate_layout(self, floor_plan: Dict[str, Any], project_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Complete layout validation:
+        1. Ensure positive dimensions
+        2. Detect and resolve overlaps
+        3. Snap to grid
+        4. Recalculate summary
+        """
+        rooms = floor_plan.get("rooms", [])
+        if not rooms:
+            return floor_plan
+        
+        # Step 1: Ensure positive dimensions and required fields
+        for i, room in enumerate(rooms):
+            room['x'] = max(0, room.get('x', 0))
+            room['y'] = max(0, room.get('y', 0))
+            room['width'] = max(1, room.get('width', 3))
+            room['depth'] = max(1, room.get('depth', 3))
+            room['area'] = round(room['width'] * room['depth'], 1)
+            if 'id' not in room:
+                room['id'] = f"{room.get('type', 'room')}_{i:02d}"
+            if 'floor' not in room:
+                room['floor'] = 0
+            if 'doors' not in room:
+                room['doors'] = []
+            if 'windows' not in room:
+                room['windows'] = []
+        
+        # Step 2: Detect and resolve overlaps
+        floor_plan = self._resolve_overlaps(floor_plan)
+        
+        # Step 3: Snap to grid
+        floor_plan = self._fix_room_gaps(floor_plan)
+        
+        # Step 4: Recalculate summary
+        rooms = floor_plan.get("rooms", [])
+        total_area = sum(r.get('area', 0) for r in rooms)
+        living_types = ["living", "family", "kitchen", "dining"]
+        living_area = sum(r.get('area', 0) for r in rooms 
+                        if any(t in r.get('type', '').lower() for t in living_types))
+        bedroom_count = len([r for r in rooms if r.get('type', '') in ['bedroom', 'bed', 'master_bedroom', 'master']])
+        bathroom_count = len([r for r in rooms if r.get('type', '') in ['bathroom', 'ensuite', 'main_bathroom']])
+        
+        floor_plan['summary'] = {
+            'total_area': round(total_area, 1),
+            'living_area': round(living_area, 1),
+            'bedroom_count': bedroom_count,
+            'bathroom_count': bathroom_count,
+            'garage_spaces': project_data.get('garage_spaces', 2),
+        }
+        
         return floor_plan
 
 

@@ -2,7 +2,7 @@
 
 // frontend/app/dashboard/projects/page.tsx
 // Handles LIST VIEW and DETAIL VIEW only
-// Plans view is handled by separate /[id]/plans/page.tsx
+// Floor plan display is handled by separate /[id]/plans/page.tsx
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
@@ -28,11 +28,7 @@ import {
   Layers,
   Building,
   Wand2,
-  FileText,
-  Shield,
   Check,
-  Cpu,
-  Download,
   X,
   Edit,
   ExternalLink,
@@ -48,19 +44,12 @@ type ProjectStatus = 'all' | 'draft' | 'generating' | 'generated' | 'error';
 type SortOption = 'newest' | 'oldest' | 'name' | 'status';
 type ViewMode = 'grid' | 'list';
 
-interface RenderedImages {
-  pdf?: string;
-  png?: string;
-  thumbnail?: string;
-}
-
 export default function ProjectsPage() {
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   
   // URL parsing - only handle list and detail views
-  // Plans view is handled by separate /[id]/plans/page.tsx
   const pathSegments = pathname?.split('/').filter(Boolean) || [];
   const lastSegment = pathSegments[pathSegments.length - 1] || '';
   
@@ -72,7 +61,6 @@ export default function ProjectsPage() {
   
   // List view state
   const [projects, setProjects] = useState<Project[]>([]);
-  const [projectThumbnails, setProjectThumbnails] = useState<Record<number, RenderedImages>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -105,29 +93,6 @@ export default function ProjectsPage() {
     try {
       const response = await api.getProjects(1, 50);
       setProjects(response.projects);
-      
-      // Fetch thumbnails for generated projects
-      const thumbnails: Record<number, RenderedImages> = {};
-      await Promise.all(
-        response.projects
-          .filter(p => p.status === 'generated')
-          .map(async (proj) => {
-            try {
-              const plans = await api.getFloorPlans(proj.id);
-              if (plans.length > 0 && plans[0].layout_data) {
-                const layoutData = JSON.parse(plans[0].layout_data);
-                thumbnails[proj.id] = {
-                  pdf: (plans[0] as any).pdf_url || layoutData.rendered_images?.pdf,
-                  png: (plans[0] as any).preview_image_url || layoutData.rendered_images?.png,
-                  thumbnail: layoutData.rendered_images?.thumbnail,
-                };
-              }
-            } catch (e) {
-              // Ignore errors for individual projects
-            }
-          })
-      );
-      setProjectThumbnails(thumbnails);
     } catch (err) {
       console.error('Error fetching projects:', err);
       setError(err instanceof Error ? err.message : 'Failed to load projects');
@@ -183,15 +148,26 @@ export default function ProjectsPage() {
     
     setIsGenerating(true);
     setError(null);
-    setGenerationProgress('Starting AI generation...');
+    setGenerationProgress('Loading sample floor plans...');
     
     try {
       await api.generateFloorPlans(project.id);
-      setGenerationProgress('AI is designing your floor plan...');
+      setGenerationProgress('Finding best matching sample plan...');
       
       // Poll for completion
       let attempts = 0;
-      const maxAttempts = 30;
+      const maxAttempts = 45; // Increased for sample-based processing
+      
+      const progressMessages = [
+        'Finding best matching sample plan...',
+        'Analyzing land dimensions...',
+        'Matching requirements to samples...',
+        'Adapting floor plan layout...',
+        'Applying minimal modifications...',
+        'Preserving circulation flow...',
+        'Generating floor plan image...',
+        'Finalizing design...'
+      ];
       
       while (attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -201,10 +177,15 @@ export default function ProjectsPage() {
           setProject(updatedProject);
           
           if (updatedProject.status === 'generated') {
-            setGenerationProgress('Rendering CAD floor plan...');
+            setGenerationProgress('Complete!');
             const plans = await api.getFloorPlans(project.id);
             setFloorPlans(plans);
-            setGenerationProgress('');
+            
+            // Redirect to plans page after short delay
+            setTimeout(() => {
+              router.push(`/dashboard/projects/${project.id}/plans`);
+            }, 1000);
+            
             setIsGenerating(false);
             return;
           } else if (updatedProject.status === 'error') {
@@ -214,7 +195,9 @@ export default function ProjectsPage() {
             return;
           }
           
-          setGenerationProgress(`AI is designing your floor plan... (${attempts * 2}s)`);
+          // Cycle through progress messages
+          const messageIndex = Math.min(Math.floor(attempts / 3), progressMessages.length - 1);
+          setGenerationProgress(`${progressMessages[messageIndex]} (${attempts * 2}s)`);
         } catch (pollError) {
           console.error('Error polling:', pollError);
         }
@@ -222,7 +205,7 @@ export default function ProjectsPage() {
         attempts++;
       }
       
-      setError('Generation is taking longer than expected. Please refresh.');
+      setError('Generation is taking longer than expected. Please refresh the page.');
       setGenerationProgress('');
       setIsGenerating(false);
     } catch (err) {
@@ -357,15 +340,6 @@ export default function ProjectsPage() {
       );
     }
 
-    // Get rendered images from floor plan
-    const planWithImages = floorPlans[0];
-    const layoutData = planWithImages?.layout_data ? JSON.parse(planWithImages.layout_data) : null;
-    const renderedImages: RenderedImages = {
-      pdf: (planWithImages as any)?.pdf_url || layoutData?.rendered_images?.pdf,
-      png: (planWithImages as any)?.preview_image_url || layoutData?.rendered_images?.png,
-      thumbnail: layoutData?.rendered_images?.thumbnail,
-    };
-
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
         {/* Header */}
@@ -423,69 +397,6 @@ export default function ProjectsPage() {
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Floor Plan Preview - Show CAD image if available */}
-            {project.status === 'generated' && renderedImages.png && (
-              <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
-                <div className="p-4 border-b border-white/10 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                    <Layers className="w-5 h-5 text-blue-400" />
-                    Generated Floor Plan
-                  </h2>
-                  <div className="flex items-center gap-2">
-                    {renderedImages.pdf && (
-                      <a
-                        href={renderedImages.pdf}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2 text-sm"
-                      >
-                        <Download className="w-4 h-4" />
-                        PDF
-                      </a>
-                    )}
-                    <button
-                      onClick={() => router.push(`/dashboard/projects/${project.id}/plans`)}
-                      className="px-3 py-1.5 bg-white/10 text-white rounded-lg hover:bg-white/20 transition flex items-center gap-2 text-sm"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      Full View
-                    </button>
-                  </div>
-                </div>
-                <div 
-                  className="aspect-[16/10] bg-slate-800 flex items-center justify-center cursor-pointer hover:bg-slate-700 transition"
-                  onClick={() => router.push(`/dashboard/projects/${project.id}/plans`)}
-                >
-                  <img
-                    src={renderedImages.png}
-                    alt="Floor Plan"
-                    className="max-w-full max-h-full object-contain"
-                  />
-                </div>
-                {/* Plan Stats */}
-                {planWithImages && (
-                  <div className="p-4 grid grid-cols-4 gap-4 border-t border-white/10">
-                    <div className="text-center">
-                      <p className="text-xl font-bold text-white">{planWithImages.total_area?.toFixed(0) || '—'}</p>
-                      <p className="text-xs text-gray-500">Total m²</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xl font-bold text-white">{layoutData?.summary?.bedroom_count || project.bedrooms || '—'}</p>
-                      <p className="text-xs text-gray-500">Bedrooms</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xl font-bold text-white">{layoutData?.summary?.bathroom_count || project.bathrooms || '—'}</p>
-                      <p className="text-xs text-gray-500">Bathrooms</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xl font-bold text-white">{layoutData?.rooms?.length || '—'}</p>
-                      <p className="text-xs text-gray-500">Rooms</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* Location Details */}
             <div className="bg-white/5 rounded-xl p-6 border border-white/10">
               <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
@@ -534,7 +445,7 @@ export default function ProjectsPage() {
               <div className="bg-white/5 rounded-xl p-6 border border-white/10">
                 <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                   <Ruler className="w-5 h-5 text-blue-400" />
-                  Land
+                  Land Dimensions
                 </h2>
                 <div className="space-y-3">
                   <div className="flex justify-between">
@@ -631,7 +542,7 @@ export default function ProjectsPage() {
                       <Check className="w-5 h-5" />
                       <span className="font-medium">Generation Complete</span>
                     </div>
-                    <p className="text-gray-400 text-sm">Your CAD-quality floor plan is ready</p>
+                    <p className="text-gray-400 text-sm">Your floor plan is ready to view</p>
                   </div>
                   
                   <div className="space-y-2">
@@ -643,89 +554,56 @@ export default function ProjectsPage() {
                       View Floor Plan
                     </button>
                     
-                    {renderedImages.pdf && (
-                      <a
-                        href={renderedImages.pdf}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full bg-white/10 text-white py-3 rounded-lg hover:bg-white/20 transition font-medium flex items-center justify-center gap-2 block"
-                      >
-                        <Download className="w-5 h-5" />
-                        Download PDF
-                      </a>
-                    )}
-                    
                     <button
                       onClick={handleGenerateFloorPlans}
                       disabled={isGenerating}
-                      className="w-full bg-white/5 text-gray-400 py-3 rounded-lg hover:bg-white/10 transition font-medium flex items-center justify-center gap-2"
+                      className="w-full bg-white/10 text-white py-3 rounded-lg hover:bg-white/20 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50"
                     >
-                      <RefreshCw className="w-4 h-4" />
+                      <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
                       Regenerate
                     </button>
                   </div>
                 </div>
               ) : project.status === 'generating' || isGenerating ? (
-                <div>
-                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 mb-4">
-                    <div className="flex items-center gap-2 text-blue-400 mb-2">
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span className="font-medium">Generating...</span>
-                    </div>
-                    <p className="text-gray-400 text-sm">
-                      {generationProgress || 'Your floor plan is being created...'}
+                <div className="text-center py-8">
+                  <Loader2 className="w-12 h-12 text-blue-400 animate-spin mx-auto mb-4" />
+                  <p className="text-white font-medium mb-2">Generating Floor Plan</p>
+                  <p className="text-gray-400 text-sm">{generationProgress || 'Please wait...'}</p>
+                  
+                  <div className="mt-4 bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
+                    <p className="text-blue-400 text-xs">
+                      AI is selecting the best matching sample plan and adapting it for your land dimensions
                     </p>
                   </div>
-                  
-                  {/* Progress animation */}
-                  <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-4">
-                    <div className="h-full bg-blue-500 rounded-full animate-pulse" style={{ width: '60%' }}></div>
-                  </div>
-                  
-                  <button
-                    disabled
-                    className="w-full bg-white/10 text-gray-400 py-3 rounded-lg cursor-not-allowed font-medium"
-                  >
-                    Please Wait...
-                  </button>
                 </div>
               ) : (
                 <div>
-                  {/* Features */}
-                  <div className="space-y-3 mb-6">
-                    <div className="flex items-center gap-3 text-sm">
-                      <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                        <Cpu className="w-4 h-4 text-blue-400" />
-                      </div>
-                      <div>
-                        <p className="text-white font-medium">AI-Powered</p>
-                        <p className="text-gray-500 text-xs">GPT-4 optimized design</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 text-sm">
-                      <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                        <FileText className="w-4 h-4 text-blue-400" />
-                      </div>
-                      <div>
-                        <p className="text-white font-medium">CAD Quality</p>
-                        <p className="text-gray-500 text-xs">Professional PDF output</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 text-sm">
-                      <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                        <Shield className="w-4 h-4 text-blue-400" />
-                      </div>
-                      <div>
-                        <p className="text-white font-medium">NCC Compliant</p>
-                        <p className="text-gray-500 text-xs">Australian building code</p>
-                      </div>
-                    </div>
-                  </div>
-
+                  <p className="text-gray-400 text-sm mb-4">
+                    Generate a professional floor plan based on your requirements. Our AI will:
+                  </p>
+                  <ul className="text-gray-400 text-sm space-y-2 mb-6">
+                    <li className="flex items-start gap-2">
+                      <Check className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
+                      Find the best matching sample from our library
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
+                      Adapt it to fit your land dimensions
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
+                      Preserve professional circulation flow
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
+                      Generate a livable, NCC-compliant design
+                    </li>
+                  </ul>
+                  
                   <button
                     onClick={handleGenerateFloorPlans}
-                    disabled={isGenerating || !project.bedrooms}
-                    className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!project.bedrooms || isGenerating}
+                    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg hover:from-blue-700 hover:to-purple-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Wand2 className="w-5 h-5" />
                     Generate Floor Plan
@@ -733,7 +611,7 @@ export default function ProjectsPage() {
                   
                   {!project.bedrooms && (
                     <p className="text-yellow-400 text-xs mt-2 text-center">
-                      Complete the questionnaire first
+                      Please complete the questionnaire first
                     </p>
                   )}
                 </div>
@@ -742,7 +620,7 @@ export default function ProjectsPage() {
 
             {/* Project Info */}
             <div className="bg-white/5 rounded-xl p-6 border border-white/10">
-              <h3 className="text-sm font-medium text-gray-400 mb-3">Project Info</h3>
+              <h3 className="text-sm font-medium text-gray-400 mb-3">Project Details</h3>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Created</span>
@@ -756,7 +634,7 @@ export default function ProjectsPage() {
                 )}
                 <div className="flex justify-between">
                   <span className="text-gray-500">ID</span>
-                  <span className="text-white font-mono">#{project.id}</span>
+                  <span className="text-white">#{project.id}</span>
                 </div>
               </div>
             </div>
@@ -764,12 +642,13 @@ export default function ProjectsPage() {
         </div>
 
         {/* Delete Confirmation Modal */}
-        {showDeleteConfirm && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        {showDeleteConfirm !== null && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full border border-white/10">
-              <h3 className="text-lg font-semibold text-white mb-2">Delete Project?</h3>
+              <h3 className="text-xl font-semibold text-white mb-2">Delete Project?</h3>
               <p className="text-gray-400 mb-6">
-                Are you sure you want to delete "{project.name}"? This cannot be undone.
+                This will permanently delete &quot;{project?.name}&quot; and all associated floor plans.
+                This action cannot be undone.
               </p>
               <div className="flex gap-3">
                 <button
@@ -799,43 +678,95 @@ export default function ProjectsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
       {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="mb-8">
+        <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-white">My Projects</h1>
-            <p className="text-gray-400 mt-1">Manage your floor plan projects</p>
+            <p className="text-gray-400">Manage your floor plan projects</p>
           </div>
           <button
             onClick={() => router.push('/dashboard/projects/new')}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-lg hover:from-blue-700 hover:to-purple-700 transition flex items-center gap-2 font-medium"
           >
             <Plus className="w-5 h-5" />
             New Project
           </button>
         </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+            <p className="text-gray-400 text-sm">Total</p>
+            <p className="text-2xl font-bold text-white">{stats.total}</p>
+          </div>
+          <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+            <p className="text-gray-400 text-sm">Generated</p>
+            <p className="text-2xl font-bold text-green-400">{stats.generated}</p>
+          </div>
+          <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+            <p className="text-gray-400 text-sm">Draft</p>
+            <p className="text-2xl font-bold text-yellow-400">{stats.draft}</p>
+          </div>
+          <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+            <p className="text-gray-400 text-sm">In Progress</p>
+            <p className="text-2xl font-bold text-blue-400">{stats.generating}</p>
+          </div>
+        </div>
+
+        {/* Search and Filters */}
+        <div className="flex flex-wrap gap-3">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search projects..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+          
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as ProjectStatus)}
+            className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+          >
+            <option value="all">All Status</option>
+            <option value="draft">Draft</option>
+            <option value="generating">Generating</option>
+            <option value="generated">Generated</option>
+            <option value="error">Error</option>
+          </select>
+          
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortOption)}
+            className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+          >
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="name">Name A-Z</option>
+            <option value="status">By Status</option>
+          </select>
+          
+          <div className="flex bg-white/5 border border-white/10 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`px-3 py-2 ${viewMode === 'grid' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+            >
+              <Grid3X3 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-2 ${viewMode === 'list' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+            >
+              <List className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Stats Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-          <p className="text-2xl font-bold text-white">{stats.total}</p>
-          <p className="text-gray-500 text-sm">Total Projects</p>
-        </div>
-        <div className="bg-green-500/10 rounded-lg p-4 border border-green-500/20">
-          <p className="text-2xl font-bold text-green-400">{stats.generated}</p>
-          <p className="text-green-400/70 text-sm">Generated</p>
-        </div>
-        <div className="bg-yellow-500/10 rounded-lg p-4 border border-yellow-500/20">
-          <p className="text-2xl font-bold text-yellow-400">{stats.draft}</p>
-          <p className="text-yellow-400/70 text-sm">Drafts</p>
-        </div>
-        <div className="bg-blue-500/10 rounded-lg p-4 border border-blue-500/20">
-          <p className="text-2xl font-bold text-blue-400">{stats.generating}</p>
-          <p className="text-blue-400/70 text-sm">Generating</p>
-        </div>
-      </div>
-
-      {/* Error Message */}
+      {/* Error message */}
       {error && (
         <div className="mb-6 bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400 flex items-center gap-3">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
@@ -846,217 +777,139 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* Search, Filter, Sort, View Toggle */}
-      <div className="mb-6 flex flex-col sm:flex-row gap-4">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search projects..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
-          />
-        </div>
-
-        <div className="flex gap-2">
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as ProjectStatus)}
-              className="pl-9 pr-8 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:border-blue-500 focus:outline-none appearance-none cursor-pointer text-sm"
-            >
-              <option value="all" className="bg-slate-800">All Status</option>
-              <option value="draft" className="bg-slate-800">Draft</option>
-              <option value="generating" className="bg-slate-800">Generating</option>
-              <option value="generated" className="bg-slate-800">Generated</option>
-              <option value="error" className="bg-slate-800">Error</option>
-            </select>
-          </div>
-
-          <div className="relative">
-            <SortAsc className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortOption)}
-              className="pl-9 pr-8 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:border-blue-500 focus:outline-none appearance-none cursor-pointer text-sm"
-            >
-              <option value="newest" className="bg-slate-800">Newest</option>
-              <option value="oldest" className="bg-slate-800">Oldest</option>
-              <option value="name" className="bg-slate-800">Name</option>
-              <option value="status" className="bg-slate-800">Status</option>
-            </select>
-          </div>
-
-          <div className="flex bg-white/5 border border-white/10 rounded-lg overflow-hidden">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-2 transition ${viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white'}`}
-            >
-              <Grid3X3 className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-2 transition ${viewMode === 'list' ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white'}`}
-            >
-              <List className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Projects Grid/List */}
       {filteredProjects.length === 0 ? (
-        <div className="bg-white/5 rounded-xl p-12 text-center border border-white/10">
-          <Home className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-white mb-2">
+        <div className="text-center py-16">
+          <Home className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+          <h3 className="text-xl font-medium text-white mb-2">
             {projects.length === 0 ? 'No projects yet' : 'No matching projects'}
           </h3>
           <p className="text-gray-400 mb-6">
             {projects.length === 0 
-              ? 'Create your first project to get started.'
-              : 'Try adjusting your search or filter.'}
+              ? 'Create your first project to get started'
+              : 'Try adjusting your search or filters'
+            }
           </p>
           {projects.length === 0 && (
             <button
               onClick={() => router.push('/dashboard/projects/new')}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
+              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition inline-flex items-center gap-2"
             >
-              Create Your First Project
+              <Plus className="w-5 h-5" />
+              Create Project
             </button>
           )}
         </div>
       ) : viewMode === 'grid' ? (
-        // Grid View
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredProjects.map((proj) => {
-            const thumbnail = projectThumbnails[proj.id];
-            
-            return (
-              <div
-                key={proj.id}
-                className="bg-white/5 rounded-xl border border-white/10 hover:border-white/20 transition overflow-hidden group cursor-pointer"
-                onClick={() => router.push(`/dashboard/projects/${proj.id}`)}
-              >
-                {/* Thumbnail */}
-                <div className="aspect-[16/10] bg-slate-800 relative overflow-hidden">
-                  {thumbnail?.thumbnail || thumbnail?.png ? (
-                    <img
-                      src={thumbnail.thumbnail || thumbnail.png}
-                      alt={proj.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <div className="text-center">
-                        <Home className="w-10 h-10 text-gray-600 mx-auto mb-2" />
-                        <p className="text-gray-500 text-sm">{proj.status === 'generated' ? 'View Plan' : 'No Preview'}</p>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Status Badge */}
-                  <div className="absolute top-2 right-2">
-                    {getStatusBadge(proj.status)}
-                  </div>
-                </div>
-                
-                {/* Content */}
-                <div className="p-4">
-                  <h3 className="text-white font-semibold mb-1 group-hover:text-blue-400 transition truncate">
-                    {proj.name}
-                  </h3>
-                  
-                  {proj.suburb && (
-                    <p className="text-gray-400 text-sm flex items-center gap-1 mb-3">
-                      <MapPin className="w-3 h-3" />
-                      {proj.suburb}, {proj.state}
-                    </p>
-                  )}
-                  
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    {proj.land_area && (
-                      <span className="px-2 py-1 bg-white/5 text-gray-400 rounded">
-                        {proj.land_area.toFixed(0)}m²
-                      </span>
-                    )}
-                    {proj.bedrooms && (
-                      <span className="px-2 py-1 bg-white/5 text-gray-400 rounded">
-                        {proj.bedrooms} bed
-                      </span>
-                    )}
-                    {proj.bathrooms && (
-                      <span className="px-2 py-1 bg-white/5 text-gray-400 rounded">
-                        {proj.bathrooms} bath
-                      </span>
-                    )}
-                  </div>
+          {filteredProjects.map((proj) => (
+            <div
+              key={proj.id}
+              className="bg-white/5 rounded-xl border border-white/10 overflow-hidden hover:border-blue-500/50 transition cursor-pointer group"
+              onClick={() => router.push(`/dashboard/projects/${proj.id}`)}
+            >
+              {/* Card Header */}
+              <div className="h-24 bg-gradient-to-br from-blue-600/20 to-purple-600/20 flex items-center justify-center relative">
+                <Home className="w-10 h-10 text-blue-400/50" />
+                <div className="absolute top-2 right-2">
+                  {getStatusBadge(proj.status)}
                 </div>
               </div>
-            );
-          })}
+              
+              {/* Card Content */}
+              <div className="p-4">
+                <h3 className="text-lg font-semibold text-white mb-1 group-hover:text-blue-400 transition truncate">
+                  {proj.name}
+                </h3>
+                <p className="text-gray-400 text-sm flex items-center gap-1 mb-3">
+                  <MapPin className="w-3 h-3" />
+                  {proj.suburb}, {proj.state}
+                </p>
+                
+                {/* Quick Stats */}
+                <div className="flex items-center gap-4 text-gray-500 text-sm">
+                  {proj.bedrooms && (
+                    <span className="flex items-center gap-1">
+                      <Bed className="w-3 h-3" /> {proj.bedrooms}
+                    </span>
+                  )}
+                  {proj.bathrooms && (
+                    <span className="flex items-center gap-1">
+                      <Bath className="w-3 h-3" /> {proj.bathrooms}
+                    </span>
+                  )}
+                  {proj.garage_spaces && (
+                    <span className="flex items-center gap-1">
+                      <Car className="w-3 h-3" /> {proj.garage_spaces}
+                    </span>
+                  )}
+                </div>
+              </div>
+              
+              {/* Card Footer */}
+              <div className="px-4 py-3 border-t border-white/10 flex items-center justify-between">
+                <span className="text-gray-500 text-xs">
+                  {formatDate(proj.created_at)}
+                </span>
+                <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-blue-400 transition" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : (
-        // List View
         <div className="space-y-2">
-          {filteredProjects.map((proj) => {
-            const thumbnail = projectThumbnails[proj.id];
-            
-            return (
-              <div
-                key={proj.id}
-                className="bg-white/5 rounded-xl border border-white/10 hover:border-white/20 transition p-4 flex items-center gap-4 cursor-pointer"
-                onClick={() => router.push(`/dashboard/projects/${proj.id}`)}
-              >
-                {/* Thumbnail */}
-                <div className="w-20 h-14 bg-slate-800 rounded-lg overflow-hidden flex-shrink-0">
-                  {thumbnail?.thumbnail ? (
-                    <img src={thumbnail.thumbnail} alt={proj.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Home className="w-6 h-6 text-gray-600" />
-                    </div>
-                  )}
-                </div>
-                
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-white font-semibold truncate">{proj.name}</h3>
-                    {getStatusBadge(proj.status)}
-                  </div>
-                  <p className="text-gray-400 text-sm truncate">
-                    {proj.suburb && `${proj.suburb}, ${proj.state}`}
-                    {proj.council && ` • ${proj.council}`}
-                  </p>
-                </div>
-                
-                {/* Stats */}
-                <div className="hidden sm:flex items-center gap-4 text-sm text-gray-400">
-                  {proj.bedrooms && <span>{proj.bedrooms} bed</span>}
-                  {proj.bathrooms && <span>{proj.bathrooms} bath</span>}
-                  {proj.land_area && <span>{proj.land_area.toFixed(0)}m²</span>}
-                </div>
-                
-                {/* Date */}
-                <div className="text-gray-500 text-sm hidden md:block">
-                  {formatDate(proj.created_at)}
-                </div>
-                
-                <ChevronRight className="w-5 h-5 text-gray-500" />
+          {filteredProjects.map((proj) => (
+            <div
+              key={proj.id}
+              className="bg-white/5 rounded-lg border border-white/10 p-4 hover:border-blue-500/50 transition cursor-pointer flex items-center gap-4"
+              onClick={() => router.push(`/dashboard/projects/${proj.id}`)}
+            >
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-600/20 to-purple-600/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Home className="w-6 h-6 text-blue-400/50" />
               </div>
-            );
-          })}
+              
+              <div className="flex-1 min-w-0">
+                <h3 className="text-white font-medium truncate">{proj.name}</h3>
+                <p className="text-gray-500 text-sm flex items-center gap-1">
+                  <MapPin className="w-3 h-3" />
+                  {proj.suburb}, {proj.state} {proj.postcode}
+                </p>
+              </div>
+              
+              <div className="flex items-center gap-4 text-gray-500 text-sm hidden sm:flex">
+                {proj.bedrooms && (
+                  <span className="flex items-center gap-1">
+                    <Bed className="w-3 h-3" /> {proj.bedrooms}
+                  </span>
+                )}
+                {proj.bathrooms && (
+                  <span className="flex items-center gap-1">
+                    <Bath className="w-3 h-3" /> {proj.bathrooms}
+                  </span>
+                )}
+              </div>
+              
+              {getStatusBadge(proj.status)}
+              
+              <span className="text-gray-500 text-xs hidden md:block">
+                {formatDate(proj.created_at)}
+              </span>
+              
+              <ChevronRight className="w-4 h-4 text-gray-500" />
+            </div>
+          ))}
         </div>
       )}
 
       {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      {showDeleteConfirm !== null && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full border border-white/10">
-            <h3 className="text-lg font-semibold text-white mb-2">Delete Project?</h3>
-            <p className="text-gray-400 mb-6">This action cannot be undone.</p>
+            <h3 className="text-xl font-semibold text-white mb-2">Delete Project?</h3>
+            <p className="text-gray-400 mb-6">
+              This will permanently delete this project and all associated floor plans.
+              This action cannot be undone.
+            </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowDeleteConfirm(null)}
@@ -1070,7 +923,8 @@ export default function ProjectsPage() {
                 className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center justify-center gap-2"
                 disabled={isDeleting}
               >
-                {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Delete'}
+                {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Delete
               </button>
             </div>
           </div>
