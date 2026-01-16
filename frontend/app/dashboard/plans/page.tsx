@@ -1,13 +1,12 @@
 'use client';
 
 // frontend/app/dashboard/plans/page.tsx
-// Handles GALLERY VIEW and DETAIL VIEW
-// Uses URL-based routing like projects page:
-// - /dashboard/plans → Gallery of all plans
-// - /dashboard/plans/123 → Detail view of plan #123
+// Handles GALLERY VIEW and DETAIL VIEW using state-based navigation
+// - Gallery: Shows all plans in a grid
+// - Detail: Click a plan to view details (no URL change)
 
 import { useState, useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { 
   Layers, 
   Search, 
@@ -66,18 +65,7 @@ interface LayoutData {
 
 export default function PlansPage() {
   const router = useRouter();
-  const pathname = usePathname();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  
-  // URL parsing - determine if we're on list or detail view
-  const pathSegments = pathname?.split('/').filter(Boolean) || [];
-  const lastSegment = pathSegments[pathSegments.length - 1] || '';
-  
-  // Check if we're on a plan detail page (e.g., /dashboard/plans/123)
-  const planIdFromUrl = lastSegment && !isNaN(parseInt(lastSegment)) && lastSegment !== 'plans' 
-    ? parseInt(lastSegment) 
-    : null;
-  const isDetailView = planIdFromUrl !== null;
   
   // Gallery view state
   const [plans, setPlans] = useState<FloorPlanWithProject[]>([]);
@@ -88,7 +76,7 @@ export default function PlansPage() {
   const [selectedProjectFilter, setSelectedProjectFilter] = useState<number | 'all'>('all');
   const [selectedVariantFilter, setSelectedVariantFilter] = useState<number | 'all'>('all');
   
-  // Detail view state
+  // Detail view state - when selectedPlan is set, show detail view
   const [selectedPlan, setSelectedPlan] = useState<FloorPlanWithProject | null>(null);
   const [layoutData, setLayoutData] = useState<LayoutData | null>(null);
   const [scale, setScale] = useState(1);
@@ -100,16 +88,12 @@ export default function PlansPage() {
   // Lightbox state (for gallery quick view)
   const [lightboxPlan, setLightboxPlan] = useState<FloorPlanWithProject | null>(null);
 
-  // Load data based on view type
+  // Load all plans on mount
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      if (isDetailView && planIdFromUrl) {
-        loadPlanDetail(planIdFromUrl);
-      } else {
-        loadAllPlans();
-      }
+      loadAllPlans();
     }
-  }, [authLoading, isAuthenticated, isDetailView, planIdFromUrl]);
+  }, [authLoading, isAuthenticated]);
 
   // Parse layout data when plan is selected
   useEffect(() => {
@@ -174,47 +158,6 @@ export default function PlansPage() {
     }
   };
 
-  const loadPlanDetail = async (planId: number) => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      // First, get all projects to find which one has this plan
-      const projectsResponse = await api.getProjects();
-      const allProjects = projectsResponse.projects || [];
-      setProjects(allProjects);
-      
-      // Search for the plan in each project
-      let foundPlan: FloorPlanWithProject | null = null;
-      
-      for (const proj of allProjects) {
-        if (proj.status === 'generated') {
-          try {
-            const projectPlans = await api.getFloorPlans(proj.id);
-            const matchingPlan = projectPlans.find(p => p.id === planId);
-            if (matchingPlan) {
-              foundPlan = { ...matchingPlan, project: proj };
-              break;
-            }
-          } catch (err) {
-            console.error(`Error fetching plans for project ${proj.id}:`, err);
-          }
-        }
-      }
-      
-      if (!foundPlan) {
-        throw new Error('Floor plan not found');
-      }
-      
-      setSelectedPlan(foundPlan);
-    } catch (err) {
-      console.error('Error loading plan:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load floor plan');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   // Filter plans for gallery view
   const filteredPlans = plans.filter(plan => {
     if (searchQuery) {
@@ -248,11 +191,12 @@ export default function PlansPage() {
   };
 
   const handleViewPlan = (plan: FloorPlanWithProject) => {
-    router.push(`/dashboard/plans/${plan.id}`);
+    setSelectedPlan(plan);
   };
 
   const handleBackToGallery = () => {
-    router.push('/dashboard/plans');
+    setSelectedPlan(null);
+    setLayoutData(null);
   };
 
   const handleDownload = async (plan: FloorPlanWithProject, e?: React.MouseEvent) => {
@@ -288,47 +232,9 @@ export default function PlansPage() {
   }
 
   // =========================================================================
-  // DETAIL VIEW - When viewing a specific plan (/dashboard/plans/123)
+  // DETAIL VIEW - When a plan is selected
   // =========================================================================
-  if (isDetailView) {
-    // Loading state for detail view
-    if (isLoading) {
-      return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 flex items-center justify-center">
-          <div className="text-center">
-            <Loader2 className="w-10 h-10 text-blue-400 animate-spin mx-auto mb-4" />
-            <p className="text-gray-400">Loading floor plan...</p>
-          </div>
-        </div>
-      );
-    }
-
-    // Error or plan not found
-    if (error || !selectedPlan) {
-      return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
-          <button 
-            onClick={handleBackToGallery}
-            className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition"
-          >
-            <ArrowLeft className="w-5 h-5" /> Back to Plans
-          </button>
-          
-          <div className="bg-red-500/20 border border-red-500/30 rounded-xl p-8 text-center max-w-md mx-auto">
-            <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-white mb-2">Error Loading Floor Plan</h2>
-            <p className="text-gray-400 mb-6">{error || 'Could not load the floor plan.'}</p>
-            <button
-              onClick={handleBackToGallery}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
-            >
-              Back to Plans
-            </button>
-          </div>
-        </div>
-      );
-    }
-
+  if (selectedPlan) {
     const variant = VARIANT_INFO[selectedPlan.variant_number || 1] || VARIANT_INFO[1];
     
     return (
