@@ -383,9 +383,9 @@ def generate_single_variant(
         return floor_plan
         
     except Exception as e:
-        logger.error(f"Variant {variant_number} generation failed: {e}")
+        logger.error(f"Variant {variant_number} generation failed: {type(e).__name__}: {e}")
         import traceback
-        traceback.print_exc()
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
         return None
 
 
@@ -467,30 +467,42 @@ def create_multiple_floor_plans_for_project(
         for i, config in enumerate(configs_to_use, start=1):
             logger.info(f"=== Generating Variant {i}/{variant_count}: {config['name']} ===")
             
-            floor_plan = generate_single_variant(
-                db=db,
-                project=project,
-                user=user,
-                requirements=requirements,
-                samples=samples,
-                building_width=building_width,
-                building_depth=building_depth,
-                setbacks=setbacks,
-                variant_number=i,
-                variant_config=config,
-                start_time=start_time
-            )
+            # Add delay between variants to avoid API rate limiting
+            if i > 1:
+                import time
+                logger.info(f"Waiting 5 seconds before generating variant {i}...")
+                time.sleep(5)
             
-            if floor_plan:
-                created_plans.append(floor_plan)
-                logger.info(f"Variant {i} completed successfully")
-            else:
-                logger.warning(f"Variant {i} failed, continuing with remaining variants")
+            try:
+                floor_plan = generate_single_variant(
+                    db=db,
+                    project=project,
+                    user=user,
+                    requirements=requirements,
+                    samples=samples,
+                    building_width=building_width,
+                    building_depth=building_depth,
+                    setbacks=setbacks,
+                    variant_number=i,
+                    variant_config=config,
+                    start_time=start_time
+                )
+                
+                if floor_plan:
+                    # Commit this variant immediately so it's saved even if next variant fails
+                    db.commit()
+                    created_plans.append(floor_plan)
+                    logger.info(f"Variant {i} committed successfully (plan_id={floor_plan.id})")
+                else:
+                    logger.error(f"Variant {i} returned None - generation failed but no exception raised")
+                    db.rollback()  # Rollback any pending changes from failed variant
+            except Exception as variant_error:
+                logger.error(f"Variant {i} generation threw exception: {type(variant_error).__name__}: {variant_error}")
+                import traceback
+                logger.error(f"Traceback:\n{traceback.format_exc()}")
+                db.rollback()  # Rollback this variant's changes, continue with next
         
-        # Commit all successful variants
-        db.commit()
-        
-        # Update project status
+        # Update project status (variants already committed individually)
         if created_plans:
             project.status = "generated"
             project.updated_at = datetime.utcnow()
