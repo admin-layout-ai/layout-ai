@@ -257,7 +257,7 @@ export default function ProjectsPage() {
         living_areas: editForm.living_areas,
         garage_spaces: editForm.garage_spaces,
         storeys: editForm.storeys,
-        style: editForm.style || null,
+        style: editForm.style || undefined,
         open_plan: editForm.open_plan,
         outdoor_entertainment: editForm.outdoor_entertainment,
         home_office: editForm.home_office
