@@ -3,8 +3,10 @@
 // frontend/app/dashboard/projects/page.tsx
 // Handles LIST VIEW and DETAIL VIEW only
 // Floor plan display is handled by separate /[id]/plans/page.tsx
+//
+// UPDATED: Supports 3 floor plan variants, removed Edit/Delete, fixed polling timeout
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { 
   Plus, 
@@ -32,17 +34,22 @@ import {
   X,
   Edit,
   ExternalLink,
-  Grid3X3,
-  List,
   SortAsc,
-  RefreshCw
+  RefreshCw,
+  Layout
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import api, { Project, FloorPlan } from '@/lib/api';
 
 type ProjectStatus = 'all' | 'draft' | 'generating' | 'generated' | 'error';
 type SortOption = 'newest' | 'oldest' | 'name' | 'status';
-type ViewMode = 'grid' | 'list';
+
+// Variant information for display
+const VARIANT_INFO = [
+  { name: 'Optimal Layout', description: 'Balanced, efficient design', icon: '⚡' },
+  { name: 'Spacious Living', description: 'Larger living areas', icon: '🏠' },
+  { name: 'Master Retreat', description: 'Enhanced master suite', icon: '👑' },
+];
 
 export default function ProjectsPage() {
   const router = useRouter();
@@ -66,7 +73,6 @@ export default function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProjectStatus>('all');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   
@@ -75,6 +81,21 @@ export default function ProjectsPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [floorPlans, setFloorPlans] = useState<FloorPlan[]>([]);
   const [generationProgress, setGenerationProgress] = useState<string>('');
+  const [generatedCount, setGeneratedCount] = useState(0);
+  
+  // Polling ref to prevent memory leaks
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const isPollingRef = useRef(false);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        clearTimeout(pollingRef.current);
+      }
+      isPollingRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
@@ -108,6 +129,12 @@ export default function ProjectsPage() {
     try {
       const data = await api.getProject(id);
       setProject(data);
+      
+      // If status is generating, start polling
+      if (data.status === 'generating') {
+        setIsGenerating(true);
+        startPolling(id);
+      }
       
       if (data.status === 'generated') {
         try {
@@ -143,73 +170,112 @@ export default function ProjectsPage() {
     }
   };
 
+  // Improved polling function with better error handling
+  const startPolling = useCallback((projectId: number) => {
+    if (isPollingRef.current) return;
+    isPollingRef.current = true;
+    
+    const progressMessages = [
+      'Loading sample floor plans...',
+      'Analyzing land dimensions...',
+      'Generating Variant 1: Optimal Layout...',
+      'Generating Variant 2: Spacious Living...',
+      'Generating Variant 3: Master Retreat...',
+      'Running compliance validation...',
+      'Uploading images...',
+      'Finalizing designs...'
+    ];
+    
+    let attempts = 0;
+    const maxAttempts = 90; // 3 minutes max (2s intervals)
+    
+    const poll = async () => {
+      if (!isPollingRef.current) return;
+      
+      try {
+        const updatedProject = await api.getProject(projectId);
+        setProject(updatedProject);
+        
+        if (updatedProject.status === 'generated') {
+          // Success!
+          isPollingRef.current = false;
+          setGenerationProgress('All variants complete!');
+          
+          const plans = await api.getFloorPlans(projectId);
+          setFloorPlans(plans);
+          setGeneratedCount(plans.length);
+          
+          // Short delay then redirect to plans page
+          setTimeout(() => {
+            setIsGenerating(false);
+            router.push(`/dashboard/projects/${projectId}/plans`);
+          }, 1500);
+          return;
+        }
+        
+        if (updatedProject.status === 'error') {
+          isPollingRef.current = false;
+          setError('Floor plan generation failed. Please try again.');
+          setGenerationProgress('');
+          setIsGenerating(false);
+          return;
+        }
+        
+        // Still generating - update progress message
+        const messageIndex = Math.min(Math.floor(attempts / 8), progressMessages.length - 1);
+        const elapsed = attempts * 2;
+        setGenerationProgress(`${progressMessages[messageIndex]} (${elapsed}s)`);
+        
+        attempts++;
+        
+        if (attempts >= maxAttempts) {
+          // Don't show error - generation might still be working
+          // Just update the message and keep polling slower
+          setGenerationProgress('Generation is taking longer than usual. Still working...');
+          
+          // Continue polling but slower (every 5 seconds)
+          pollingRef.current = setTimeout(poll, 5000);
+          return;
+        }
+        
+        // Continue polling
+        pollingRef.current = setTimeout(poll, 2000);
+        
+      } catch (pollError) {
+        console.error('Polling error:', pollError);
+        
+        // Don't stop on network errors - keep trying
+        attempts++;
+        if (attempts < maxAttempts) {
+          pollingRef.current = setTimeout(poll, 3000);
+        }
+      }
+    };
+    
+    // Start polling
+    poll();
+  }, [router]);
+
   const handleGenerateFloorPlans = async () => {
     if (!project) return;
     
     setIsGenerating(true);
     setError(null);
-    setGenerationProgress('Loading sample floor plans...');
+    setGenerationProgress('Starting generation of 3 floor plan variants...');
+    setGeneratedCount(0);
     
     try {
+      // Trigger generation (this returns immediately)
       await api.generateFloorPlans(project.id);
-      setGenerationProgress('Finding best matching sample plan...');
       
-      // Poll for completion
-      let attempts = 0;
-      const maxAttempts = 45; // Increased for sample-based processing
+      // Update local project status
+      setProject(prev => prev ? { ...prev, status: 'generating' } : null);
       
-      const progressMessages = [
-        'Finding best matching sample plan...',
-        'Analyzing land dimensions...',
-        'Matching requirements to samples...',
-        'Adapting floor plan layout...',
-        'Applying minimal modifications...',
-        'Preserving circulation flow...',
-        'Generating floor plan image...',
-        'Finalizing design...'
-      ];
+      // Start polling for completion
+      startPolling(project.id);
       
-      while (attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        try {
-          const updatedProject = await api.getProject(project.id);
-          setProject(updatedProject);
-          
-          if (updatedProject.status === 'generated') {
-            setGenerationProgress('Complete!');
-            const plans = await api.getFloorPlans(project.id);
-            setFloorPlans(plans);
-            
-            // Redirect to plans page after short delay
-            setTimeout(() => {
-              router.push(`/dashboard/projects/${project.id}/plans`);
-            }, 1000);
-            
-            setIsGenerating(false);
-            return;
-          } else if (updatedProject.status === 'error') {
-            setError('Floor plan generation failed. Please try again.');
-            setGenerationProgress('');
-            setIsGenerating(false);
-            return;
-          }
-          
-          // Cycle through progress messages
-          const messageIndex = Math.min(Math.floor(attempts / 3), progressMessages.length - 1);
-          setGenerationProgress(`${progressMessages[messageIndex]} (${attempts * 2}s)`);
-        } catch (pollError) {
-          console.error('Error polling:', pollError);
-        }
-        
-        attempts++;
-      }
-      
-      setError('Generation is taking longer than expected. Please refresh the page.');
-      setGenerationProgress('');
-      setIsGenerating(false);
     } catch (err) {
-      console.error('Error generating floor plans:', err);
+      console.error('Error starting generation:', err);
       setError(err instanceof Error ? err.message : 'Failed to start generation');
       setGenerationProgress('');
       setIsGenerating(false);
@@ -297,14 +363,15 @@ export default function ProjectsPage() {
           <div className="h-8 w-48 bg-white/10 rounded mb-2"></div>
           <div className="h-4 w-64 bg-white/10 rounded"></div>
         </div>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="bg-white/5 rounded-xl border border-white/10 overflow-hidden animate-pulse">
-              <div className="h-32 bg-white/5"></div>
-              <div className="p-4 space-y-3">
-                <div className="h-5 w-3/4 bg-white/10 rounded"></div>
-                <div className="h-4 w-1/2 bg-white/10 rounded"></div>
+        <div className="space-y-2">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="bg-white/5 rounded-lg border border-white/10 p-4 flex items-center gap-4 animate-pulse">
+              <div className="w-12 h-12 bg-white/10 rounded-lg flex-shrink-0"></div>
+              <div className="flex-1 space-y-2">
+                <div className="h-5 w-1/3 bg-white/10 rounded"></div>
+                <div className="h-4 w-1/4 bg-white/10 rounded"></div>
               </div>
+              <div className="h-6 w-20 bg-white/10 rounded-full"></div>
             </div>
           ))}
         </div>
@@ -315,7 +382,7 @@ export default function ProjectsPage() {
   // ==================== DETAIL VIEW ====================
   if (isDetailView) {
     // Error state for detail view
-    if (error || !project) {
+    if (error && !project) {
       return (
         <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
           <button 
@@ -340,9 +407,11 @@ export default function ProjectsPage() {
       );
     }
 
+    if (!project) return null;
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
-        {/* Header */}
+        {/* Header - REMOVED Edit/Delete buttons */}
         <div className="mb-6">
           <button 
             onClick={() => router.push('/dashboard/projects')}
@@ -364,22 +433,8 @@ export default function ProjectsPage() {
               </p>
             </div>
             
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => router.push(`/dashboard/projects/${project.id}/edit`)}
-                className="px-3 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition flex items-center gap-2"
-              >
-                <Edit className="w-4 h-4" />
-                Edit
-              </button>
-              <button
-                onClick={() => setShowDeleteConfirm(project.id)}
-                className="px-3 py-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition flex items-center gap-2"
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete
-              </button>
-            </div>
+            {/* Empty div to maintain layout - buttons removed */}
+            <div></div>
           </div>
         </div>
 
@@ -532,7 +587,7 @@ export default function ProjectsPage() {
             <div className="bg-white/5 rounded-xl p-6 border border-white/10">
               <h2 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
                 <Wand2 className="w-5 h-5 text-blue-400" />
-                AI Floor Plan
+                AI Floor Plans
               </h2>
 
               {project.status === 'generated' ? (
@@ -542,8 +597,38 @@ export default function ProjectsPage() {
                       <Check className="w-5 h-5" />
                       <span className="font-medium">Generation Complete</span>
                     </div>
-                    <p className="text-gray-400 text-sm">Your floor plan is ready to view</p>
+                    <p className="text-gray-400 text-sm">
+                      {floorPlans.length} floor plan variant{floorPlans.length !== 1 ? 's' : ''} ready to view
+                    </p>
                   </div>
+                  
+                  {/* Show variant previews if we have floor plans */}
+                  {floorPlans.length > 0 && (
+                    <div className="space-y-2 mb-4">
+                      {floorPlans.slice(0, 3).map((plan, index) => (
+                        <div 
+                          key={plan.id}
+                          className="bg-white/5 rounded-lg p-3 flex items-center gap-3"
+                        >
+                          <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center text-lg">
+                            {VARIANT_INFO[index]?.icon || '📐'}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white text-sm font-medium truncate">
+                              {plan.plan_type || VARIANT_INFO[index]?.name || `Variant ${index + 1}`}
+                            </p>
+                            <p className="text-gray-500 text-xs">
+                              {plan.total_area ? `${plan.total_area.toFixed(0)}m²` : ''} 
+                              {plan.is_compliant && ' • Compliant'}
+                            </p>
+                          </div>
+                          {plan.is_compliant && (
+                            <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   
                   <div className="space-y-2">
                     <button
@@ -551,7 +636,7 @@ export default function ProjectsPage() {
                       className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2"
                     >
                       <Eye className="w-5 h-5" />
-                      View Floor Plan
+                      View All Variants
                     </button>
                     
                     <button
@@ -560,43 +645,79 @@ export default function ProjectsPage() {
                       className="w-full bg-white/10 text-white py-3 rounded-lg hover:bg-white/20 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                       <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
-                      Regenerate
+                      Regenerate All
                     </button>
                   </div>
                 </div>
               ) : project.status === 'generating' || isGenerating ? (
-                <div className="text-center py-8">
+                <div className="text-center py-6">
                   <Loader2 className="w-12 h-12 text-blue-400 animate-spin mx-auto mb-4" />
-                  <p className="text-white font-medium mb-2">Generating Floor Plan</p>
-                  <p className="text-gray-400 text-sm">{generationProgress || 'Please wait...'}</p>
+                  <p className="text-white font-medium mb-2">Generating 3 Floor Plan Variants</p>
+                  <p className="text-gray-400 text-sm mb-4">{generationProgress || 'Please wait...'}</p>
                   
-                  <div className="mt-4 bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
+                  {/* Variant progress indicators */}
+                  <div className="space-y-2 mb-4">
+                    {VARIANT_INFO.map((variant, index) => (
+                      <div 
+                        key={index}
+                        className={`flex items-center gap-3 p-2 rounded-lg ${
+                          index < generatedCount 
+                            ? 'bg-green-500/10' 
+                            : 'bg-white/5'
+                        }`}
+                      >
+                        <span className="text-lg">{variant.icon}</span>
+                        <span className="text-sm text-gray-300 flex-1">{variant.name}</span>
+                        {index < generatedCount ? (
+                          <CheckCircle className="w-4 h-4 text-green-400" />
+                        ) : (
+                          <div className="w-4 h-4 rounded-full border-2 border-gray-600" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
                     <p className="text-blue-400 text-xs">
-                      AI is selecting the best matching sample plan and adapting it for your land dimensions
+                      AI is generating 3 unique designs optimized for your requirements. 
+                      This typically takes 30-60 seconds.
                     </p>
                   </div>
                 </div>
               ) : (
                 <div>
                   <p className="text-gray-400 text-sm mb-4">
-                    Generate a professional floor plan based on your requirements. Our AI will:
+                    Generate 3 professional floor plan variants based on your requirements:
                   </p>
+                  
+                  {/* Variant descriptions */}
+                  <div className="space-y-2 mb-6">
+                    {VARIANT_INFO.map((variant, index) => (
+                      <div 
+                        key={index}
+                        className="flex items-start gap-3 p-3 bg-white/5 rounded-lg"
+                      >
+                        <span className="text-lg">{variant.icon}</span>
+                        <div>
+                          <p className="text-white text-sm font-medium">{variant.name}</p>
+                          <p className="text-gray-500 text-xs">{variant.description}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
                   <ul className="text-gray-400 text-sm space-y-2 mb-6">
                     <li className="flex items-start gap-2">
                       <Check className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
-                      Find the best matching sample from our library
+                      Council & NCC compliant designs
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
-                      Adapt it to fit your land dimensions
+                      Optimized for your land dimensions
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
-                      Preserve professional circulation flow
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <Check className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
-                      Generate a livable, NCC-compliant design
+                      Professional circulation flow
                     </li>
                   </ul>
                   
@@ -606,7 +727,7 @@ export default function ProjectsPage() {
                     className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg hover:from-blue-700 hover:to-purple-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Wand2 className="w-5 h-5" />
-                    Generate Floor Plan
+                    Generate 3 Floor Plans
                   </button>
                   
                   {!project.bedrooms && (
@@ -641,7 +762,7 @@ export default function ProjectsPage() {
           </div>
         </div>
 
-        {/* Delete Confirmation Modal */}
+        {/* Delete Confirmation Modal - Kept for backwards compatibility but won't be triggered */}
         {showDeleteConfirm !== null && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full border border-white/10">
@@ -678,45 +799,28 @@ export default function ProjectsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
       {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-white">My Projects</h1>
-            <p className="text-gray-400">Manage your floor plan projects</p>
-          </div>
-          <button
-            onClick={() => router.push('/dashboard/projects/new')}
-            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-lg hover:from-blue-700 hover:to-purple-700 transition flex items-center gap-2 font-medium"
-          >
-            <Plus className="w-5 h-5" />
-            New Project
-          </button>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Projects</h1>
+          <p className="text-gray-400 text-sm mt-1">
+            {stats.total} project{stats.total !== 1 ? 's' : ''} • {stats.generated} generated
+          </p>
         </div>
+        
+        <button
+          onClick={() => router.push('/dashboard/projects/new')}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition flex items-center gap-2 whitespace-nowrap"
+        >
+          <Plus className="w-5 h-5" />
+          New Project
+        </button>
+      </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-            <p className="text-gray-400 text-sm">Total</p>
-            <p className="text-2xl font-bold text-white">{stats.total}</p>
-          </div>
-          <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-            <p className="text-gray-400 text-sm">Generated</p>
-            <p className="text-2xl font-bold text-green-400">{stats.generated}</p>
-          </div>
-          <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-            <p className="text-gray-400 text-sm">Draft</p>
-            <p className="text-2xl font-bold text-yellow-400">{stats.draft}</p>
-          </div>
-          <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-            <p className="text-gray-400 text-sm">In Progress</p>
-            <p className="text-2xl font-bold text-blue-400">{stats.generating}</p>
-          </div>
-        </div>
-
-        {/* Search and Filters */}
-        <div className="flex flex-wrap gap-3">
+      {/* Filters */}
+      <div className="bg-white/5 rounded-xl p-4 mb-6 border border-white/10">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
             <input
               type="text"
               placeholder="Search projects..."
@@ -748,21 +852,6 @@ export default function ProjectsPage() {
             <option value="name">Name A-Z</option>
             <option value="status">By Status</option>
           </select>
-          
-          <div className="flex bg-white/5 border border-white/10 rounded-lg overflow-hidden">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`px-3 py-2 ${viewMode === 'grid' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
-            >
-              <Grid3X3 className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`px-3 py-2 ${viewMode === 'list' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
-            >
-              <List className="w-4 h-4" />
-            </button>
-          </div>
         </div>
       </div>
 
@@ -777,7 +866,7 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* Projects Grid/List */}
+      {/* Projects List */}
       {filteredProjects.length === 0 ? (
         <div className="text-center py-16">
           <Home className="w-16 h-16 text-gray-600 mx-auto mb-4" />
@@ -799,62 +888,6 @@ export default function ProjectsPage() {
               Create Project
             </button>
           )}
-        </div>
-      ) : viewMode === 'grid' ? (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredProjects.map((proj) => (
-            <div
-              key={proj.id}
-              className="bg-white/5 rounded-xl border border-white/10 overflow-hidden hover:border-blue-500/50 transition cursor-pointer group"
-              onClick={() => router.push(`/dashboard/projects/${proj.id}`)}
-            >
-              {/* Card Header */}
-              <div className="h-24 bg-gradient-to-br from-blue-600/20 to-purple-600/20 flex items-center justify-center relative">
-                <Home className="w-10 h-10 text-blue-400/50" />
-                <div className="absolute top-2 right-2">
-                  {getStatusBadge(proj.status)}
-                </div>
-              </div>
-              
-              {/* Card Content */}
-              <div className="p-4">
-                <h3 className="text-lg font-semibold text-white mb-1 group-hover:text-blue-400 transition truncate">
-                  {proj.name}
-                </h3>
-                <p className="text-gray-400 text-sm flex items-center gap-1 mb-3">
-                  <MapPin className="w-3 h-3" />
-                  {proj.suburb}, {proj.state}
-                </p>
-                
-                {/* Quick Stats */}
-                <div className="flex items-center gap-4 text-gray-500 text-sm">
-                  {proj.bedrooms && (
-                    <span className="flex items-center gap-1">
-                      <Bed className="w-3 h-3" /> {proj.bedrooms}
-                    </span>
-                  )}
-                  {proj.bathrooms && (
-                    <span className="flex items-center gap-1">
-                      <Bath className="w-3 h-3" /> {proj.bathrooms}
-                    </span>
-                  )}
-                  {proj.garage_spaces && (
-                    <span className="flex items-center gap-1">
-                      <Car className="w-3 h-3" /> {proj.garage_spaces}
-                    </span>
-                  )}
-                </div>
-              </div>
-              
-              {/* Card Footer */}
-              <div className="px-4 py-3 border-t border-white/10 flex items-center justify-between">
-                <span className="text-gray-500 text-xs">
-                  {formatDate(proj.created_at)}
-                </span>
-                <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-blue-400 transition" />
-              </div>
-            </div>
-          ))}
         </div>
       ) : (
         <div className="space-y-2">

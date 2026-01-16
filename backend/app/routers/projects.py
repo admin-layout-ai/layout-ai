@@ -1,4 +1,8 @@
 # backend/app/routers/projects.py
+# Project management router
+#
+# UPDATED: Now generates 3 floor plan variants instead of 1
+
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import Optional, List
@@ -16,6 +20,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 
 AUSTRALIAN_STATES = ["NSW", "VIC", "QLD", "SA", "WA", "TAS", "ACT", "NT"]
+
+# Default number of floor plan variants to generate
+DEFAULT_VARIANT_COUNT = 3
 
 
 class ProjectCreateRequest(BaseModel):
@@ -135,16 +142,33 @@ class GenerateResponse(BaseModel):
     project_id: int
     status: str
     floor_plans_count: Optional[int] = None
+    variants: Optional[List[str]] = None
+
+
+class GenerateRequest(BaseModel):
+    """Optional request body for generate endpoint."""
+    variant_count: Optional[int] = DEFAULT_VARIANT_COUNT
+    
+    @validator('variant_count')
+    def validate_variant_count(cls, v):
+        if v is not None and (v < 1 or v > 5):
+            raise ValueError('variant_count must be between 1 and 5')
+        return v
 
 
 # =============================================================================
-# Background task - delegates to plans module for AI generation
+# Background task - generates multiple floor plan variants
 # =============================================================================
 
-def generate_floor_plans_task(project_id: int, db_session_factory):
+def generate_floor_plans_task(project_id: int, db_session_factory, variant_count: int = DEFAULT_VARIANT_COUNT):
     """
-    Background task to generate floor plan.
-    Delegates to the plans module which handles OpenAI integration.
+    Background task to generate multiple floor plan variants.
+    Delegates to the plans module which handles Gemini AI integration.
+    
+    Args:
+        project_id: Project ID to generate plans for
+        db_session_factory: Not used (kept for backwards compatibility)
+        variant_count: Number of variants to generate (default 3)
     """
     from ..database import SessionLocal
     from . import plans  # Import plans router module
@@ -156,15 +180,26 @@ def generate_floor_plans_task(project_id: int, db_session_factory):
             logger.error(f"Project {project_id} not found for generation")
             return
         
-        logger.info(f"Starting floor plan generation for project {project_id}")
+        # Get user for image upload
+        user = db.query(models.User).filter(models.User.id == project.user_id).first()
         
-        # Call the plans module's generation function
-        plans.create_floor_plan_for_project(db, project)
+        logger.info(f"Starting floor plan generation for project {project_id} ({variant_count} variants)")
         
-        logger.info(f"Successfully generated floor plan for project {project_id}")
+        # Call the plans module's multi-variant generation function
+        created_plans = plans.create_multiple_floor_plans_for_project(
+            db, 
+            project, 
+            user,
+            variant_count=variant_count
+        )
+        
+        logger.info(
+            f"Successfully generated {len(created_plans)} floor plan variants "
+            f"for project {project_id}"
+        )
             
     except Exception as e:
-        logger.error(f"Error generating floor plan for project {project_id}: {str(e)}")
+        logger.error(f"Error generating floor plans for project {project_id}: {str(e)}")
         logger.error(traceback.format_exc())
         try:
             project = db.query(models.Project).filter(models.Project.id == project_id).first()
@@ -340,12 +375,20 @@ async def delete_project(
 async def generate_floor_plans_endpoint(
     project_id: int,
     background_tasks: BackgroundTasks,
+    generate_request: Optional[GenerateRequest] = None,
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Trigger floor plan generation for a project.
-    Generates ONE professional floor plan using AI (Azure OpenAI) or rule-based system.
+    
+    Generates multiple professional floor plan variants (default 3) using AI:
+    1. Optimal Layout - Balanced, efficient design
+    2. Spacious Living - Emphasis on living areas
+    3. Master Retreat - Emphasis on master suite
+    
+    Query Parameters:
+        variant_count: Number of variants to generate (1-5, default 3)
     """
     db_user = db.query(models.User).filter(models.User.azure_ad_id == current_user.id).first()
     if not db_user:
@@ -361,7 +404,7 @@ async def generate_floor_plans_endpoint(
     
     # Check if already generating
     if project.status == "generating":
-        raise HTTPException(status_code=400, detail="Floor plan is already being generated")
+        raise HTTPException(status_code=400, detail="Floor plans are already being generated")
     
     # Allow regeneration - delete existing plans first
     if project.status == "generated":
@@ -378,21 +421,39 @@ async def generate_floor_plans_endpoint(
             detail="Please complete the project questionnaire before generating floor plans"
         )
     
+    # Get variant count from request or use default
+    variant_count = DEFAULT_VARIANT_COUNT
+    if generate_request and generate_request.variant_count:
+        variant_count = generate_request.variant_count
+    
     # Update status to generating
     project.status = "generating"
     project.updated_at = datetime.utcnow()
     db.commit()
     
-    # Add background task to generate floor plan (delegates to plans module)
-    background_tasks.add_task(generate_floor_plans_task, project_id, None)
+    # Variant descriptions for response
+    variant_names = [
+        "Optimal Layout",
+        "Spacious Living",
+        "Master Retreat"
+    ][:variant_count]
     
-    logger.info(f"Floor plan generation triggered for project: {project_id}")
+    # Add background task to generate floor plans
+    background_tasks.add_task(
+        generate_floor_plans_task, 
+        project_id, 
+        None,
+        variant_count
+    )
+    
+    logger.info(f"Floor plan generation triggered for project: {project_id} ({variant_count} variants)")
     
     return GenerateResponse(
-        message="Floor plan generation started. This typically takes a few seconds.",
+        message=f"Floor plan generation started. Generating {variant_count} design variants. This typically takes 30-60 seconds.",
         project_id=project_id,
         status="generating",
-        floor_plans_count=1
+        floor_plans_count=variant_count,
+        variants=variant_names
     )
 
 
@@ -424,3 +485,56 @@ async def reset_project_status(
     
     logger.info(f"Reset project {project_id} status to draft")
     return project
+
+
+@router.get("/{project_id}/generation-status")
+async def get_generation_status(
+    project_id: int,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get the current generation status for a project including generated plans count.
+    """
+    db_user = db.query(models.User).filter(models.User.azure_ad_id == current_user.id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    project = db.query(models.Project).filter(
+        models.Project.id == project_id,
+        models.Project.user_id == db_user.id
+    ).first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Get count of generated plans
+    plans_count = db.query(models.FloorPlan).filter(
+        models.FloorPlan.project_id == project_id
+    ).count()
+    
+    # Get plan summaries if generated
+    plans_summary = []
+    if project.status == "generated":
+        plans = db.query(models.FloorPlan).filter(
+            models.FloorPlan.project_id == project_id
+        ).order_by(models.FloorPlan.variant_number).all()
+        
+        for plan in plans:
+            plans_summary.append({
+                'id': plan.id,
+                'variant_number': plan.variant_number,
+                'plan_type': plan.plan_type,
+                'is_compliant': plan.is_compliant,
+                'total_area': plan.total_area,
+                'has_image': plan.preview_image_url is not None
+            })
+    
+    return {
+        'project_id': project_id,
+        'status': project.status,
+        'plans_count': plans_count,
+        'expected_count': DEFAULT_VARIANT_COUNT,
+        'plans': plans_summary,
+        'updated_at': project.updated_at.isoformat() if project.updated_at else None
+    }
