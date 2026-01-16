@@ -1,60 +1,134 @@
 'use client';
 
+// frontend/app/dashboard/plans/page.tsx
+// Handles GALLERY VIEW and DETAIL VIEW
+// Uses URL-based routing like projects page:
+// - /dashboard/plans → Gallery of all plans
+// - /dashboard/plans/123 → Detail view of plan #123
+
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { 
   Layers, 
   Search, 
-  Filter,
   Eye,
   Download,
   Loader2,
   CheckCircle,
   AlertCircle,
   MapPin,
-  Calendar,
   Bed,
   Bath,
-  Car,
   Home,
   ChevronRight,
   X,
-  ImageIcon
+  ImageIcon,
+  ArrowLeft,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Info,
+  FileText,
+  Ruler,
+  Clock
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import api, { Project, FloorPlan } from '@/lib/api';
 
 // Variant information
-const VARIANT_INFO: Record<number, { name: string; icon: string; color: string }> = {
-  1: { name: 'Optimal Layout', icon: '⚡', color: 'bg-yellow-500/20 text-yellow-400' },
-  2: { name: 'Spacious Living', icon: '🏠', color: 'bg-blue-500/20 text-blue-400' },
-  3: { name: 'Master Retreat', icon: '👑', color: 'bg-purple-500/20 text-purple-400' },
+const VARIANT_INFO: Record<number, { name: string; icon: string; color: string; description: string }> = {
+  1: { name: 'Optimal Layout', icon: '⚡', color: 'bg-yellow-500/20 text-yellow-400', description: 'Balanced, efficient design' },
+  2: { name: 'Spacious Living', icon: '🏠', color: 'bg-blue-500/20 text-blue-400', description: 'Emphasis on living areas' },
+  3: { name: 'Master Retreat', icon: '👑', color: 'bg-purple-500/20 text-purple-400', description: 'Enhanced master suite' },
 };
 
 interface FloorPlanWithProject extends FloorPlan {
   project?: Project;
 }
 
-export default function PlansGalleryPage() {
+interface LayoutData {
+  rooms?: Array<{
+    type: string;
+    name?: string;
+    width: number;
+    depth: number;
+    area?: number;
+  }>;
+  summary?: {
+    total_area?: number;
+    living_area?: number;
+  };
+  building_envelope?: {
+    width?: number;
+    depth?: number;
+  };
+}
+
+export default function PlansPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   
+  // URL parsing - determine if we're on list or detail view
+  const pathSegments = pathname?.split('/').filter(Boolean) || [];
+  const lastSegment = pathSegments[pathSegments.length - 1] || '';
+  
+  // Check if we're on a plan detail page (e.g., /dashboard/plans/123)
+  const planIdFromUrl = lastSegment && !isNaN(parseInt(lastSegment)) && lastSegment !== 'plans' 
+    ? parseInt(lastSegment) 
+    : null;
+  const isDetailView = planIdFromUrl !== null;
+  
+  // Gallery view state
   const [plans, setPlans] = useState<FloorPlanWithProject[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedProject, setSelectedProject] = useState<number | 'all'>('all');
-  const [selectedVariant, setSelectedVariant] = useState<number | 'all'>('all');
+  const [selectedProjectFilter, setSelectedProjectFilter] = useState<number | 'all'>('all');
+  const [selectedVariantFilter, setSelectedVariantFilter] = useState<number | 'all'>('all');
   
-  // Lightbox state
+  // Detail view state
+  const [selectedPlan, setSelectedPlan] = useState<FloorPlanWithProject | null>(null);
+  const [layoutData, setLayoutData] = useState<LayoutData | null>(null);
+  const [scale, setScale] = useState(1);
+  const [showDetails, setShowDetails] = useState(true);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  
+  // Lightbox state (for gallery quick view)
   const [lightboxPlan, setLightboxPlan] = useState<FloorPlanWithProject | null>(null);
 
+  // Load data based on view type
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      loadAllPlans();
+      if (isDetailView && planIdFromUrl) {
+        loadPlanDetail(planIdFromUrl);
+      } else {
+        loadAllPlans();
+      }
     }
-  }, [authLoading, isAuthenticated]);
+  }, [authLoading, isAuthenticated, isDetailView, planIdFromUrl]);
+
+  // Parse layout data when plan is selected
+  useEffect(() => {
+    if (selectedPlan?.layout_data) {
+      try {
+        const parsed = JSON.parse(selectedPlan.layout_data);
+        setLayoutData(parsed);
+      } catch (e) {
+        console.error('Error parsing layout data:', e);
+        setLayoutData(null);
+      }
+    } else {
+      setLayoutData(null);
+    }
+    // Reset image state when plan changes
+    setImageLoaded(false);
+    setImageError(false);
+    setScale(1);
+  }, [selectedPlan]);
 
   const loadAllPlans = async () => {
     setIsLoading(true);
@@ -74,7 +148,6 @@ export default function PlansGalleryPage() {
       for (const project of generatedProjects) {
         try {
           const projectPlans = await api.getFloorPlans(project.id);
-          // Add project reference to each plan
           const plansWithProject = projectPlans.map(plan => ({
             ...plan,
             project
@@ -101,9 +174,49 @@ export default function PlansGalleryPage() {
     }
   };
 
-  // Filter plans
+  const loadPlanDetail = async (planId: number) => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // First, get all projects to find which one has this plan
+      const projectsResponse = await api.getProjects();
+      const allProjects = projectsResponse.projects || [];
+      setProjects(allProjects);
+      
+      // Search for the plan in each project
+      let foundPlan: FloorPlanWithProject | null = null;
+      
+      for (const proj of allProjects) {
+        if (proj.status === 'generated') {
+          try {
+            const projectPlans = await api.getFloorPlans(proj.id);
+            const matchingPlan = projectPlans.find(p => p.id === planId);
+            if (matchingPlan) {
+              foundPlan = { ...matchingPlan, project: proj };
+              break;
+            }
+          } catch (err) {
+            console.error(`Error fetching plans for project ${proj.id}:`, err);
+          }
+        }
+      }
+      
+      if (!foundPlan) {
+        throw new Error('Floor plan not found');
+      }
+      
+      setSelectedPlan(foundPlan);
+    } catch (err) {
+      console.error('Error loading plan:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load floor plan');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Filter plans for gallery view
   const filteredPlans = plans.filter(plan => {
-    // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       const matchesProject = plan.project?.name?.toLowerCase().includes(query);
@@ -112,36 +225,41 @@ export default function PlansGalleryPage() {
       if (!matchesProject && !matchesType && !matchesLocation) return false;
     }
     
-    // Project filter
-    if (selectedProject !== 'all' && plan.project_id !== selectedProject) {
+    if (selectedProjectFilter !== 'all' && plan.project_id !== selectedProjectFilter) {
       return false;
     }
     
-    // Variant filter
-    if (selectedVariant !== 'all' && plan.variant_number !== selectedVariant) {
+    if (selectedVariantFilter !== 'all' && plan.variant_number !== selectedVariantFilter) {
       return false;
     }
     
     return true;
   });
 
-  const formatDate = (dateString: string | undefined) => {
+  const formatDate = (dateString: string | undefined, includeTime = false) => {
     if (!dateString) return '—';
-    return new Date(dateString).toLocaleDateString('en-AU', {
+    const options: Intl.DateTimeFormatOptions = {
       day: 'numeric',
       month: 'short',
-      year: 'numeric'
-    });
+      year: 'numeric',
+      ...(includeTime && { hour: '2-digit', minute: '2-digit' })
+    };
+    return new Date(dateString).toLocaleDateString('en-AU', options);
   };
 
   const handleViewPlan = (plan: FloorPlanWithProject) => {
-    router.push(`/dashboard/projects/${plan.project_id}/plans`);
+    router.push(`/dashboard/plans/${plan.id}`);
   };
 
-  const handleDownload = async (plan: FloorPlanWithProject, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleBackToGallery = () => {
+    router.push('/dashboard/plans');
+  };
+
+  const handleDownload = async (plan: FloorPlanWithProject, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (!plan.preview_image_url) return;
     
+    setDownloading(true);
     try {
       const response = await fetch(plan.preview_image_url);
       const blob = await response.blob();
@@ -155,6 +273,8 @@ export default function PlansGalleryPage() {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Download failed:', err);
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -167,6 +287,304 @@ export default function PlansGalleryPage() {
     );
   }
 
+  // =========================================================================
+  // DETAIL VIEW - When viewing a specific plan (/dashboard/plans/123)
+  // =========================================================================
+  if (isDetailView) {
+    // Loading state for detail view
+    if (isLoading) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="w-10 h-10 text-blue-400 animate-spin mx-auto mb-4" />
+            <p className="text-gray-400">Loading floor plan...</p>
+          </div>
+        </div>
+      );
+    }
+
+    // Error or plan not found
+    if (error || !selectedPlan) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
+          <button 
+            onClick={handleBackToGallery}
+            className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition"
+          >
+            <ArrowLeft className="w-5 h-5" /> Back to Plans
+          </button>
+          
+          <div className="bg-red-500/20 border border-red-500/30 rounded-xl p-8 text-center max-w-md mx-auto">
+            <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-white mb-2">Error Loading Floor Plan</h2>
+            <p className="text-gray-400 mb-6">{error || 'Could not load the floor plan.'}</p>
+            <button
+              onClick={handleBackToGallery}
+              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
+            >
+              Back to Plans
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    const variant = VARIANT_INFO[selectedPlan.variant_number || 1] || VARIANT_INFO[1];
+    
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900">
+        {/* Header */}
+        <div className="bg-slate-800/50 border-b border-white/10 sticky top-0 z-10 backdrop-blur-sm">
+          <div className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={handleBackToGallery}
+                className="flex items-center gap-2 text-gray-400 hover:text-white transition"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div>
+                <h1 className="text-lg font-semibold text-white">{selectedPlan.project?.name || 'Floor Plan'}</h1>
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="text-gray-400 flex items-center gap-1">
+                    <MapPin className="w-3 h-3" />
+                    {selectedPlan.project?.suburb}, {selectedPlan.project?.state}
+                  </span>
+                  <span className={variant.color.replace('bg-', 'text-').split(' ')[1]}>
+                    {variant.icon} {variant.name}
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {/* Zoom Controls */}
+              <div className="hidden sm:flex items-center gap-1 bg-white/5 rounded-lg p-1">
+                <button
+                  onClick={() => setScale(s => Math.max(s - 0.25, 0.5))}
+                  className="p-2 text-gray-400 hover:text-white transition"
+                  title="Zoom out"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+                <span className="text-white text-sm w-12 text-center">{Math.round(scale * 100)}%</span>
+                <button
+                  onClick={() => setScale(s => Math.min(s + 0.25, 3))}
+                  className="p-2 text-gray-400 hover:text-white transition"
+                  title="Zoom in"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setScale(1)}
+                  className="p-2 text-gray-400 hover:text-white transition"
+                  title="Reset zoom"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+              </div>
+              
+              {/* Toggle Details */}
+              <button
+                onClick={() => setShowDetails(!showDetails)}
+                className={`p-2 rounded-lg transition ${showDetails ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-400 hover:text-white'}`}
+                title="Toggle details panel"
+              >
+                <Info className="w-5 h-5" />
+              </button>
+              
+              {/* Download */}
+              {selectedPlan.preview_image_url && (
+                <button
+                  onClick={() => handleDownload(selectedPlan)}
+                  disabled={downloading}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+                >
+                  {downloading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  Download
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="flex flex-col lg:flex-row">
+          {/* Floor Plan Image */}
+          <div className="flex-1 p-4 lg:p-6">
+            {selectedPlan.preview_image_url ? (
+              <div className="bg-white rounded-xl overflow-hidden shadow-xl">
+                <div 
+                  className="relative bg-gray-50 overflow-auto"
+                  style={{ maxHeight: 'calc(100vh - 200px)' }}
+                >
+                  <div className="min-w-full min-h-full flex items-center justify-center p-4">
+                    <img
+                      src={selectedPlan.preview_image_url}
+                      alt="Floor Plan"
+                      className="max-w-full h-auto transition-transform"
+                      style={{ transform: `scale(${scale})` }}
+                      onLoad={() => setImageLoaded(true)}
+                      onError={() => setImageError(true)}
+                    />
+                  </div>
+                  
+                  {!imageLoaded && !imageError && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
+                      <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white/5 rounded-xl p-20 text-center">
+                <Layers className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400">No image available for this floor plan</p>
+              </div>
+            )}
+          </div>
+
+          {/* Details Sidebar */}
+          {showDetails && (
+            <div className="lg:w-96 p-4 lg:p-6 lg:border-l border-white/10">
+              <div className="space-y-6">
+                {/* Variant Info */}
+                <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-2xl">{variant.icon}</span>
+                    <div>
+                      <h3 className="text-white font-semibold">{variant.name}</h3>
+                      <p className="text-gray-400 text-sm">{variant.description}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Compliance Status */}
+                <div className={`rounded-xl p-4 border ${
+                  selectedPlan.is_compliant 
+                    ? 'bg-green-500/10 border-green-500/30' 
+                    : 'bg-orange-500/10 border-orange-500/30'
+                }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    {selectedPlan.is_compliant ? (
+                      <CheckCircle className="w-5 h-5 text-green-400" />
+                    ) : (
+                      <AlertCircle className="w-5 h-5 text-orange-400" />
+                    )}
+                    <span className={`font-medium ${selectedPlan.is_compliant ? 'text-green-400' : 'text-orange-400'}`}>
+                      {selectedPlan.is_compliant ? 'Compliant' : 'Needs Review'}
+                    </span>
+                  </div>
+                  {selectedPlan.compliance_notes && (
+                    <p className="text-gray-400 text-sm">{selectedPlan.compliance_notes}</p>
+                  )}
+                </div>
+
+                {/* Plan Summary */}
+                <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                  <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+                    <Home className="w-5 h-5 text-blue-400" />
+                    Plan Summary
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-center p-3 bg-white/5 rounded-lg">
+                      <p className="text-2xl font-bold text-white">
+                        {selectedPlan.total_area ? Math.round(selectedPlan.total_area) : '—'}
+                      </p>
+                      <p className="text-gray-400 text-xs">Total Area (m²)</p>
+                    </div>
+                    {selectedPlan.living_area && (
+                      <div className="text-center p-3 bg-white/5 rounded-lg">
+                        <p className="text-2xl font-bold text-white">{Math.round(selectedPlan.living_area)}</p>
+                        <p className="text-gray-400 text-xs">Living Area (m²)</p>
+                      </div>
+                    )}
+                    {selectedPlan.project?.bedrooms && (
+                      <div className="text-center p-3 bg-white/5 rounded-lg">
+                        <Bed className="w-5 h-5 text-blue-400 mx-auto mb-1" />
+                        <p className="text-xl font-bold text-white">{selectedPlan.project.bedrooms}</p>
+                        <p className="text-gray-400 text-xs">Bedrooms</p>
+                      </div>
+                    )}
+                    {selectedPlan.project?.bathrooms && (
+                      <div className="text-center p-3 bg-white/5 rounded-lg">
+                        <Bath className="w-5 h-5 text-blue-400 mx-auto mb-1" />
+                        <p className="text-xl font-bold text-white">{selectedPlan.project.bathrooms}</p>
+                        <p className="text-gray-400 text-xs">Bathrooms</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Building Envelope */}
+                {layoutData?.building_envelope && (
+                  <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                    <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+                      <Ruler className="w-5 h-5 text-blue-400" />
+                      Building Envelope
+                    </h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Width</span>
+                        <span className="text-white">{layoutData.building_envelope.width?.toFixed(1)}m</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Depth</span>
+                        <span className="text-white">{layoutData.building_envelope.depth?.toFixed(1)}m</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Generation Info */}
+                <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                  <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-blue-400" />
+                    Generation Info
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Created</span>
+                      <span className="text-white">{formatDate(selectedPlan.created_at, true)}</span>
+                    </div>
+                    {selectedPlan.generation_time_seconds && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Generation Time</span>
+                        <span className="text-white">{selectedPlan.generation_time_seconds.toFixed(1)}s</span>
+                      </div>
+                    )}
+                    {selectedPlan.ai_model_version && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">AI Model</span>
+                        <span className="text-white text-xs">{selectedPlan.ai_model_version}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Back to Project */}
+                <button
+                  onClick={() => router.push(`/dashboard/projects/${selectedPlan.project_id}`)}
+                  className="w-full bg-white/5 text-white py-3 rounded-lg hover:bg-white/10 transition flex items-center justify-center gap-2"
+                >
+                  <FileText className="w-5 h-5" />
+                  View Project Details
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // GALLERY VIEW - List of all plans (/dashboard/plans)
+  // =========================================================================
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
       {/* Header */}
@@ -197,8 +615,8 @@ export default function PlansGalleryPage() {
           
           {/* Project Filter */}
           <select
-            value={selectedProject}
-            onChange={(e) => setSelectedProject(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+            value={selectedProjectFilter}
+            onChange={(e) => setSelectedProjectFilter(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
             className="px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
           >
             <option value="all">All Projects</option>
@@ -209,8 +627,8 @@ export default function PlansGalleryPage() {
           
           {/* Variant Filter */}
           <select
-            value={selectedVariant}
-            onChange={(e) => setSelectedVariant(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+            value={selectedVariantFilter}
+            onChange={(e) => setSelectedVariantFilter(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
             className="px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
           >
             <option value="all">All Variants</option>
