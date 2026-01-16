@@ -238,9 +238,9 @@ export default function PlansPage() {
     const variant = VARIANT_INFO[selectedPlan.variant_number || 1] || VARIANT_INFO[1];
     
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900">
+      <div className="h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="bg-slate-800/50 border-b border-white/10 sticky top-0 z-10 backdrop-blur-sm">
+        <div className="bg-slate-800/50 border-b border-white/10 z-10 backdrop-blur-sm flex-shrink-0">
           <div className="p-4 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <button 
@@ -319,32 +319,25 @@ export default function PlansPage() {
         </div>
 
         {/* Main Content */}
-        <div className="flex flex-col lg:flex-row">
+        <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
           {/* Floor Plan Image */}
-          <div className="flex-1 p-4 lg:p-6">
+          <div className="flex-1 p-4 lg:p-6 flex items-center justify-center overflow-hidden">
             {selectedPlan.preview_image_url ? (
-              <div className="bg-white rounded-xl overflow-hidden shadow-xl">
-                <div 
-                  className="relative bg-gray-50 overflow-auto"
-                  style={{ maxHeight: 'calc(100vh - 200px)' }}
-                >
-                  <div className="min-w-full min-h-full flex items-center justify-center p-4">
-                    <img
-                      src={selectedPlan.preview_image_url}
-                      alt="Floor Plan"
-                      className="max-w-full h-auto transition-transform"
-                      style={{ transform: `scale(${scale})` }}
-                      onLoad={() => setImageLoaded(true)}
-                      onError={() => setImageError(true)}
-                    />
+              <div className="bg-white rounded-xl shadow-xl h-full w-full flex items-center justify-center p-4">
+                <img
+                  src={selectedPlan.preview_image_url}
+                  alt="Floor Plan"
+                  className="max-h-full max-w-full object-contain transition-transform"
+                  style={{ transform: `scale(${scale})` }}
+                  onLoad={() => setImageLoaded(true)}
+                  onError={() => setImageError(true)}
+                />
+                
+                {!imageLoaded && !imageError && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
+                    <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
                   </div>
-                  
-                  {!imageLoaded && !imageError && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
-                      <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
             ) : (
               <div className="bg-white/5 rounded-xl p-20 text-center">
@@ -356,7 +349,7 @@ export default function PlansPage() {
 
           {/* Details Sidebar */}
           {showDetails && (
-            <div className="lg:w-96 p-4 lg:p-6 lg:border-l border-white/10">
+            <div className="lg:w-96 p-4 lg:p-6 lg:border-l border-white/10 overflow-y-auto">
               <div className="space-y-6">
                 {/* Variant Info */}
                 <div className="bg-white/5 rounded-xl p-4 border border-white/10">
