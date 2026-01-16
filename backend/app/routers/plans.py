@@ -347,11 +347,13 @@ def generate_single_variant(
         db.flush()
         plan_id = floor_plan.id
         
-        # Upload image to blob storage
+        # Upload image to blob storage with variant number in filename
         if user and image_bytes:
             user_name = user.full_name or (user.email.split('@')[0] if user.email else f"user_{user.id}")
+            # Use variant number in filename: floor_plan_1.png, floor_plan_2.png, etc.
+            variant_filename = f"floor_plan_{variant_number}.png"
             png_url = upload_floor_plan_image(
-                image_bytes, user_name, project.name, plan_id
+                image_bytes, user_name, project.name, plan_id, variant_filename
             )
             
             if png_url:
@@ -365,8 +367,9 @@ def generate_single_variant(
             best_sample = select_best_sample(samples, requirements)
             if best_sample and best_sample.get('image_bytes'):
                 user_name = user.full_name or user.email.split('@')[0]
+                variant_filename = f"floor_plan_{variant_number}.png"
                 png_url = upload_floor_plan_image(
-                    best_sample['image_bytes'], user_name, project.name, plan_id
+                    best_sample['image_bytes'], user_name, project.name, plan_id, variant_filename
                 )
                 if png_url:
                     floor_plan.preview_image_url = png_url

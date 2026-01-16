@@ -35,7 +35,6 @@ import {
   Edit,
   ExternalLink,
   SortAsc,
-  RefreshCw,
   Layout
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -636,16 +635,7 @@ export default function ProjectsPage() {
                       className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2"
                     >
                       <Eye className="w-5 h-5" />
-                      View All Variants
-                    </button>
-                    
-                    <button
-                      onClick={handleGenerateFloorPlans}
-                      disabled={isGenerating}
-                      className="w-full bg-white/10 text-white py-3 rounded-lg hover:bg-white/20 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50"
-                    >
-                      <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
-                      Regenerate All
+                      View All Plans
                     </button>
                   </div>
                 </div>

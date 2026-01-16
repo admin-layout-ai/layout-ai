@@ -53,10 +53,18 @@ def sanitize_path(name: str) -> str:
 
 
 def get_blob_path(user_name: str, project_name: str, plan_id: int, filename: str = "floor_plan.png") -> str:
-    """Generate a standardized blob path for floor plan files."""
+    """
+    Generate a standardized blob path for floor plan files.
+    
+    Path structure: {user_folder}/{project_folder}/{filename}
+    Example: Admin_Layout-AI/Admin_Plan_1/floor_plan_1.png
+    
+    For multi-variant support, the filename should include the variant number
+    (e.g., floor_plan_1.png, floor_plan_2.png, floor_plan_3.png)
+    """
     user_folder = sanitize_path(user_name) if user_name else "unknown_user"
     project_folder = sanitize_path(project_name) if project_name else f"project_{plan_id}"
-    return f"{user_folder}/{project_folder}/{plan_id}/{filename}"
+    return f"{user_folder}/{project_folder}/{filename}"
 
 
 # =============================================================================
