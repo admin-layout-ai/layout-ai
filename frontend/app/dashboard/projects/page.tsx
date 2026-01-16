@@ -35,7 +35,10 @@ import {
   Edit,
   ExternalLink,
   SortAsc,
-  Layout
+  Layout,
+  Pencil,
+  Save,
+  Sofa
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import api, { Project, FloorPlan } from '@/lib/api';
@@ -81,6 +84,24 @@ export default function ProjectsPage() {
   const [floorPlans, setFloorPlans] = useState<FloorPlan[]>([]);
   const [generationProgress, setGenerationProgress] = useState<string>('');
   const [generatedCount, setGeneratedCount] = useState(0);
+  
+  // Edit mode state (for draft projects)
+  const [isEditingLand, setIsEditingLand] = useState(false);
+  const [isEditingRequirements, setIsEditingRequirements] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editForm, setEditForm] = useState({
+    land_width: 0,
+    land_depth: 0,
+    bedrooms: 0,
+    bathrooms: 0,
+    living_areas: 1,
+    garage_spaces: 0,
+    storeys: 1,
+    style: '',
+    open_plan: false,
+    outdoor_entertainment: false,
+    home_office: false
+  });
   
   // Polling ref to prevent memory leaks
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
@@ -167,6 +188,94 @@ export default function ProjectsPage() {
     } finally {
       setIsDeleting(false);
     }
+  };
+
+  // Start editing land dimensions
+  const handleEditLand = () => {
+    if (project) {
+      setEditForm(prev => ({
+        ...prev,
+        land_width: project.land_width || 0,
+        land_depth: project.land_depth || 0
+      }));
+      setIsEditingLand(true);
+    }
+  };
+
+  // Start editing requirements
+  const handleEditRequirements = () => {
+    if (project) {
+      setEditForm(prev => ({
+        ...prev,
+        bedrooms: project.bedrooms || 0,
+        bathrooms: project.bathrooms || 0,
+        living_areas: project.living_areas || 1,
+        garage_spaces: project.garage_spaces || 0,
+        storeys: project.storeys || 1,
+        style: project.style || '',
+        open_plan: project.open_plan || false,
+        outdoor_entertainment: project.outdoor_entertainment || false,
+        home_office: project.home_office || false
+      }));
+      setIsEditingRequirements(true);
+    }
+  };
+
+  // Save land dimensions
+  const handleSaveLand = async () => {
+    if (!project) return;
+    setIsSaving(true);
+    setError(null);
+    
+    try {
+      const landArea = editForm.land_width * editForm.land_depth;
+      const updated = await api.updateProject(project.id, {
+        land_width: editForm.land_width,
+        land_depth: editForm.land_depth,
+        land_area: landArea
+      });
+      setProject(updated);
+      setIsEditingLand(false);
+    } catch (err) {
+      console.error('Error updating land dimensions:', err);
+      setError(err instanceof Error ? err.message : 'Failed to update land dimensions');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Save requirements
+  const handleSaveRequirements = async () => {
+    if (!project) return;
+    setIsSaving(true);
+    setError(null);
+    
+    try {
+      const updated = await api.updateProject(project.id, {
+        bedrooms: editForm.bedrooms,
+        bathrooms: editForm.bathrooms,
+        living_areas: editForm.living_areas,
+        garage_spaces: editForm.garage_spaces,
+        storeys: editForm.storeys,
+        style: editForm.style || null,
+        open_plan: editForm.open_plan,
+        outdoor_entertainment: editForm.outdoor_entertainment,
+        home_office: editForm.home_office
+      });
+      setProject(updated);
+      setIsEditingRequirements(false);
+    } catch (err) {
+      console.error('Error updating requirements:', err);
+      setError(err instanceof Error ? err.message : 'Failed to update requirements');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Cancel editing
+  const handleCancelEdit = () => {
+    setIsEditingLand(false);
+    setIsEditingRequirements(false);
   };
 
   // Improved polling function with better error handling
@@ -497,60 +606,265 @@ export default function ProjectsPage() {
             <div className="grid sm:grid-cols-2 gap-6">
               {/* Land Details */}
               <div className="bg-white/5 rounded-xl p-6 border border-white/10">
-                <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                  <Ruler className="w-5 h-5 text-blue-400" />
-                  Land Dimensions
-                </h2>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Width</span>
-                    <span className="text-white font-medium">{project.land_width || '—'}m</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Depth</span>
-                    <span className="text-white font-medium">{project.land_depth || '—'}m</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Area</span>
-                    <span className="text-white font-medium">{project.land_area?.toFixed(0) || '—'}m²</span>
-                  </div>
-                  {project.land_slope && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Slope</span>
-                      <span className="text-white font-medium">{project.land_slope}</span>
-                    </div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <Ruler className="w-5 h-5 text-blue-400" />
+                    Land Dimensions
+                  </h2>
+                  {project.status === 'draft' && !isEditingLand && (
+                    <button
+                      onClick={handleEditLand}
+                      className="p-1.5 text-gray-400 hover:text-blue-400 hover:bg-white/10 rounded-lg transition"
+                      title="Edit land dimensions"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
                   )}
                 </div>
+                
+                {isEditingLand ? (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-gray-500 text-sm block mb-1">Width (m)</label>
+                      <input
+                        type="number"
+                        value={editForm.land_width || ''}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, land_width: parseFloat(e.target.value) || 0 }))}
+                        className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                        step="0.1"
+                        min="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-gray-500 text-sm block mb-1">Depth (m)</label>
+                      <input
+                        type="number"
+                        value={editForm.land_depth || ''}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, land_depth: parseFloat(e.target.value) || 0 }))}
+                        className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                        step="0.1"
+                        min="0"
+                      />
+                    </div>
+                    <div className="text-gray-500 text-sm">
+                      Area: <span className="text-white font-medium">{(editForm.land_width * editForm.land_depth).toFixed(0)}m²</span>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        onClick={handleSaveLand}
+                        disabled={isSaving}
+                        className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        Save
+                      </button>
+                      <button
+                        onClick={handleCancelEdit}
+                        disabled={isSaving}
+                        className="flex-1 bg-white/10 text-white py-2 rounded-lg hover:bg-white/20 transition font-medium"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Width</span>
+                      <span className="text-white font-medium">{project.land_width || '—'}m</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Depth</span>
+                      <span className="text-white font-medium">{project.land_depth || '—'}m</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Area</span>
+                      <span className="text-white font-medium">{project.land_area?.toFixed(0) || '—'}m²</span>
+                    </div>
+                    {project.land_slope && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Slope</span>
+                        <span className="text-white font-medium">{project.land_slope}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Building Requirements */}
               <div className="bg-white/5 rounded-xl p-6 border border-white/10">
-                <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                  <Building className="w-5 h-5 text-blue-400" />
-                  Requirements
-                </h2>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-white/5 rounded-lg p-3 text-center">
-                    <Bed className="w-5 h-5 text-blue-400 mx-auto mb-1" />
-                    <p className="text-lg font-bold text-white">{project.bedrooms || '—'}</p>
-                    <p className="text-xs text-gray-500">Beds</p>
-                  </div>
-                  <div className="bg-white/5 rounded-lg p-3 text-center">
-                    <Bath className="w-5 h-5 text-blue-400 mx-auto mb-1" />
-                    <p className="text-lg font-bold text-white">{project.bathrooms || '—'}</p>
-                    <p className="text-xs text-gray-500">Baths</p>
-                  </div>
-                  <div className="bg-white/5 rounded-lg p-3 text-center">
-                    <Car className="w-5 h-5 text-blue-400 mx-auto mb-1" />
-                    <p className="text-lg font-bold text-white">{project.garage_spaces || '—'}</p>
-                    <p className="text-xs text-gray-500">Garage</p>
-                  </div>
-                  <div className="bg-white/5 rounded-lg p-3 text-center">
-                    <Layers className="w-5 h-5 text-blue-400 mx-auto mb-1" />
-                    <p className="text-lg font-bold text-white">{project.storeys || '—'}</p>
-                    <p className="text-xs text-gray-500">Storeys</p>
-                  </div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <Building className="w-5 h-5 text-blue-400" />
+                    Requirements
+                  </h2>
+                  {project.status === 'draft' && !isEditingRequirements && (
+                    <button
+                      onClick={handleEditRequirements}
+                      className="p-1.5 text-gray-400 hover:text-blue-400 hover:bg-white/10 rounded-lg transition"
+                      title="Edit requirements"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
+                
+                {isEditingRequirements ? (
+                  <div className="space-y-4">
+                    {/* Number inputs */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-gray-500 text-xs block mb-1">Bedrooms</label>
+                        <input
+                          type="number"
+                          value={editForm.bedrooms || ''}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, bedrooms: parseInt(e.target.value) || 0 }))}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-center focus:outline-none focus:border-blue-500"
+                          min="1"
+                          max="10"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-gray-500 text-xs block mb-1">Bathrooms</label>
+                        <input
+                          type="number"
+                          value={editForm.bathrooms || ''}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, bathrooms: parseFloat(e.target.value) || 0 }))}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-center focus:outline-none focus:border-blue-500"
+                          min="1"
+                          max="10"
+                          step="0.5"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-gray-500 text-xs block mb-1">Living Areas</label>
+                        <input
+                          type="number"
+                          value={editForm.living_areas || ''}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, living_areas: parseInt(e.target.value) || 1 }))}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-center focus:outline-none focus:border-blue-500"
+                          min="1"
+                          max="5"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-gray-500 text-xs block mb-1">Garage</label>
+                        <input
+                          type="number"
+                          value={editForm.garage_spaces || ''}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, garage_spaces: parseInt(e.target.value) || 0 }))}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-center focus:outline-none focus:border-blue-500"
+                          min="0"
+                          max="4"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-gray-500 text-xs block mb-1">Storeys</label>
+                        <input
+                          type="number"
+                          value={editForm.storeys || ''}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, storeys: parseInt(e.target.value) || 1 }))}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white text-center focus:outline-none focus:border-blue-500"
+                          min="1"
+                          max="3"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-gray-500 text-xs block mb-1">Style</label>
+                        <select
+                          value={editForm.style || ''}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, style: e.target.value }))}
+                          className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white focus:outline-none focus:border-blue-500"
+                        >
+                          <option value="">Select...</option>
+                          <option value="Modern">Modern</option>
+                          <option value="Contemporary">Contemporary</option>
+                          <option value="Traditional">Traditional</option>
+                          <option value="Hamptons">Hamptons</option>
+                          <option value="Farmhouse">Farmhouse</option>
+                          <option value="Minimalist">Minimalist</option>
+                        </select>
+                      </div>
+                    </div>
+                    
+                    {/* Toggle options */}
+                    <div className="space-y-2 pt-2 border-t border-white/10">
+                      <label className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer">
+                        <span className="text-gray-300 text-sm">Open Plan Living</span>
+                        <input
+                          type="checkbox"
+                          checked={editForm.open_plan}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, open_plan: e.target.checked }))}
+                          className="w-5 h-5 rounded bg-white/10 border-white/20 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                        />
+                      </label>
+                      <label className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer">
+                        <span className="text-gray-300 text-sm">Outdoor Entertainment (Alfresco)</span>
+                        <input
+                          type="checkbox"
+                          checked={editForm.outdoor_entertainment}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, outdoor_entertainment: e.target.checked }))}
+                          className="w-5 h-5 rounded bg-white/10 border-white/20 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                        />
+                      </label>
+                      <label className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer">
+                        <span className="text-gray-300 text-sm">Home Office</span>
+                        <input
+                          type="checkbox"
+                          checked={editForm.home_office}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, home_office: e.target.checked }))}
+                          className="w-5 h-5 rounded bg-white/10 border-white/20 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                        />
+                      </label>
+                    </div>
+                    
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        onClick={handleSaveRequirements}
+                        disabled={isSaving}
+                        className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        Save
+                      </button>
+                      <button
+                        onClick={handleCancelEdit}
+                        disabled={isSaving}
+                        className="flex-1 bg-white/10 text-white py-2 rounded-lg hover:bg-white/20 transition font-medium"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-white/5 rounded-lg p-3 text-center">
+                      <Bed className="w-5 h-5 text-blue-400 mx-auto mb-1" />
+                      <p className="text-lg font-bold text-white">{project.bedrooms || '—'}</p>
+                      <p className="text-xs text-gray-500">Beds</p>
+                    </div>
+                    <div className="bg-white/5 rounded-lg p-3 text-center">
+                      <Bath className="w-5 h-5 text-blue-400 mx-auto mb-1" />
+                      <p className="text-lg font-bold text-white">{project.bathrooms || '—'}</p>
+                      <p className="text-xs text-gray-500">Baths</p>
+                    </div>
+                    <div className="bg-white/5 rounded-lg p-3 text-center">
+                      <Sofa className="w-5 h-5 text-blue-400 mx-auto mb-1" />
+                      <p className="text-lg font-bold text-white">{project.living_areas || '—'}</p>
+                      <p className="text-xs text-gray-500">Living</p>
+                    </div>
+                    <div className="bg-white/5 rounded-lg p-3 text-center">
+                      <Car className="w-5 h-5 text-blue-400 mx-auto mb-1" />
+                      <p className="text-lg font-bold text-white">{project.garage_spaces || '—'}</p>
+                      <p className="text-xs text-gray-500">Garage</p>
+                    </div>
+                    <div className="bg-white/5 rounded-lg p-3 text-center">
+                      <Layers className="w-5 h-5 text-blue-400 mx-auto mb-1" />
+                      <p className="text-lg font-bold text-white">{project.storeys || '—'}</p>
+                      <p className="text-xs text-gray-500">Storeys</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -743,10 +1057,6 @@ export default function ProjectsPage() {
                     <span className="text-white">{formatDate(project.updated_at, true)}</span>
                   </div>
                 )}
-                <div className="flex justify-between">
-                  <span className="text-gray-500">ID</span>
-                  <span className="text-white">#{project.id}</span>
-                </div>
               </div>
             </div>
           </div>
