@@ -769,7 +769,7 @@ export default function PlansPage() {
             return (
               <div
                 key={plan.id}
-                className="bg-white/5 rounded-lg border border-white/10 overflow-hidden hover:border-blue-500/50 transition group cursor-pointer"
+                className="bg-white/5 rounded-lg border border-white/10 overflow-hidden hover:border-blue-500/50 transition cursor-pointer"
                 onClick={() => handleViewPlan(plan)}
               >
                 {/* Image */}
@@ -778,7 +778,7 @@ export default function PlansPage() {
                     <img
                       src={plan.preview_image_url}
                       alt={plan.plan_type || 'Floor Plan'}
-                      className="w-full h-full object-contain bg-white group-hover:scale-105 transition-transform duration-300"
+                      className="w-full h-full object-contain bg-white"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
@@ -798,29 +798,6 @@ export default function PlansPage() {
                       : 'bg-orange-500/20 text-orange-400'
                   }`}>
                     {plan.is_compliant ? '✓' : '⚠'}
-                  </div>
-                  
-                  {/* Hover Actions */}
-                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setLightboxPlan(plan);
-                      }}
-                      className="p-2 bg-white/20 rounded-full hover:bg-white/30 transition"
-                      title="Quick View"
-                    >
-                      <Eye className="w-4 h-4 text-white" />
-                    </button>
-                    {plan.preview_image_url && (
-                      <button
-                        onClick={(e) => handleDownload(plan, e)}
-                        className="p-2 bg-white/20 rounded-full hover:bg-white/30 transition"
-                        title="Download"
-                      >
-                        <Download className="w-4 h-4 text-white" />
-                      </button>
-                    )}
                   </div>
                 </div>
                 
