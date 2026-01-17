@@ -3,7 +3,7 @@
 
 'use client';
 
-import { Home, FolderOpen, CreditCard, Settings, LogOut, LayoutDashboard, User, Layers } from 'lucide-react';
+import { Home, FolderOpen, CreditCard, LogOut, LayoutDashboard, User, Layers } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useAuth } from '@/contexts/AuthContext';
@@ -23,7 +23,6 @@ export default function DashboardLayout({
     { icon: Layers, label: 'Plans', href: '/dashboard/plans' },
     { icon: CreditCard, label: 'Billing', href: '/dashboard/billing' },
     { icon: User, label: 'User Profile', href: '/dashboard/profile' },
-    { icon: Settings, label: 'Settings', href: '/dashboard/settings' },
   ];
 
   const handleLogout = async () => {
@@ -47,12 +46,12 @@ export default function DashboardLayout({
         <div className="w-64 bg-slate-900/50 backdrop-blur-sm border-r border-white/10 flex flex-col">
           {/* Logo */}
           <div className="p-6 border-b border-white/10">
-            <a href="/" className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <Home className="w-8 h-8 text-blue-400" />
               <span className="text-xl font-bold text-white">
                 Layout<span className="text-blue-400">AI</span>
               </span>
-            </a>
+            </div>
           </div>
 
           {/* User Profile */}

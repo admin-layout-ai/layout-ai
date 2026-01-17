@@ -762,14 +762,14 @@ export default function PlansPage() {
 
       {/* Plans Grid */}
       {!isLoading && !error && filteredPlans.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
           {filteredPlans.map((plan) => {
             const variant = VARIANT_INFO[plan.variant_number || 1] || VARIANT_INFO[1];
             
             return (
               <div
                 key={plan.id}
-                className="bg-white/5 rounded-xl border border-white/10 overflow-hidden hover:border-blue-500/50 transition group cursor-pointer"
+                className="bg-white/5 rounded-lg border border-white/10 overflow-hidden hover:border-blue-500/50 transition group cursor-pointer"
                 onClick={() => handleViewPlan(plan)}
               >
                 {/* Image */}
@@ -782,75 +782,75 @@ export default function PlansPage() {
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <ImageIcon className="w-12 h-12 text-gray-600" />
+                      <ImageIcon className="w-8 h-8 text-gray-600" />
                     </div>
                   )}
                   
                   {/* Variant Badge */}
-                  <div className={`absolute top-3 left-3 px-2.5 py-1 rounded-full text-xs font-medium ${variant.color}`}>
+                  <div className={`absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${variant.color}`}>
                     {variant.icon} {variant.name}
                   </div>
                   
                   {/* Compliance Badge */}
-                  <div className={`absolute top-3 right-3 px-2.5 py-1 rounded-full text-xs font-medium ${
+                  <div className={`absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
                     plan.is_compliant 
                       ? 'bg-green-500/20 text-green-400' 
                       : 'bg-orange-500/20 text-orange-400'
                   }`}>
-                    {plan.is_compliant ? '✓ Compliant' : '⚠ Review'}
+                    {plan.is_compliant ? '✓' : '⚠'}
                   </div>
                   
                   {/* Hover Actions */}
-                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         setLightboxPlan(plan);
                       }}
-                      className="p-3 bg-white/20 rounded-full hover:bg-white/30 transition"
+                      className="p-2 bg-white/20 rounded-full hover:bg-white/30 transition"
                       title="Quick View"
                     >
-                      <Eye className="w-5 h-5 text-white" />
+                      <Eye className="w-4 h-4 text-white" />
                     </button>
                     {plan.preview_image_url && (
                       <button
                         onClick={(e) => handleDownload(plan, e)}
-                        className="p-3 bg-white/20 rounded-full hover:bg-white/30 transition"
+                        className="p-2 bg-white/20 rounded-full hover:bg-white/30 transition"
                         title="Download"
                       >
-                        <Download className="w-5 h-5 text-white" />
+                        <Download className="w-4 h-4 text-white" />
                       </button>
                     )}
                   </div>
                 </div>
                 
                 {/* Info */}
-                <div className="p-4">
-                  <h3 className="font-semibold text-white truncate mb-1">
+                <div className="p-2">
+                  <h3 className="font-medium text-white truncate text-xs mb-0.5">
                     {plan.project?.name || `Project ${plan.project_id}`}
                   </h3>
-                  <p className="text-gray-400 text-sm flex items-center gap-1 mb-3">
-                    <MapPin className="w-3 h-3" />
+                  <p className="text-gray-400 text-[10px] flex items-center gap-1 mb-1.5">
+                    <MapPin className="w-2.5 h-2.5" />
                     {plan.project?.suburb}, {plan.project?.state}
                   </p>
                   
                   {/* Stats Row */}
-                  <div className="flex items-center gap-4 text-sm text-gray-400">
+                  <div className="flex items-center gap-2 text-[10px] text-gray-400">
                     {plan.total_area && (
-                      <span className="flex items-center gap-1">
-                        <Home className="w-3.5 h-3.5" />
+                      <span className="flex items-center gap-0.5">
+                        <Home className="w-2.5 h-2.5" />
                         {Math.round(plan.total_area)}m²
                       </span>
                     )}
                     {plan.project?.bedrooms && (
-                      <span className="flex items-center gap-1">
-                        <Bed className="w-3.5 h-3.5" />
+                      <span className="flex items-center gap-0.5">
+                        <Bed className="w-2.5 h-2.5" />
                         {plan.project.bedrooms}
                       </span>
                     )}
                     {plan.project?.bathrooms && (
-                      <span className="flex items-center gap-1">
-                        <Bath className="w-3.5 h-3.5" />
+                      <span className="flex items-center gap-0.5">
+                        <Bath className="w-2.5 h-2.5" />
                         {plan.project.bathrooms}
                       </span>
                     )}

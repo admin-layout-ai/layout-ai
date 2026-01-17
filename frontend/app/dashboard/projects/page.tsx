@@ -468,18 +468,44 @@ export default function ProjectsPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
         <div className="mb-8 animate-pulse">
-          <div className="h-8 w-48 bg-white/10 rounded mb-2"></div>
-          <div className="h-4 w-64 bg-white/10 rounded"></div>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-7 h-7 bg-white/10 rounded"></div>
+            <div className="h-8 w-48 bg-white/10 rounded"></div>
+          </div>
+          <div className="h-4 w-64 bg-white/10 rounded mt-2"></div>
         </div>
-        <div className="space-y-2">
+        
+        {/* Filter skeleton */}
+        <div className="bg-white/5 rounded-xl p-4 mb-6 border border-white/10 animate-pulse">
+          <div className="flex gap-4">
+            <div className="flex-1 h-10 bg-white/10 rounded-lg"></div>
+            <div className="w-32 h-10 bg-white/10 rounded-lg"></div>
+            <div className="w-32 h-10 bg-white/10 rounded-lg"></div>
+          </div>
+        </div>
+        
+        {/* Stats skeleton */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 animate-pulse">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="bg-white/5 rounded-xl p-4 border border-white/10">
+              <div className="h-4 w-20 bg-white/10 rounded mb-2"></div>
+              <div className="h-8 w-12 bg-white/10 rounded"></div>
+            </div>
+          ))}
+        </div>
+        
+        {/* List skeleton */}
+        <div className="space-y-3">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="bg-white/5 rounded-lg border border-white/10 p-4 flex items-center gap-4 animate-pulse">
-              <div className="w-12 h-12 bg-white/10 rounded-lg flex-shrink-0"></div>
-              <div className="flex-1 space-y-2">
-                <div className="h-5 w-1/3 bg-white/10 rounded"></div>
-                <div className="h-4 w-1/4 bg-white/10 rounded"></div>
+            <div key={i} className="bg-white/5 rounded-xl border border-white/10 p-4 animate-pulse">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-white/10 rounded-xl flex-shrink-0"></div>
+                <div className="flex-1 space-y-2">
+                  <div className="h-5 w-1/3 bg-white/10 rounded"></div>
+                  <div className="h-4 w-1/4 bg-white/10 rounded"></div>
+                </div>
+                <div className="h-6 w-24 bg-white/10 rounded-full"></div>
               </div>
-              <div className="h-6 w-20 bg-white/10 rounded-full"></div>
             </div>
           ))}
         </div>
@@ -548,7 +574,7 @@ export default function ProjectsPage() {
 
         {/* Error message */}
         {error && (
-          <div className="mb-6 bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400 flex items-center gap-3">
+          <div className="mb-6 bg-red-500/20 border border-red-500/30 rounded-xl p-4 text-red-400 flex items-center gap-3">
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
             <span>{error}</span>
             <button onClick={() => setError(null)} className="ml-auto">
@@ -1099,17 +1125,20 @@ export default function ProjectsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-white">Projects</h1>
-          <p className="text-gray-400 text-sm mt-1">
-            {stats.total} project{stats.total !== 1 ? 's' : ''} • {stats.generated} generated
+          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+            <Building className="w-7 h-7 text-blue-400" />
+            Projects
+          </h1>
+          <p className="text-gray-400 mt-1">
+            Manage your floor plan projects
           </p>
         </div>
         
         <button
           onClick={() => router.push('/dashboard/projects/new')}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition flex items-center gap-2 whitespace-nowrap"
+          className="bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition flex items-center gap-2 whitespace-nowrap"
         >
           <Plus className="w-5 h-5" />
           New Project
@@ -1118,22 +1147,22 @@ export default function ProjectsPage() {
 
       {/* Filters */}
       <div className="bg-white/5 rounded-xl p-4 mb-6 border border-white/10">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
             <input
               type="text"
               placeholder="Search projects..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
             />
           </div>
           
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as ProjectStatus)}
-            className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+            className="px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
           >
             <option value="all">All Status</option>
             <option value="draft">Draft</option>
@@ -1145,7 +1174,7 @@ export default function ProjectsPage() {
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortOption)}
-            className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+            className="px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
           >
             <option value="newest">Newest First</option>
             <option value="oldest">Oldest First</option>
@@ -1155,9 +1184,29 @@ export default function ProjectsPage() {
         </div>
       </div>
 
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+          <p className="text-gray-400 text-sm">Total Projects</p>
+          <p className="text-2xl font-bold text-white">{stats.total}</p>
+        </div>
+        <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+          <p className="text-gray-400 text-sm">Generated</p>
+          <p className="text-2xl font-bold text-green-400">{stats.generated}</p>
+        </div>
+        <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+          <p className="text-gray-400 text-sm">Draft</p>
+          <p className="text-2xl font-bold text-yellow-400">{stats.draft}</p>
+        </div>
+        <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+          <p className="text-gray-400 text-sm">Showing</p>
+          <p className="text-2xl font-bold text-blue-400">{filteredProjects.length}</p>
+        </div>
+      </div>
+
       {/* Error message */}
       {error && (
-        <div className="mb-6 bg-red-500/20 border border-red-500/30 rounded-lg p-4 text-red-400 flex items-center gap-3">
+        <div className="mb-6 bg-red-500/20 border border-red-500/30 rounded-xl p-4 text-red-400 flex items-center gap-3">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
           <span>{error}</span>
           <button onClick={() => setError(null)} className="ml-auto">
@@ -1166,23 +1215,23 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* Projects List */}
+      {/* Empty State */}
       {filteredProjects.length === 0 ? (
-        <div className="text-center py-16">
+        <div className="bg-white/5 border border-white/10 rounded-xl p-12 text-center">
           <Home className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-          <h3 className="text-xl font-medium text-white mb-2">
-            {projects.length === 0 ? 'No projects yet' : 'No matching projects'}
+          <h3 className="text-xl font-semibold text-white mb-2">
+            {projects.length === 0 ? 'No Projects Yet' : 'No Matching Projects'}
           </h3>
           <p className="text-gray-400 mb-6">
             {projects.length === 0 
-              ? 'Create your first project to get started'
-              : 'Try adjusting your search or filters'
+              ? 'Create your first project to get started with AI-generated floor plans.'
+              : 'Try adjusting your search or filters.'
             }
           </p>
           {projects.length === 0 && (
             <button
               onClick={() => router.push('/dashboard/projects/new')}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition inline-flex items-center gap-2"
+              className="bg-blue-600 text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 transition inline-flex items-center gap-2"
             >
               <Plus className="w-5 h-5" />
               Create Project
@@ -1190,45 +1239,47 @@ export default function ProjectsPage() {
           )}
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {filteredProjects.map((proj) => (
             <div
               key={proj.id}
-              className="bg-white/5 rounded-lg border border-white/10 p-4 hover:border-blue-500/50 transition cursor-pointer flex items-center gap-4"
+              className="bg-white/5 rounded-xl border border-white/10 p-4 hover:border-blue-500/50 transition cursor-pointer group"
               onClick={() => router.push(`/dashboard/projects/${proj.id}`)}
             >
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-600/20 to-purple-600/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                <Home className="w-6 h-6 text-blue-400/50" />
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-blue-600/20 to-purple-600/20 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/10">
+                  <Home className="w-7 h-7 text-blue-400" />
+                </div>
+                
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-white font-semibold truncate group-hover:text-blue-400 transition">{proj.name}</h3>
+                  <p className="text-gray-400 text-sm flex items-center gap-1 mt-0.5">
+                    <MapPin className="w-3.5 h-3.5" />
+                    {proj.suburb}, {proj.state} {proj.postcode}
+                  </p>
+                </div>
+                
+                <div className="hidden sm:flex items-center gap-6 text-gray-400 text-sm">
+                  {proj.bedrooms && (
+                    <span className="flex items-center gap-1.5">
+                      <Bed className="w-4 h-4" /> {proj.bedrooms}
+                    </span>
+                  )}
+                  {proj.bathrooms && (
+                    <span className="flex items-center gap-1.5">
+                      <Bath className="w-4 h-4" /> {proj.bathrooms}
+                    </span>
+                  )}
+                </div>
+                
+                {getStatusBadge(proj.status)}
+                
+                <span className="text-gray-500 text-sm hidden md:block">
+                  {formatDate(proj.created_at)}
+                </span>
+                
+                <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-blue-400 transition" />
               </div>
-              
-              <div className="flex-1 min-w-0">
-                <h3 className="text-white font-medium truncate">{proj.name}</h3>
-                <p className="text-gray-500 text-sm flex items-center gap-1">
-                  <MapPin className="w-3 h-3" />
-                  {proj.suburb}, {proj.state} {proj.postcode}
-                </p>
-              </div>
-              
-              <div className="flex items-center gap-4 text-gray-500 text-sm hidden sm:flex">
-                {proj.bedrooms && (
-                  <span className="flex items-center gap-1">
-                    <Bed className="w-3 h-3" /> {proj.bedrooms}
-                  </span>
-                )}
-                {proj.bathrooms && (
-                  <span className="flex items-center gap-1">
-                    <Bath className="w-3 h-3" /> {proj.bathrooms}
-                  </span>
-                )}
-              </div>
-              
-              {getStatusBadge(proj.status)}
-              
-              <span className="text-gray-500 text-xs hidden md:block">
-                {formatDate(proj.created_at)}
-              </span>
-              
-              <ChevronRight className="w-4 h-4 text-gray-500" />
             </div>
           ))}
         </div>
