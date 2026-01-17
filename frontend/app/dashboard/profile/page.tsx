@@ -387,7 +387,7 @@ export default function ProfilePage() {
 
       {/* Main Content - Two Column Layout */}
       <div className="flex flex-col lg:flex-row gap-6">
-        {/* Left Column - Profile Info & Personal Details */}
+        {/* Left Column - Profile Info, Personal Details & Account Info */}
         <div className="flex-1 space-y-6">
           {/* Profile Card */}
           <div className="bg-white/5 rounded-xl p-6 border border-white/10">
@@ -500,9 +500,37 @@ export default function ProfilePage() {
               </div>
             </div>
           </div>
+
+          {/* Account Information Card */}
+          <div className="bg-white/5 rounded-xl p-6 border border-white/10">
+            <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+              <FileText className="w-5 h-5 text-blue-400" />
+              Account Information
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="bg-white/5 rounded-lg p-3 text-center">
+                <p className="text-gray-400 text-xs mb-1">Status</p>
+                <p className={`font-medium ${profile?.is_active ? 'text-green-400' : 'text-red-400'}`}>
+                  {profile?.is_active ? 'Active' : 'Inactive'}
+                </p>
+              </div>
+              <div className="bg-white/5 rounded-lg p-3 text-center">
+                <p className="text-gray-400 text-xs mb-1">Plan</p>
+                <p className="text-white font-medium capitalize">{profile?.subscription_tier || 'Free'}</p>
+              </div>
+              <div className="bg-white/5 rounded-lg p-3 text-center">
+                <p className="text-gray-400 text-xs mb-1">Member Since</p>
+                <p className="text-white text-sm">{formatDate(profile?.created_at)}</p>
+              </div>
+              <div className="bg-white/5 rounded-lg p-3 text-center">
+                <p className="text-gray-400 text-xs mb-1">Last Updated</p>
+                <p className="text-white text-sm">{formatDate(profile?.updated_at)}</p>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Right Column - Business Details & Account Info */}
+        {/* Right Column - Business Details */}
         <div className="lg:w-96 space-y-6">
           {/* Builder Toggle Card */}
           <div className="bg-white/5 rounded-xl p-6 border border-white/10">
@@ -638,54 +666,28 @@ export default function ProfilePage() {
               />
             </div>
           )}
-
-          {/* Account Information Card */}
-          <div className="bg-white/5 rounded-xl p-6 border border-white/10">
-            <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
-              <FileText className="w-5 h-5 text-blue-400" />
-              Account Information
-            </h3>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center py-2 border-b border-white/5">
-                <span className="text-gray-400 text-sm">Status</span>
-                <span className={`text-sm font-medium ${profile?.is_active ? 'text-green-400' : 'text-red-400'}`}>
-                  {profile?.is_active ? '● Active' : '● Inactive'}
-                </span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b border-white/5">
-                <span className="text-gray-400 text-sm">Plan</span>
-                <span className="text-white text-sm font-medium capitalize">{profile?.subscription_tier || 'Free'}</span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b border-white/5">
-                <span className="text-gray-400 text-sm">Member Since</span>
-                <span className="text-white text-sm">{formatDate(profile?.created_at)}</span>
-              </div>
-              <div className="flex justify-between items-center py-2">
-                <span className="text-gray-400 text-sm">Last Updated</span>
-                <span className="text-white text-sm">{formatDate(profile?.updated_at)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Save Button */}
-          <button
-            onClick={handleSave}
-            disabled={isSaving || isUploadingLogo}
-            className="w-full bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSaving || isUploadingLogo ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                {isUploadingLogo ? 'Uploading Logo...' : 'Saving...'}
-              </>
-            ) : (
-              <>
-                <Save className="w-5 h-5" />
-                Save Changes
-              </>
-            )}
-          </button>
         </div>
+      </div>
+
+      {/* Save Button - Bottom Center */}
+      <div className="mt-8 flex justify-center">
+        <button
+          onClick={handleSave}
+          disabled={isSaving || isUploadingLogo}
+          className="px-12 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isSaving || isUploadingLogo ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              {isUploadingLogo ? 'Uploading Logo...' : 'Saving...'}
+            </>
+          ) : (
+            <>
+              <Save className="w-5 h-5" />
+              Save Changes
+            </>
+          )}
+        </button>
       </div>
     </div>
   );
