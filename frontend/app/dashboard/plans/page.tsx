@@ -340,12 +340,12 @@ export default function PlansPage() {
             {/* Floor Plan Image - Portrait orientation, trimmed whitespace */}
             <div className="w-full lg:w-[60%] p-4 lg:p-6 flex items-center justify-center overflow-hidden">
               {selectedPlan.preview_image_url ? (
-                <div className="bg-white rounded-xl shadow-xl flex items-center justify-center p-2 overflow-hidden" style={{ maxHeight: '100%', aspectRatio: '3/4' }}>
+                <div className="bg-white rounded-xl shadow-xl flex items-center justify-center p-2 overflow-hidden h-full">
                   <img
                     src={selectedPlan.preview_image_url}
                     alt="Floor Plan"
-                    className="h-full w-full object-contain transition-transform origin-center"
-                    style={{ transform: `scale(${scale}) rotate(90deg)` }}
+                    className="max-h-full max-w-full object-contain transition-transform"
+                    style={{ transform: `scale(${scale})` }}
                     onLoad={() => setImageLoaded(true)}
                     onError={() => setImageError(true)}
                   />
