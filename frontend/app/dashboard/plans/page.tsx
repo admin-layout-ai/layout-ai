@@ -6,7 +6,7 @@
 // - Detail: Click a plan to view details (no URL change)
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   Layers, 
   Search, 
@@ -108,7 +108,12 @@ interface LayoutData {
 
 export default function PlansPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
+  
+  // Get project filter from URL query param
+  const projectParam = searchParams.get('project');
+  const initialProjectFilter = projectParam ? parseInt(projectParam) : 'all';
   
   // Gallery view state
   const [plans, setPlans] = useState<FloorPlanWithProject[]>([]);
@@ -116,7 +121,7 @@ export default function PlansPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedProjectFilter, setSelectedProjectFilter] = useState<number | 'all'>('all');
+  const [selectedProjectFilter, setSelectedProjectFilter] = useState<number | 'all'>(initialProjectFilter);
   const [selectedVariantFilter, setSelectedVariantFilter] = useState<number | 'all'>('all');
   
   // Detail view state - when selectedPlan is set, show detail view
@@ -130,6 +135,17 @@ export default function PlansPage() {
   
   // Lightbox state (for gallery quick view)
   const [lightboxPlan, setLightboxPlan] = useState<FloorPlanWithProject | null>(null);
+
+  // Sync project filter with URL param when it changes
+  useEffect(() => {
+    const projectParam = searchParams.get('project');
+    if (projectParam) {
+      const projectId = parseInt(projectParam);
+      if (!isNaN(projectId)) {
+        setSelectedProjectFilter(projectId);
+      }
+    }
+  }, [searchParams]);
 
   // Load all plans on mount
   useEffect(() => {
