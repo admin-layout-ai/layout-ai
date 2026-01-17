@@ -392,9 +392,9 @@ export default function ProfilePage() {
           {/* Profile Card */}
           <div className="bg-white/5 rounded-xl p-6 border border-white/10">
             <div className="flex items-center gap-4">
-              <div className="w-20 h-20 bg-blue-600/20 rounded-full flex items-center justify-center overflow-hidden border-2 border-blue-500/30">
+              <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center overflow-hidden border-2 border-blue-500/30 p-1">
                 {builderLogoUrl && isBuilder ? (
-                  <img src={builderLogoUrl} alt="Logo" className="w-full h-full object-cover" />
+                  <img src={builderLogoUrl} alt="Logo" className="w-full h-full object-contain" />
                 ) : (
                   <UserIcon className="w-10 h-10 text-blue-400" />
                 )}
@@ -449,54 +449,57 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {/* Email (Read-only) */}
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
-                  Email Address
-                  <span className="ml-2 text-xs text-gray-500">(Cannot be changed)</span>
-                </label>
-                <input
-                  type="email"
-                  value={profile?.email || ''}
-                  disabled
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-gray-500 cursor-not-allowed"
-                />
-              </div>
-
-              {/* Address with Autocomplete */}
-              <div className="relative" ref={addressInputRef}>
-                <label className="block text-sm font-medium text-gray-400 mb-2">Address</label>
-                <div className="relative">
+              {/* Email & Address - Same Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Email (Read-only) */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                    Email Address
+                    <span className="ml-2 text-xs text-gray-500">(Cannot be changed)</span>
+                  </label>
                   <input
-                    type="text"
-                    value={address}
-                    onChange={(e) => handleAddressChange(e.target.value)}
-                    onFocus={() => address.length >= 2 && setShowAddressSuggestions(true)}
-                    placeholder="Start typing your address"
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 pr-10 transition"
+                    type="email"
+                    value={profile?.email || ''}
+                    disabled
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-gray-500 cursor-not-allowed"
                   />
-                  {isLoadingAddress ? (
-                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
-                  ) : (
-                    <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                </div>
+
+                {/* Address with Autocomplete */}
+                <div className="relative" ref={addressInputRef}>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Address</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={address}
+                      onChange={(e) => handleAddressChange(e.target.value)}
+                      onFocus={() => address.length >= 2 && setShowAddressSuggestions(true)}
+                      placeholder="Start typing your address"
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 pr-10 transition"
+                    />
+                    {isLoadingAddress ? (
+                      <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
+                    ) : (
+                      <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                    )}
+                  </div>
+                  
+                  {/* Address Suggestions Dropdown */}
+                  {showAddressSuggestions && addressSuggestions.length > 0 && (
+                    <div className="absolute z-20 w-full mt-1 bg-slate-800 border border-white/20 rounded-lg shadow-2xl max-h-48 overflow-auto">
+                      {addressSuggestions.map((suggestion) => (
+                        <button
+                          key={suggestion.place_id}
+                          onClick={() => selectAddress(suggestion)}
+                          className="w-full px-4 py-2.5 text-left text-white hover:bg-blue-600/30 transition flex items-center gap-2 border-b border-white/5 last:border-0"
+                        >
+                          <MapPin className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                          <span className="text-sm">{suggestion.description}</span>
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </div>
-                
-                {/* Address Suggestions Dropdown */}
-                {showAddressSuggestions && addressSuggestions.length > 0 && (
-                  <div className="absolute z-20 w-full mt-1 bg-slate-800 border border-white/20 rounded-lg shadow-2xl max-h-48 overflow-auto">
-                    {addressSuggestions.map((suggestion) => (
-                      <button
-                        key={suggestion.place_id}
-                        onClick={() => selectAddress(suggestion)}
-                        className="w-full px-4 py-2.5 text-left text-white hover:bg-blue-600/30 transition flex items-center gap-2 border-b border-white/5 last:border-0"
-                      >
-                        <MapPin className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                        <span className="text-sm">{suggestion.description}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -605,7 +608,7 @@ export default function ProfilePage() {
                   
                   {builderLogoUrl ? (
                     <div className="flex items-center gap-4 p-3 bg-white/5 rounded-lg border border-white/10">
-                      <div className="w-16 h-16 bg-white rounded-lg overflow-hidden flex-shrink-0">
+                      <div className="w-16 h-16 bg-white rounded-lg overflow-hidden flex-shrink-0 p-1">
                         <img 
                           src={builderLogoUrl} 
                           alt="Company Logo" 
