@@ -679,11 +679,11 @@ export default function PlansPage() {
           <select
             value={selectedProjectFilter}
             onChange={(e) => setSelectedProjectFilter(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-            className="px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+            className="px-4 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
           >
-            <option value="all">All Projects</option>
+            <option value="all" className="bg-slate-800">All Projects</option>
             {projects.filter(p => p.status === 'generated').map(project => (
-              <option key={project.id} value={project.id}>{project.name}</option>
+              <option key={project.id} value={project.id} className="bg-slate-800">{project.name}</option>
             ))}
           </select>
           
@@ -691,12 +691,12 @@ export default function PlansPage() {
           <select
             value={selectedVariantFilter}
             onChange={(e) => setSelectedVariantFilter(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-            className="px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+            className="px-4 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
           >
-            <option value="all">All Variants</option>
-            <option value={1}>⚡ Optimal Layout</option>
-            <option value={2}>🏠 Spacious Living</option>
-            <option value={3}>👑 Master Retreat</option>
+            <option value="all" className="bg-slate-800">All Variants</option>
+            <option value={1} className="bg-slate-800">⚡ Optimal Layout</option>
+            <option value={2} className="bg-slate-800">🏠 Spacious Living</option>
+            <option value={3} className="bg-slate-800">👑 Master Retreat</option>
           </select>
         </div>
       </div>

@@ -1163,24 +1163,24 @@ export default function ProjectsPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as ProjectStatus)}
-            className="px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+            className="px-4 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
           >
-            <option value="all">All Status</option>
-            <option value="draft">Draft</option>
-            <option value="generating">Generating</option>
-            <option value="generated">Generated</option>
-            <option value="error">Error</option>
+            <option value="all" className="bg-slate-800">All Status</option>
+            <option value="draft" className="bg-slate-800">Draft</option>
+            <option value="generating" className="bg-slate-800">Generating</option>
+            <option value="generated" className="bg-slate-800">Generated</option>
+            <option value="error" className="bg-slate-800">Error</option>
           </select>
           
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortOption)}
-            className="px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
+            className="px-4 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
           >
-            <option value="newest">Newest First</option>
-            <option value="oldest">Oldest First</option>
-            <option value="name">Name A-Z</option>
-            <option value="status">By Status</option>
+            <option value="newest" className="bg-slate-800">Newest First</option>
+            <option value="oldest" className="bg-slate-800">Oldest First</option>
+            <option value="name" className="bg-slate-800">Name A-Z</option>
+            <option value="status" className="bg-slate-800">By Status</option>
           </select>
         </div>
       </div>
