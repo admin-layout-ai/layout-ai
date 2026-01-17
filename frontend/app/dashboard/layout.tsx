@@ -3,7 +3,7 @@
 
 'use client';
 
-import { Home, FolderOpen, CreditCard, LogOut, LayoutDashboard, User, Layers } from 'lucide-react';
+import { Home, FolderOpen, CreditCard, LogOut, LayoutDashboard, User, Layers, Building2 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,7 +20,8 @@ export default function DashboardLayout({
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
     { icon: FolderOpen, label: 'Projects', href: '/dashboard/projects' },
-    { icon: Layers, label: 'Plans', href: '/dashboard/plans' },
+    { icon: Layers, label: 'Floor Plans', href: '/dashboard/plans' },
+    { icon: Building2, label: 'Facades', href: '/dashboard/facades' },
     { icon: CreditCard, label: 'Billing', href: '/dashboard/billing' },
     { icon: User, label: 'User Profile', href: '/dashboard/profile' },
   ];
