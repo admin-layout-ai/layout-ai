@@ -359,21 +359,19 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
       {/* Header */}
-      <div className="mb-6">
-        <button 
-          onClick={() => router.push('/dashboard')}
-          className="flex items-center gap-2 text-gray-400 hover:text-white mb-4 transition"
-        >
-          <ArrowLeft className="w-5 h-5" /> Back to Dashboard
-        </button>
-        
-        <h1 className="text-2xl font-bold text-white">User Profile</h1>
-        <p className="text-gray-400">Manage your personal information</p>
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+          <UserIcon className="w-7 h-7 text-blue-400" />
+          User Profile
+        </h1>
+        <p className="text-gray-400 mt-1">
+          Manage your personal and business information
+        </p>
       </div>
 
       {/* Success Message */}
       {success && (
-        <div className="mb-6 bg-green-500/20 border border-green-500/30 rounded-lg p-4 flex items-center gap-3 max-w-6xl">
+        <div className="mb-6 bg-green-500/20 border border-green-500/30 rounded-xl p-4 flex items-center gap-3">
           <Check className="w-5 h-5 text-green-400" />
           <span className="text-green-400">{success}</span>
         </div>
@@ -381,92 +379,93 @@ export default function ProfilePage() {
 
       {/* Error Message */}
       {error && (
-        <div className="mb-6 bg-red-500/20 border border-red-500/30 rounded-lg p-4 flex items-center gap-3 max-w-6xl">
+        <div className="mb-6 bg-red-500/20 border border-red-500/30 rounded-xl p-4 flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-red-400" />
           <span className="text-red-400">{error}</span>
         </div>
       )}
 
-      {/* Profile Card - Landscape Layout - Wider */}
-      <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden max-w-6xl">
-        {/* Profile Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center overflow-hidden">
-              {builderLogoUrl && isBuilder ? (
-                <img src={builderLogoUrl} alt="Logo" className="w-full h-full object-cover" />
-              ) : (
-                <UserIcon className="w-8 h-8 text-white" />
-              )}
+      {/* Main Content - Two Column Layout */}
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Left Column - Profile Info & Personal Details */}
+        <div className="flex-1 space-y-6">
+          {/* Profile Card */}
+          <div className="bg-white/5 rounded-xl p-6 border border-white/10">
+            <div className="flex items-center gap-4">
+              <div className="w-20 h-20 bg-blue-600/20 rounded-full flex items-center justify-center overflow-hidden border-2 border-blue-500/30">
+                {builderLogoUrl && isBuilder ? (
+                  <img src={builderLogoUrl} alt="Logo" className="w-full h-full object-cover" />
+                ) : (
+                  <UserIcon className="w-10 h-10 text-blue-400" />
+                )}
+              </div>
+              <div className="flex-1">
+                <h2 className="text-xl font-semibold text-white">{profile?.full_name || 'User'}</h2>
+                <p className="text-gray-400">{profile?.email}</p>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${getSubscriptionBadge(profile?.subscription_tier || 'free')}`}>
+                    {profile?.subscription_tier || 'Free'} Plan
+                  </span>
+                  {isBuilder && (
+                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-yellow-500/20 text-yellow-400">
+                      <HardHat className="w-3 h-3 inline mr-1" />
+                      Licensed Builder
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="flex-1">
-              <h2 className="text-xl font-semibold text-white">{profile?.full_name || 'User'}</h2>
-              <p className="text-blue-200">{profile?.email}</p>
-            </div>
-            <span className={`px-3 py-1 rounded-full text-sm font-medium capitalize ${getSubscriptionBadge(profile?.subscription_tier || 'free')}`}>
-              {profile?.subscription_tier || 'Free'} Plan
-            </span>
           </div>
-        </div>
 
-        {/* Form Content - Two Column Layout - More Compact */}
-        <div className="p-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Left Column - Personal Details */}
-            <div className="space-y-3">
-              <h3 className="text-lg font-semibold text-white border-b border-white/10 pb-2">Personal Details</h3>
-              
-              {/* Full Name & Phone - Same Row */}
-              <div className="grid grid-cols-2 gap-3">
+          {/* Personal Details Card */}
+          <div className="bg-white/5 rounded-xl p-6 border border-white/10">
+            <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+              <UserIcon className="w-5 h-5 text-blue-400" />
+              Personal Details
+            </h3>
+            
+            <div className="space-y-4">
+              {/* Full Name & Phone */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">
-                    <UserIcon className="w-4 h-4 inline mr-1" />
-                    Full Name
-                  </label>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Full Name</label>
                   <input
                     type="text"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="Your full name"
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">
-                    <Phone className="w-4 h-4 inline mr-1" />
-                    Phone Number
-                  </label>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Phone Number</label>
                   <input
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="Phone number"
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition"
                   />
                 </div>
               </div>
 
               {/* Email (Read-only) */}
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">
-                  <Mail className="w-4 h-4 inline mr-1" />
+                <label className="block text-sm font-medium text-gray-400 mb-2">
                   Email Address
-                  <span className="ml-1 text-xs text-gray-500">(Cannot be changed)</span>
+                  <span className="ml-2 text-xs text-gray-500">(Cannot be changed)</span>
                 </label>
                 <input
                   type="email"
                   value={profile?.email || ''}
                   disabled
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-gray-400 cursor-not-allowed text-sm"
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-gray-500 cursor-not-allowed"
                 />
               </div>
 
               {/* Address with Autocomplete */}
               <div className="relative" ref={addressInputRef}>
-                <label className="block text-sm font-medium text-gray-400 mb-1">
-                  <MapPin className="w-4 h-4 inline mr-1" />
-                  Address
-                </label>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Address</label>
                 <div className="relative">
                   <input
                     type="text"
@@ -474,12 +473,12 @@ export default function ProfilePage() {
                     onChange={(e) => handleAddressChange(e.target.value)}
                     onFocus={() => address.length >= 2 && setShowAddressSuggestions(true)}
                     placeholder="Start typing your address"
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10 text-sm"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 pr-10 transition"
                   />
                   {isLoadingAddress ? (
                     <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
                   ) : (
-                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                    <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                   )}
                 </div>
                 
@@ -490,7 +489,7 @@ export default function ProfilePage() {
                       <button
                         key={suggestion.place_id}
                         onClick={() => selectAddress(suggestion)}
-                        className="w-full px-3 py-2 text-left text-white hover:bg-blue-600/30 transition flex items-center gap-2 border-b border-white/5 last:border-0"
+                        className="w-full px-4 py-2.5 text-left text-white hover:bg-blue-600/30 transition flex items-center gap-2 border-b border-white/5 last:border-0"
                       >
                         <MapPin className="w-4 h-4 text-blue-400 flex-shrink-0" />
                         <span className="text-sm">{suggestion.description}</span>
@@ -500,190 +499,192 @@ export default function ProfilePage() {
                 )}
               </div>
             </div>
+          </div>
+        </div>
 
-            {/* Right Column - Builder Details */}
-            <div className="space-y-3">
-              <h3 className="text-lg font-semibold text-white border-b border-white/10 pb-2">Business Details</h3>
-              
-              {/* Is Builder Toggle */}
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">
-                  <HardHat className="w-4 h-4 inline mr-1" />
-                  Are you a licensed builder?
-                </label>
-                <div 
-                  onClick={() => setIsBuilder(!isBuilder)}
-                  className={`relative inline-flex h-10 w-full cursor-pointer items-center rounded-lg border transition-colors ${
-                    isBuilder 
-                      ? 'bg-blue-600/20 border-blue-500' 
-                      : 'bg-white/5 border-white/10'
-                  }`}
-                >
-                  <div className="flex items-center justify-between w-full px-3">
-                    <span className={`text-sm ${isBuilder ? 'text-blue-400' : 'text-gray-400'}`}>
-                      {isBuilder ? 'Yes, I am a licensed builder' : 'No, I am not a builder'}
-                    </span>
-                    <div className={`w-10 h-5 rounded-full transition-colors relative ${
-                      isBuilder ? 'bg-blue-500' : 'bg-white/20'
-                    }`}>
-                      <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                        isBuilder ? 'translate-x-5' : 'translate-x-0.5'
-                      }`} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Company Name & ABN - Same Row when builder */}
-              {isBuilder ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      <Building2 className="w-4 h-4 inline mr-1" />
-                      Company Name
-                    </label>
-                    <input
-                      type="text"
-                      value={companyName}
-                      onChange={(e) => setCompanyName(e.target.value)}
-                      placeholder="Company name"
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      <FileText className="w-4 h-4 inline mr-1" />
-                      ABN / ACN
-                    </label>
-                    <input
-                      type="text"
-                      value={abnAcn}
-                      onChange={handleAbnAcnChange}
-                      placeholder="ABN or ACN"
-                      maxLength={14}
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
-                    />
-                  </div>
-                </div>
-              ) : (
+        {/* Right Column - Business Details & Account Info */}
+        <div className="lg:w-96 space-y-6">
+          {/* Builder Toggle Card */}
+          <div className="bg-white/5 rounded-xl p-6 border border-white/10">
+            <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+              <HardHat className="w-5 h-5 text-blue-400" />
+              Builder Status
+            </h3>
+            
+            <div 
+              onClick={() => setIsBuilder(!isBuilder)}
+              className={`relative cursor-pointer rounded-lg border p-4 transition-colors ${
+                isBuilder 
+                  ? 'bg-blue-600/20 border-blue-500/50' 
+                  : 'bg-white/5 border-white/10 hover:border-white/20'
+              }`}
+            >
+              <div className="flex items-center justify-between">
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">
-                    <Building2 className="w-4 h-4 inline mr-1" />
-                    Company Name <span className="text-gray-500 text-xs">(Optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
-                    placeholder="Company name"
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                  />
+                  <p className={`font-medium ${isBuilder ? 'text-blue-400' : 'text-gray-300'}`}>
+                    {isBuilder ? 'Licensed Builder' : 'Not a Builder'}
+                  </p>
+                  <p className="text-gray-500 text-sm mt-1">
+                    {isBuilder ? 'Your logo will appear on generated plans' : 'Toggle to add builder details'}
+                  </p>
                 </div>
-              )}
-
-              {/* Builder-specific fields */}
-              {isBuilder && (
-                <>
-                  {/* Builder Logo Upload - Compact */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                      <Upload className="w-4 h-4 inline mr-1" />
-                      Company Logo
-                    </label>
-                    
-                    {builderLogoUrl ? (
-                      <div className="flex items-center gap-3">
-                        <div className="w-16 h-16 bg-white/5 rounded-lg border border-white/10 overflow-hidden">
-                          <img 
-                            src={builderLogoUrl} 
-                            alt="Company Logo" 
-                            className="w-full h-full object-contain"
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <button
-                            onClick={() => fileInputRef.current?.click()}
-                            className="text-blue-400 hover:text-blue-300 text-sm transition"
-                          >
-                            Change Logo
-                          </button>
-                          <button
-                            onClick={removeLogo}
-                            className="text-red-400 hover:text-red-300 text-sm transition flex items-center gap-1"
-                          >
-                            <X className="w-4 h-4" /> Remove
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-white/20 rounded-lg cursor-pointer bg-white/5 hover:bg-white/10 transition"
-                      >
-                        <Upload className="w-6 h-6 text-gray-400 mb-1" />
-                        <span className="text-gray-300 text-sm">Click to upload</span>
-                        <span className="text-gray-500 text-xs">PNG, JPG (max 5MB)</span>
-                      </div>
-                    )}
-                    
-                    <input 
-                      ref={fileInputRef}
-                      type="file" 
-                      className="hidden" 
-                      accept="image/png,image/jpeg,image/jpg"
-                      onChange={handleLogoSelect}
-                    />
-                  </div>
-                </>
-              )}
-
-              {/* Account Info - More Compact */}
-              <div className="bg-white/5 rounded-lg p-3">
-                <h4 className="text-sm font-medium text-gray-400 mb-2">Account Information</h4>
-                <div className="grid grid-cols-4 gap-2 text-xs">
-                  <div>
-                    <p className="text-gray-500">Status</p>
-                    <p className={`font-medium ${profile?.is_active ? 'text-green-400' : 'text-red-400'}`}>
-                      {profile?.is_active ? 'Active' : 'Inactive'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Plan</p>
-                    <p className="text-white font-medium capitalize">{profile?.subscription_tier || 'Free'}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Member Since</p>
-                    <p className="text-white">{formatDate(profile?.created_at)}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Updated</p>
-                    <p className="text-white">{formatDate(profile?.updated_at)}</p>
-                  </div>
+                <div className={`w-12 h-6 rounded-full transition-colors relative ${
+                  isBuilder ? 'bg-blue-500' : 'bg-white/20'
+                }`}>
+                  <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                    isBuilder ? 'translate-x-7' : 'translate-x-1'
+                  }`} />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Save Button - Full Width - More Compact */}
-          <div className="mt-4 pt-4 border-t border-white/10">
-            <button
-              onClick={handleSave}
-              disabled={isSaving || isUploadingLogo}
-              className="w-full bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSaving || isUploadingLogo ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  {isUploadingLogo ? 'Uploading Logo...' : 'Saving...'}
-                </>
-              ) : (
-                <>
-                  <Save className="w-5 h-5" />
-                  Save Changes
-                </>
-              )}
-            </button>
+          {/* Business Details Card - Only show when builder */}
+          {isBuilder && (
+            <div className="bg-white/5 rounded-xl p-6 border border-white/10">
+              <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-blue-400" />
+                Business Details
+              </h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Company Name</label>
+                  <input
+                    type="text"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder="Company name"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">ABN / ACN</label>
+                  <input
+                    type="text"
+                    value={abnAcn}
+                    onChange={handleAbnAcnChange}
+                    placeholder="ABN or ACN"
+                    maxLength={14}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 font-mono transition"
+                  />
+                </div>
+
+                {/* Builder Logo Upload */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Company Logo</label>
+                  
+                  {builderLogoUrl ? (
+                    <div className="flex items-center gap-4 p-3 bg-white/5 rounded-lg border border-white/10">
+                      <div className="w-16 h-16 bg-white rounded-lg overflow-hidden flex-shrink-0">
+                        <img 
+                          src={builderLogoUrl} 
+                          alt="Company Logo" 
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          className="text-blue-400 hover:text-blue-300 text-sm transition"
+                        >
+                          Change Logo
+                        </button>
+                        <button
+                          onClick={removeLogo}
+                          className="text-red-400 hover:text-red-300 text-sm transition flex items-center gap-1"
+                        >
+                          <X className="w-3 h-3" /> Remove
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-white/20 rounded-lg cursor-pointer bg-white/5 hover:bg-white/10 hover:border-blue-500/50 transition"
+                    >
+                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                      <span className="text-gray-300 text-sm">Click to upload</span>
+                      <span className="text-gray-500 text-xs">PNG, JPG (max 5MB)</span>
+                    </div>
+                  )}
+                  
+                  <input 
+                    ref={fileInputRef}
+                    type="file" 
+                    className="hidden" 
+                    accept="image/png,image/jpeg,image/jpg"
+                    onChange={handleLogoSelect}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Company Name for non-builders */}
+          {!isBuilder && (
+            <div className="bg-white/5 rounded-xl p-6 border border-white/10">
+              <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-blue-400" />
+                Company <span className="text-gray-500 text-sm font-normal">(Optional)</span>
+              </h3>
+              <input
+                type="text"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="Company name"
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition"
+              />
+            </div>
+          )}
+
+          {/* Account Information Card */}
+          <div className="bg-white/5 rounded-xl p-6 border border-white/10">
+            <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+              <FileText className="w-5 h-5 text-blue-400" />
+              Account Information
+            </h3>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2 border-b border-white/5">
+                <span className="text-gray-400 text-sm">Status</span>
+                <span className={`text-sm font-medium ${profile?.is_active ? 'text-green-400' : 'text-red-400'}`}>
+                  {profile?.is_active ? '● Active' : '● Inactive'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-white/5">
+                <span className="text-gray-400 text-sm">Plan</span>
+                <span className="text-white text-sm font-medium capitalize">{profile?.subscription_tier || 'Free'}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-white/5">
+                <span className="text-gray-400 text-sm">Member Since</span>
+                <span className="text-white text-sm">{formatDate(profile?.created_at)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2">
+                <span className="text-gray-400 text-sm">Last Updated</span>
+                <span className="text-white text-sm">{formatDate(profile?.updated_at)}</span>
+              </div>
+            </div>
           </div>
+
+          {/* Save Button */}
+          <button
+            onClick={handleSave}
+            disabled={isSaving || isUploadingLogo}
+            className="w-full bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSaving || isUploadingLogo ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                {isUploadingLogo ? 'Uploading Logo...' : 'Saving...'}
+              </>
+            ) : (
+              <>
+                <Save className="w-5 h-5" />
+                Save Changes
+              </>
+            )}
+          </button>
         </div>
       </div>
     </div>
