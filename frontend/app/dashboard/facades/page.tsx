@@ -30,6 +30,7 @@ const FACADE_STYLES: Record<string, { name: string; icon: string; color: string;
   'traditional': { name: 'Traditional', icon: '🏛️', color: 'bg-amber-500/20 text-amber-400', description: 'Classic architectural elements' },
   'hamptons': { name: 'Hamptons', icon: '🏖️', color: 'bg-cyan-500/20 text-cyan-400', description: 'Coastal elegance' },
   'farmhouse': { name: 'Farmhouse', icon: '🏡', color: 'bg-green-500/20 text-green-400', description: 'Rustic charm' },
+  'minimalist': { name: 'Minimalist', icon: '◻️', color: 'bg-gray-500/20 text-gray-400', description: 'Simple and understated' },
 };
 
 interface Facade {
