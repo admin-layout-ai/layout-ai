@@ -15,6 +15,7 @@ import {
   Loader2,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
   MapPin,
   Bed,
   Bath,
@@ -45,6 +46,14 @@ interface FloorPlanWithProject extends FloorPlan {
   project?: Project;
 }
 
+interface ValidationItem {
+  code?: string;
+  message: string;
+  severity?: 'error' | 'warning';
+  room?: string;
+  details?: string;
+}
+
 interface LayoutData {
   rooms?: Array<{
     type: string;
@@ -60,6 +69,12 @@ interface LayoutData {
   building_envelope?: {
     width?: number;
     depth?: number;
+  };
+  errors?: ValidationItem[];
+  warnings?: ValidationItem[];
+  validation_results?: {
+    errors?: ValidationItem[];
+    warnings?: ValidationItem[];
   };
 }
 
@@ -320,36 +335,127 @@ export default function PlansPage() {
 
         {/* Main Content */}
         <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
-          {/* Floor Plan Image */}
-          <div className="flex-1 p-4 lg:p-6 flex items-center justify-center overflow-hidden">
-            {selectedPlan.preview_image_url ? (
-              <div className="bg-white rounded-xl shadow-xl h-full w-full flex items-center justify-center p-4">
-                <img
-                  src={selectedPlan.preview_image_url}
-                  alt="Floor Plan"
-                  className="max-h-full max-w-full object-contain transition-transform"
-                  style={{ transform: `scale(${scale})` }}
-                  onLoad={() => setImageLoaded(true)}
-                  onError={() => setImageError(true)}
-                />
+          {/* Left Section: Floor Plan (60%) + Errors Panel (40%) */}
+          <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+            {/* Floor Plan Image - Portrait orientation, trimmed whitespace */}
+            <div className="w-full lg:w-[60%] p-4 lg:p-6 flex items-center justify-center overflow-hidden">
+              {selectedPlan.preview_image_url ? (
+                <div className="bg-white rounded-xl shadow-xl flex items-center justify-center p-2 overflow-hidden" style={{ maxHeight: '100%', aspectRatio: '3/4' }}>
+                  <img
+                    src={selectedPlan.preview_image_url}
+                    alt="Floor Plan"
+                    className="h-full w-full object-contain transition-transform origin-center"
+                    style={{ transform: `scale(${scale}) rotate(90deg)` }}
+                    onLoad={() => setImageLoaded(true)}
+                    onError={() => setImageError(true)}
+                  />
+                  
+                  {!imageLoaded && !imageError && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
+                      <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-white/5 rounded-xl p-20 text-center">
+                  <Layers className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                  <p className="text-gray-400">No image available for this floor plan</p>
+                </div>
+              )}
+            </div>
+
+            {/* Errors & Warnings Panel - 40% */}
+            <div className="w-full lg:w-[40%] p-4 lg:p-6 lg:border-l border-white/10 overflow-y-auto">
+              <div className="space-y-4">
+                <h3 className="text-white font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-orange-400" />
+                  Validation Results
+                </h3>
                 
-                {!imageLoaded && !imageError && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
-                    <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+                {/* Errors Section */}
+                {(() => {
+                  const errors = layoutData?.errors || layoutData?.validation_results?.errors || [];
+                  const errorCount = errors.length || (selectedPlan.compliance_notes?.match(/Errors:\s*(\d+)/)?.[1] ? parseInt(selectedPlan.compliance_notes.match(/Errors:\s*(\d+)/)?.[1] || '0') : 0);
+                  
+                  return (
+                    <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/30">
+                      <div className="flex items-center gap-2 mb-3">
+                        <AlertCircle className="w-4 h-4 text-red-400" />
+                        <span className="text-red-400 font-medium">Errors ({errors.length > 0 ? errors.length : errorCount})</span>
+                      </div>
+                      {errors.length > 0 ? (
+                        <ul className="space-y-2">
+                          {errors.map((error, index) => (
+                            <li key={index} className="text-sm text-gray-300 flex items-start gap-2">
+                              <span className="text-red-400 mt-0.5">•</span>
+                              <div>
+                                <p>{error.message}</p>
+                                {error.room && <p className="text-gray-500 text-xs">Room: {error.room}</p>}
+                                {error.details && <p className="text-gray-500 text-xs">{error.details}</p>}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : errorCount > 0 ? (
+                        <p className="text-gray-400 text-sm">
+                          {errorCount} error{errorCount !== 1 ? 's' : ''} detected. Check layout_data for details.
+                        </p>
+                      ) : (
+                        <p className="text-gray-400 text-sm">No errors detected</p>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Warnings Section */}
+                {(() => {
+                  const warnings = layoutData?.warnings || layoutData?.validation_results?.warnings || [];
+                  const warningCount = warnings.length || (selectedPlan.compliance_notes?.match(/Warnings:\s*(\d+)/)?.[1] ? parseInt(selectedPlan.compliance_notes.match(/Warnings:\s*(\d+)/)?.[1] || '0') : 0);
+                  
+                  return (
+                    <div className="bg-yellow-500/10 rounded-xl p-4 border border-yellow-500/30">
+                      <div className="flex items-center gap-2 mb-3">
+                        <AlertTriangle className="w-4 h-4 text-yellow-400" />
+                        <span className="text-yellow-400 font-medium">Warnings ({warnings.length > 0 ? warnings.length : warningCount})</span>
+                      </div>
+                      {warnings.length > 0 ? (
+                        <ul className="space-y-2">
+                          {warnings.map((warning, index) => (
+                            <li key={index} className="text-sm text-gray-300 flex items-start gap-2">
+                              <span className="text-yellow-400 mt-0.5">•</span>
+                              <div>
+                                <p>{warning.message}</p>
+                                {warning.room && <p className="text-gray-500 text-xs">Room: {warning.room}</p>}
+                                {warning.details && <p className="text-gray-500 text-xs">{warning.details}</p>}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : warningCount > 0 ? (
+                        <p className="text-gray-400 text-sm">
+                          {warningCount} warning{warningCount !== 1 ? 's' : ''} detected. Check layout_data for details.
+                        </p>
+                      ) : (
+                        <p className="text-gray-400 text-sm">No warnings detected</p>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Compliance Summary */}
+                {selectedPlan.compliance_notes && (
+                  <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                    <h4 className="text-white font-medium text-sm mb-2">Compliance Notes</h4>
+                    <p className="text-gray-400 text-sm">{selectedPlan.compliance_notes}</p>
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="bg-white/5 rounded-xl p-20 text-center">
-                <Layers className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                <p className="text-gray-400">No image available for this floor plan</p>
-              </div>
-            )}
+            </div>
           </div>
 
-          {/* Details Sidebar */}
+          {/* Details Sidebar - Fixed width */}
           {showDetails && (
-            <div className="lg:w-96 p-4 lg:p-6 lg:border-l border-white/10 overflow-y-auto">
+            <div className="lg:w-80 p-4 lg:p-6 lg:border-l border-white/10 overflow-y-auto bg-slate-900/50">
               <div className="space-y-6">
                 {/* Variant Info */}
                 <div className="bg-white/5 rounded-xl p-4 border border-white/10">
