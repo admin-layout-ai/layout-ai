@@ -46,12 +46,45 @@ interface FloorPlanWithProject extends FloorPlan {
   project?: Project;
 }
 
-interface ValidationItem {
-  code?: string;
-  message: string;
-  severity?: 'error' | 'warning';
-  room?: string;
-  details?: string;
+interface ValidationSummary {
+  total_errors?: number;
+  total_warnings?: number;
+  layout_valid?: boolean;
+  dimensions_valid?: boolean;
+  coverage_percent?: number;
+  council_compliant?: boolean;
+  ncc_compliant?: boolean;
+  bedroom_count?: number;
+  bathroom_count?: number;
+  is_tile_layout?: boolean;
+  building_envelope?: {
+    width: number;
+    depth: number;
+    area: number;
+  };
+}
+
+interface ValidationData {
+  overall_compliant?: boolean;
+  all_errors?: string[];
+  all_warnings?: string[];
+  summary?: ValidationSummary;
+  council_validation?: {
+    valid: boolean;
+    errors: string[];
+    warnings: string[];
+    council?: string;
+  };
+  ncc_validation?: {
+    compliant: boolean;
+    errors: string[];
+    warnings: string[];
+  };
+  layout_validation?: {
+    valid: boolean;
+    errors: string[];
+    warnings: string[];
+  };
 }
 
 interface LayoutData {
@@ -70,12 +103,7 @@ interface LayoutData {
     width?: number;
     depth?: number;
   };
-  errors?: ValidationItem[];
-  warnings?: ValidationItem[];
-  validation_results?: {
-    errors?: ValidationItem[];
-    warnings?: ValidationItem[];
-  };
+  validation?: ValidationData;
 }
 
 export default function PlansPage() {
@@ -374,32 +402,35 @@ export default function PlansPage() {
                 
                 {/* Errors Section */}
                 {(() => {
-                  const errors = layoutData?.errors || layoutData?.validation_results?.errors || [];
-                  const errorCount = errors.length || (selectedPlan.compliance_notes?.match(/Errors:\s*(\d+)/)?.[1] ? parseInt(selectedPlan.compliance_notes.match(/Errors:\s*(\d+)/)?.[1] || '0') : 0);
+                  const errors = layoutData?.validation?.all_errors || [];
                   
                   return (
                     <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/30">
                       <div className="flex items-center gap-2 mb-3">
                         <AlertCircle className="w-4 h-4 text-red-400" />
-                        <span className="text-red-400 font-medium">Errors ({errors.length > 0 ? errors.length : errorCount})</span>
+                        <span className="text-red-400 font-medium">Errors ({errors.length})</span>
                       </div>
                       {errors.length > 0 ? (
                         <ul className="space-y-2">
-                          {errors.map((error, index) => (
-                            <li key={index} className="text-sm text-gray-300 flex items-start gap-2">
-                              <span className="text-red-400 mt-0.5">•</span>
-                              <div>
-                                <p>{error.message}</p>
-                                {error.room && <p className="text-gray-500 text-xs">Room: {error.room}</p>}
-                                {error.details && <p className="text-gray-500 text-xs">{error.details}</p>}
-                              </div>
-                            </li>
-                          ))}
+                          {errors.map((error, index) => {
+                            // Parse category from error message (e.g., "Council: ..." or "NCC: ...")
+                            const [category, ...messageParts] = error.split(': ');
+                            const message = messageParts.join(': ') || category;
+                            const hasCategory = messageParts.length > 0;
+                            
+                            return (
+                              <li key={index} className="text-sm text-gray-300 flex items-start gap-2">
+                                <span className="text-red-400 mt-0.5">•</span>
+                                <div>
+                                  {hasCategory && (
+                                    <span className="text-red-400/70 text-xs font-medium">[{category}]</span>
+                                  )}
+                                  <p className={hasCategory ? 'mt-0.5' : ''}>{message}</p>
+                                </div>
+                              </li>
+                            );
+                          })}
                         </ul>
-                      ) : errorCount > 0 ? (
-                        <p className="text-gray-400 text-sm">
-                          {errorCount} error{errorCount !== 1 ? 's' : ''} detected. Check layout_data for details.
-                        </p>
                       ) : (
                         <p className="text-gray-400 text-sm">No errors detected</p>
                       )}
@@ -409,32 +440,35 @@ export default function PlansPage() {
 
                 {/* Warnings Section */}
                 {(() => {
-                  const warnings = layoutData?.warnings || layoutData?.validation_results?.warnings || [];
-                  const warningCount = warnings.length || (selectedPlan.compliance_notes?.match(/Warnings:\s*(\d+)/)?.[1] ? parseInt(selectedPlan.compliance_notes.match(/Warnings:\s*(\d+)/)?.[1] || '0') : 0);
+                  const warnings = layoutData?.validation?.all_warnings || [];
                   
                   return (
                     <div className="bg-yellow-500/10 rounded-xl p-4 border border-yellow-500/30">
                       <div className="flex items-center gap-2 mb-3">
                         <AlertTriangle className="w-4 h-4 text-yellow-400" />
-                        <span className="text-yellow-400 font-medium">Warnings ({warnings.length > 0 ? warnings.length : warningCount})</span>
+                        <span className="text-yellow-400 font-medium">Warnings ({warnings.length})</span>
                       </div>
                       {warnings.length > 0 ? (
                         <ul className="space-y-2">
-                          {warnings.map((warning, index) => (
-                            <li key={index} className="text-sm text-gray-300 flex items-start gap-2">
-                              <span className="text-yellow-400 mt-0.5">•</span>
-                              <div>
-                                <p>{warning.message}</p>
-                                {warning.room && <p className="text-gray-500 text-xs">Room: {warning.room}</p>}
-                                {warning.details && <p className="text-gray-500 text-xs">{warning.details}</p>}
-                              </div>
-                            </li>
-                          ))}
+                          {warnings.map((warning, index) => {
+                            // Parse category from warning message
+                            const [category, ...messageParts] = warning.split(': ');
+                            const message = messageParts.join(': ') || category;
+                            const hasCategory = messageParts.length > 0;
+                            
+                            return (
+                              <li key={index} className="text-sm text-gray-300 flex items-start gap-2">
+                                <span className="text-yellow-400 mt-0.5">•</span>
+                                <div>
+                                  {hasCategory && (
+                                    <span className="text-yellow-400/70 text-xs font-medium">[{category}]</span>
+                                  )}
+                                  <p className={hasCategory ? 'mt-0.5' : ''}>{message}</p>
+                                </div>
+                              </li>
+                            );
+                          })}
                         </ul>
-                      ) : warningCount > 0 ? (
-                        <p className="text-gray-400 text-sm">
-                          {warningCount} warning{warningCount !== 1 ? 's' : ''} detected. Check layout_data for details.
-                        </p>
                       ) : (
                         <p className="text-gray-400 text-sm">No warnings detected</p>
                       )}
@@ -442,11 +476,34 @@ export default function PlansPage() {
                   );
                 })()}
 
-                {/* Compliance Summary */}
-                {selectedPlan.compliance_notes && (
+                {/* Validation Summary */}
+                {layoutData?.validation?.summary && (
                   <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-                    <h4 className="text-white font-medium text-sm mb-2">Compliance Notes</h4>
-                    <p className="text-gray-400 text-sm">{selectedPlan.compliance_notes}</p>
+                    <h4 className="text-white font-medium text-sm mb-3">Validation Summary</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Council Compliant</span>
+                        <span className={layoutData.validation.summary.council_compliant ? 'text-green-400' : 'text-red-400'}>
+                          {layoutData.validation.summary.council_compliant ? 'Yes' : 'No'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">NCC Compliant</span>
+                        <span className={layoutData.validation.summary.ncc_compliant ? 'text-green-400' : 'text-red-400'}>
+                          {layoutData.validation.summary.ncc_compliant ? 'Yes' : 'No'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Layout Valid</span>
+                        <span className={layoutData.validation.summary.layout_valid ? 'text-green-400' : 'text-red-400'}>
+                          {layoutData.validation.summary.layout_valid ? 'Yes' : 'No'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Coverage</span>
+                        <span className="text-white">{layoutData.validation.summary.coverage_percent}%</span>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
