@@ -435,13 +435,26 @@ export default function PlansPage() {
                             const hasCategory = messageParts.length > 0;
                             
                             return (
-                              <li key={index} className="text-sm text-gray-300 flex items-start gap-2">
-                                <span className="text-red-400 mt-0.5">•</span>
-                                <div>
+                              <li 
+                                key={index} 
+                                className="text-sm text-gray-300 flex items-start gap-2 group/item cursor-pointer relative"
+                                onClick={() => {
+                                  // TODO: Implement fix action
+                                  console.log('Fix error:', error);
+                                }}
+                              >
+                                <span className="text-red-400 mt-0.5 group-hover/item:opacity-30 transition-all">•</span>
+                                <div className="flex-1 group-hover/item:blur-[2px] transition-all">
                                   {hasCategory && (
                                     <span className="text-red-400/70 text-xs font-medium">[{category}]</span>
                                   )}
                                   <p className={hasCategory ? 'mt-0.5' : ''}>{message}</p>
+                                </div>
+                                {/* Fix it overlay */}
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity">
+                                  <span className="bg-red-500 text-white px-3 py-1 rounded-lg text-sm font-medium shadow-lg">
+                                    Fix it
+                                  </span>
                                 </div>
                               </li>
                             );
@@ -473,13 +486,26 @@ export default function PlansPage() {
                             const hasCategory = messageParts.length > 0;
                             
                             return (
-                              <li key={index} className="text-sm text-gray-300 flex items-start gap-2">
-                                <span className="text-yellow-400 mt-0.5">•</span>
-                                <div>
+                              <li 
+                                key={index} 
+                                className="text-sm text-gray-300 flex items-start gap-2 group/item cursor-pointer relative"
+                                onClick={() => {
+                                  // TODO: Implement fix action
+                                  console.log('Fix warning:', warning);
+                                }}
+                              >
+                                <span className="text-yellow-400 mt-0.5 group-hover/item:opacity-30 transition-all">•</span>
+                                <div className="flex-1 group-hover/item:blur-[2px] transition-all">
                                   {hasCategory && (
                                     <span className="text-yellow-400/70 text-xs font-medium">[{category}]</span>
                                   )}
                                   <p className={hasCategory ? 'mt-0.5' : ''}>{message}</p>
+                                </div>
+                                {/* Fix it overlay */}
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity">
+                                  <span className="bg-yellow-500 text-white px-3 py-1 rounded-lg text-sm font-medium shadow-lg">
+                                    Fix it
+                                  </span>
                                 </div>
                               </li>
                             );
