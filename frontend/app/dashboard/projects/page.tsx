@@ -519,21 +519,21 @@ export default function ProjectsPage() {
     // Error state for detail view
     if (error && !project) {
       return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-4 sm:p-6">
           <button 
             onClick={() => router.push('/dashboard/projects')}
-            className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition"
+            className="flex items-center gap-2 text-gray-400 hover:text-white mb-4 sm:mb-6 transition text-sm"
           >
-            <ArrowLeft className="w-5 h-5" /> Back to Projects
+            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" /> Back to Projects
           </button>
           
-          <div className="bg-red-500/20 border border-red-500/30 rounded-xl p-6 text-center">
-            <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-white mb-2">Project Not Found</h2>
-            <p className="text-gray-400 mb-4">{error || 'The project you\'re looking for doesn\'t exist.'}</p>
+          <div className="bg-red-500/20 border border-red-500/30 rounded-xl p-4 sm:p-6 text-center">
+            <AlertCircle className="w-10 h-10 sm:w-12 sm:h-12 text-red-400 mx-auto mb-3 sm:mb-4" />
+            <h2 className="text-lg sm:text-xl font-semibold text-white mb-2">Project Not Found</h2>
+            <p className="text-gray-400 mb-4 text-sm">{error || 'The project you\'re looking for doesn\'t exist.'}</p>
             <button
               onClick={() => router.push('/dashboard/projects')}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
+              className="bg-blue-600 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-blue-700 transition text-sm"
             >
               Back to Projects
             </button>
@@ -545,25 +545,25 @@ export default function ProjectsPage() {
     if (!project) return null;
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-4 sm:p-6">
         {/* Header - REMOVED Edit/Delete buttons */}
-        <div className="mb-6">
+        <div className="mb-4 sm:mb-6">
           <button 
             onClick={() => router.push('/dashboard/projects')}
-            className="flex items-center gap-2 text-gray-400 hover:text-white mb-4 transition"
+            className="flex items-center gap-2 text-gray-400 hover:text-white mb-3 sm:mb-4 transition text-sm"
           >
-            <ArrowLeft className="w-5 h-5" /> Back to Projects
+            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" /> Back to Projects
           </button>
           
-          <div className="flex items-start justify-between flex-wrap gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <h1 className="text-2xl font-bold text-white">{project.name}</h1>
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                <h1 className="text-xl sm:text-2xl font-bold text-white truncate">{project.name}</h1>
                 {getStatusBadge(project.status, 'md')}
               </div>
-              <p className="text-gray-400 flex items-center gap-2">
-                <MapPin className="w-4 h-4" />
-                {project.suburb}, {project.state} {project.postcode}
+              <p className="text-gray-400 flex items-center gap-2 text-sm flex-wrap">
+                <MapPin className="w-4 h-4 flex-shrink-0" />
+                <span>{project.suburb}, {project.state} {project.postcode}</span>
                 {project.council && <span className="text-gray-500">• {project.council}</span>}
               </p>
             </div>
@@ -575,62 +575,62 @@ export default function ProjectsPage() {
 
         {/* Error message */}
         {error && (
-          <div className="mb-6 bg-red-500/20 border border-red-500/30 rounded-xl p-4 text-red-400 flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            <span>{error}</span>
-            <button onClick={() => setError(null)} className="ml-auto">
+          <div className="mb-4 sm:mb-6 bg-red-500/20 border border-red-500/30 rounded-xl p-3 sm:p-4 text-red-400 flex items-center gap-2 sm:gap-3 text-sm">
+            <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+            <span className="flex-1">{error}</span>
+            <button onClick={() => setError(null)} className="ml-auto flex-shrink-0">
               <X className="w-4 h-4" />
             </button>
           </div>
         )}
 
-        <div className="grid lg:grid-cols-3 gap-6">
+        <div className="grid lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             {/* Location Details */}
-            <div className="bg-white/5 rounded-xl p-6 border border-white/10">
-              <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-blue-400" />
+            <div className="bg-white/5 rounded-xl p-4 sm:p-6 border border-white/10">
+              <h2 className="text-base sm:text-lg font-semibold text-white mb-3 sm:mb-4 flex items-center gap-2">
+                <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
                 Location
               </h2>
-              <div className="grid sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
                 {project.street_address && (
-                  <div>
-                    <p className="text-gray-500 text-sm">Street Address</p>
-                    <p className="text-white">{project.street_address}</p>
+                  <div className="col-span-2 sm:col-span-1">
+                    <p className="text-gray-500 text-xs sm:text-sm">Street Address</p>
+                    <p className="text-white text-sm sm:text-base">{project.street_address}</p>
                   </div>
                 )}
                 {project.suburb && (
                   <div>
-                    <p className="text-gray-500 text-sm">Suburb</p>
-                    <p className="text-white">{project.suburb}</p>
+                    <p className="text-gray-500 text-xs sm:text-sm">Suburb</p>
+                    <p className="text-white text-sm sm:text-base">{project.suburb}</p>
                   </div>
                 )}
                 <div>
-                  <p className="text-gray-500 text-sm">State</p>
-                  <p className="text-white">{project.state}</p>
+                  <p className="text-gray-500 text-xs sm:text-sm">State</p>
+                  <p className="text-white text-sm sm:text-base">{project.state}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500 text-sm">Postcode</p>
-                  <p className="text-white">{project.postcode}</p>
+                  <p className="text-gray-500 text-xs sm:text-sm">Postcode</p>
+                  <p className="text-white text-sm sm:text-base">{project.postcode}</p>
                 </div>
                 {project.council && (
-                  <div className="sm:col-span-2">
-                    <p className="text-gray-500 text-sm">Council</p>
-                    <p className="text-white">{project.council}</p>
+                  <div className="col-span-2">
+                    <p className="text-gray-500 text-xs sm:text-sm">Council</p>
+                    <p className="text-white text-sm sm:text-base">{project.council}</p>
                   </div>
                 )}
                 {project.lot_dp && (
                   <div>
-                    <p className="text-gray-500 text-sm">Lot/DP</p>
-                    <p className="text-white">{project.lot_dp}</p>
+                    <p className="text-gray-500 text-xs sm:text-sm">Lot/DP</p>
+                    <p className="text-white text-sm sm:text-base">{project.lot_dp}</p>
                   </div>
                 )}
               </div>
             </div>
 
             {/* Land & Building Details */}
-            <div className="grid sm:grid-cols-2 gap-6">
+            <div className="grid sm:grid-cols-2 gap-4 sm:gap-6">
               {/* Land Details */}
               <div className="bg-white/5 rounded-xl p-6 border border-white/10">
                 <div className="flex items-center justify-between mb-4">
@@ -1124,22 +1124,22 @@ export default function ProjectsPage() {
 
   // ==================== LIST VIEW ====================
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-4 sm:p-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <FolderOpen className="w-7 h-7 text-blue-400" />
+          <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2 sm:gap-3">
+            <FolderOpen className="w-6 h-6 sm:w-7 sm:h-7 text-blue-400" />
             Projects
           </h1>
-          <p className="text-gray-400 mt-1">
+          <p className="text-gray-400 mt-1 text-sm">
             Manage your floor plan projects
           </p>
         </div>
         
         <button
           onClick={() => router.push('/dashboard/projects/new')}
-          className="bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition flex items-center gap-2 whitespace-nowrap"
+          className="bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition flex items-center gap-2 whitespace-nowrap text-sm sm:text-base w-full sm:w-auto justify-center"
         >
           <Plus className="w-5 h-5" />
           New Project
@@ -1147,61 +1147,63 @@ export default function ProjectsPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white/5 rounded-xl p-4 mb-6 border border-white/10">
-        <div className="flex flex-col sm:flex-row gap-4">
+      <div className="bg-white/5 rounded-xl p-3 sm:p-4 mb-4 sm:mb-6 border border-white/10">
+        <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-500" />
             <input
               type="text"
               placeholder="Search projects..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              className="w-full pl-9 sm:pl-10 pr-4 py-2 sm:py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
             />
           </div>
           
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as ProjectStatus)}
-            className="px-4 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-          >
-            <option value="all" className="bg-slate-800">All Status</option>
-            <option value="draft" className="bg-slate-800">Draft</option>
-            <option value="generating" className="bg-slate-800">Generating</option>
-            <option value="generated" className="bg-slate-800">Generated</option>
-            <option value="error" className="bg-slate-800">Error</option>
-          </select>
-          
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortOption)}
-            className="px-4 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-          >
-            <option value="newest" className="bg-slate-800">Newest First</option>
-            <option value="oldest" className="bg-slate-800">Oldest First</option>
-            <option value="name" className="bg-slate-800">Name A-Z</option>
-            <option value="status" className="bg-slate-800">By Status</option>
-          </select>
+          <div className="flex gap-2 sm:gap-4">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as ProjectStatus)}
+              className="flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 text-sm"
+            >
+              <option value="all" className="bg-slate-800">All Status</option>
+              <option value="draft" className="bg-slate-800">Draft</option>
+              <option value="generating" className="bg-slate-800">Generating</option>
+              <option value="generated" className="bg-slate-800">Generated</option>
+              <option value="error" className="bg-slate-800">Error</option>
+            </select>
+            
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortOption)}
+              className="flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 text-sm"
+            >
+              <option value="newest" className="bg-slate-800">Newest</option>
+              <option value="oldest" className="bg-slate-800">Oldest</option>
+              <option value="name" className="bg-slate-800">Name A-Z</option>
+              <option value="status" className="bg-slate-800">By Status</option>
+            </select>
+          </div>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-          <p className="text-gray-400 text-sm">Total Projects</p>
-          <p className="text-2xl font-bold text-white">{stats.total}</p>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-6">
+        <div className="bg-white/5 rounded-xl p-3 sm:p-4 border border-white/10">
+          <p className="text-gray-400 text-xs sm:text-sm">Total Projects</p>
+          <p className="text-xl sm:text-2xl font-bold text-white">{stats.total}</p>
         </div>
-        <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-          <p className="text-gray-400 text-sm">Generated</p>
-          <p className="text-2xl font-bold text-green-400">{stats.generated}</p>
+        <div className="bg-white/5 rounded-xl p-3 sm:p-4 border border-white/10">
+          <p className="text-gray-400 text-xs sm:text-sm">Generated</p>
+          <p className="text-xl sm:text-2xl font-bold text-green-400">{stats.generated}</p>
         </div>
-        <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-          <p className="text-gray-400 text-sm">Draft</p>
-          <p className="text-2xl font-bold text-yellow-400">{stats.draft}</p>
+        <div className="bg-white/5 rounded-xl p-3 sm:p-4 border border-white/10">
+          <p className="text-gray-400 text-xs sm:text-sm">Draft</p>
+          <p className="text-xl sm:text-2xl font-bold text-yellow-400">{stats.draft}</p>
         </div>
-        <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-          <p className="text-gray-400 text-sm">Showing</p>
-          <p className="text-2xl font-bold text-blue-400">{filteredProjects.length}</p>
+        <div className="bg-white/5 rounded-xl p-3 sm:p-4 border border-white/10">
+          <p className="text-gray-400 text-xs sm:text-sm">Showing</p>
+          <p className="text-xl sm:text-2xl font-bold text-blue-400">{filteredProjects.length}</p>
         </div>
       </div>
 

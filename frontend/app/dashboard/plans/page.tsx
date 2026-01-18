@@ -297,20 +297,20 @@ export default function PlansPage() {
     const variant = VARIANT_INFO[selectedPlan.variant_number || 1] || VARIANT_INFO[1];
     
     return (
-      <div className="h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 overflow-hidden flex flex-col">
+      <div className="min-h-screen lg:h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 overflow-auto lg:overflow-hidden flex flex-col">
         {/* Header */}
         <div className="bg-slate-800/50 border-b border-white/10 z-10 backdrop-blur-sm flex-shrink-0">
-          <div className="p-4 flex items-center justify-between">
-            <div className="flex items-center gap-4">
+          <div className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-3 sm:gap-4">
               <button 
                 onClick={handleBackToGallery}
-                className="flex items-center gap-2 text-gray-400 hover:text-white transition"
+                className="flex items-center gap-2 text-gray-400 hover:text-white transition flex-shrink-0"
               >
-                <ArrowLeft className="w-5 h-5" />
+                <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
-              <div>
-                <h1 className="text-lg font-semibold text-white">{selectedPlan.project?.name || 'Floor Plan'}</h1>
-                <div className="flex items-center gap-3 text-sm">
+              <div className="min-w-0">
+                <h1 className="text-base sm:text-lg font-semibold text-white truncate">{selectedPlan.project?.name || 'Floor Plan'}</h1>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm">
                   <span className="text-gray-400 flex items-center gap-1">
                     <MapPin className="w-3 h-3" />
                     {selectedPlan.project?.suburb}, {selectedPlan.project?.state}
@@ -322,7 +322,7 @@ export default function PlansPage() {
               </div>
             </div>
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 justify-end">
               {/* Zoom Controls */}
               <div className="hidden sm:flex items-center gap-1 bg-white/5 rounded-lg p-1">
                 <button
@@ -363,14 +363,14 @@ export default function PlansPage() {
                 <button
                   onClick={() => handleDownload(selectedPlan)}
                   disabled={downloading}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+                  className="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2 text-sm"
                 >
                   {downloading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <Download className="w-4 h-4" />
                   )}
-                  Download
+                  <span className="hidden sm:inline">Download</span>
                 </button>
               )}
             </div>
@@ -378,13 +378,13 @@ export default function PlansPage() {
         </div>
 
         {/* Main Content */}
-        <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
+        <div className="flex flex-col lg:flex-row flex-1 overflow-auto lg:overflow-hidden">
           {/* Left Section: Floor Plan (60%) + Errors Panel (40%) */}
-          <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+          <div className="flex-1 flex flex-col lg:flex-row overflow-visible lg:overflow-hidden">
             {/* Floor Plan Image - Portrait orientation, trimmed whitespace */}
-            <div className="w-full lg:w-[60%] p-4 lg:p-6 flex items-center justify-center overflow-hidden">
+            <div className="w-full lg:w-[60%] p-3 sm:p-4 lg:p-6 flex items-center justify-center overflow-visible lg:overflow-hidden min-h-[300px] sm:min-h-[400px]">
               {selectedPlan.preview_image_url ? (
-                <div className="bg-white rounded-xl shadow-xl flex items-center justify-center p-2 overflow-hidden h-full">
+                <div className="bg-white rounded-xl shadow-xl flex items-center justify-center p-2 overflow-hidden h-full w-full">
                   <img
                     src={selectedPlan.preview_image_url}
                     alt="Floor Plan"
@@ -401,18 +401,18 @@ export default function PlansPage() {
                   )}
                 </div>
               ) : (
-                <div className="bg-white/5 rounded-xl p-20 text-center">
-                  <Layers className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                  <p className="text-gray-400">No image available for this floor plan</p>
+                <div className="bg-white/5 rounded-xl p-10 sm:p-20 text-center">
+                  <Layers className="w-12 h-12 sm:w-16 sm:h-16 text-gray-600 mx-auto mb-4" />
+                  <p className="text-gray-400 text-sm">No image available for this floor plan</p>
                 </div>
               )}
             </div>
 
             {/* Errors & Warnings Panel - 40% */}
-            <div className="w-full lg:w-[40%] p-4 lg:p-6 lg:border-l border-white/10 overflow-y-auto">
+            <div className="w-full lg:w-[40%] p-3 sm:p-4 lg:p-6 border-t lg:border-t-0 lg:border-l border-white/10 overflow-y-auto">
               <div className="space-y-4">
-                <h3 className="text-white font-semibold flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5 text-orange-400" />
+                <h3 className="text-white font-semibold flex items-center gap-2 text-sm sm:text-base">
+                  <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400" />
                   Validation Results
                 </h3>
                 
@@ -664,76 +664,78 @@ export default function PlansPage() {
   // GALLERY VIEW - List of all plans (/dashboard/plans)
   // =========================================================================
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-4 sm:p-6">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-          <Layers className="w-7 h-7 text-blue-400" />
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2 sm:gap-3">
+          <Layers className="w-6 h-6 sm:w-7 sm:h-7 text-blue-400" />
           Generated Floor Plans
         </h1>
-        <p className="text-gray-400 mt-1">
+        <p className="text-gray-400 mt-1 text-sm">
           View and download all your AI-generated floor plans
         </p>
       </div>
 
       {/* Filters */}
-      <div className="bg-white/5 rounded-xl p-4 mb-6 border border-white/10">
-        <div className="flex flex-col sm:flex-row gap-4">
+      <div className="bg-white/5 rounded-xl p-3 sm:p-4 mb-4 sm:mb-6 border border-white/10">
+        <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
           {/* Search */}
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-500" />
             <input
               type="text"
               placeholder="Search by project name, location..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              className="w-full pl-9 sm:pl-10 pr-4 py-2 sm:py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm"
             />
           </div>
           
-          {/* Project Filter */}
-          <select
-            value={selectedProjectFilter}
-            onChange={(e) => setSelectedProjectFilter(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-            className="px-4 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-          >
-            <option value="all" className="bg-slate-800">All Projects</option>
-            {projects.filter(p => p.status === 'generated').map(project => (
-              <option key={project.id} value={project.id} className="bg-slate-800">{project.name}</option>
-            ))}
-          </select>
-          
-          {/* Variant Filter */}
-          <select
-            value={selectedVariantFilter}
-            onChange={(e) => setSelectedVariantFilter(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-            className="px-4 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500"
-          >
-            <option value="all" className="bg-slate-800">All Variants</option>
-            <option value={1} className="bg-slate-800">⚡ Optimal Layout</option>
-            <option value={2} className="bg-slate-800">🏠 Spacious Living</option>
-            <option value={3} className="bg-slate-800">👑 Master Retreat</option>
-          </select>
+          <div className="flex gap-2 sm:gap-4">
+            {/* Project Filter */}
+            <select
+              value={selectedProjectFilter}
+              onChange={(e) => setSelectedProjectFilter(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+              className="flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 text-sm"
+            >
+              <option value="all" className="bg-slate-800">All Projects</option>
+              {projects.filter(p => p.status === 'generated').map(project => (
+                <option key={project.id} value={project.id} className="bg-slate-800">{project.name}</option>
+              ))}
+            </select>
+            
+            {/* Variant Filter */}
+            <select
+              value={selectedVariantFilter}
+              onChange={(e) => setSelectedVariantFilter(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+              className="flex-1 sm:flex-none px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-blue-500 text-sm"
+            >
+              <option value="all" className="bg-slate-800">All Variants</option>
+              <option value={1} className="bg-slate-800">⚡ Optimal</option>
+              <option value={2} className="bg-slate-800">🏠 Spacious</option>
+              <option value={3} className="bg-slate-800">👑 Master</option>
+            </select>
+          </div>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-          <p className="text-gray-400 text-sm">Total Plans</p>
-          <p className="text-2xl font-bold text-white">{plans.length}</p>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-6">
+        <div className="bg-white/5 rounded-xl p-3 sm:p-4 border border-white/10">
+          <p className="text-gray-400 text-xs sm:text-sm">Total Plans</p>
+          <p className="text-xl sm:text-2xl font-bold text-white">{plans.length}</p>
         </div>
-        <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-          <p className="text-gray-400 text-sm">Projects</p>
-          <p className="text-2xl font-bold text-white">{projects.filter(p => p.status === 'generated').length}</p>
+        <div className="bg-white/5 rounded-xl p-3 sm:p-4 border border-white/10">
+          <p className="text-gray-400 text-xs sm:text-sm">Projects</p>
+          <p className="text-xl sm:text-2xl font-bold text-white">{projects.filter(p => p.status === 'generated').length}</p>
         </div>
-        <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-          <p className="text-gray-400 text-sm">Compliant</p>
-          <p className="text-2xl font-bold text-green-400">{plans.filter(p => p.is_compliant).length}</p>
+        <div className="bg-white/5 rounded-xl p-3 sm:p-4 border border-white/10">
+          <p className="text-gray-400 text-xs sm:text-sm">Compliant</p>
+          <p className="text-xl sm:text-2xl font-bold text-green-400">{plans.filter(p => p.is_compliant).length}</p>
         </div>
-        <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-          <p className="text-gray-400 text-sm">Showing</p>
-          <p className="text-2xl font-bold text-blue-400">{filteredPlans.length}</p>
+        <div className="bg-white/5 rounded-xl p-3 sm:p-4 border border-white/10">
+          <p className="text-gray-400 text-xs sm:text-sm">Showing</p>
+          <p className="text-xl sm:text-2xl font-bold text-blue-400">{filteredPlans.length}</p>
         </div>
       </div>
 
@@ -778,7 +780,7 @@ export default function PlansPage() {
 
       {/* Plans Grid */}
       {!isLoading && !error && filteredPlans.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 sm:gap-4">
           {filteredPlans.map((plan) => {
             const variant = VARIANT_INFO[plan.variant_number || 1] || VARIANT_INFO[1];
             

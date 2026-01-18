@@ -357,57 +357,57 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-4 sm:p-6">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-          <UserIcon className="w-7 h-7 text-blue-400" />
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2 sm:gap-3">
+          <UserIcon className="w-6 h-6 sm:w-7 sm:h-7 text-blue-400" />
           User Profile
         </h1>
-        <p className="text-gray-400 mt-1">
+        <p className="text-gray-400 mt-1 text-sm">
           Manage your personal and business information
         </p>
       </div>
 
       {/* Success Message */}
       {success && (
-        <div className="mb-6 bg-green-500/20 border border-green-500/30 rounded-xl p-4 flex items-center gap-3">
-          <Check className="w-5 h-5 text-green-400" />
-          <span className="text-green-400">{success}</span>
+        <div className="mb-4 sm:mb-6 bg-green-500/20 border border-green-500/30 rounded-xl p-3 sm:p-4 flex items-center gap-2 sm:gap-3">
+          <Check className="w-4 h-4 sm:w-5 sm:h-5 text-green-400 flex-shrink-0" />
+          <span className="text-green-400 text-sm">{success}</span>
         </div>
       )}
 
       {/* Error Message */}
       {error && (
-        <div className="mb-6 bg-red-500/20 border border-red-500/30 rounded-xl p-4 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-red-400" />
-          <span className="text-red-400">{error}</span>
+        <div className="mb-4 sm:mb-6 bg-red-500/20 border border-red-500/30 rounded-xl p-3 sm:p-4 flex items-center gap-2 sm:gap-3">
+          <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-400 flex-shrink-0" />
+          <span className="text-red-400 text-sm">{error}</span>
         </div>
       )}
 
       {/* Main Content - Two Column Layout */}
-      <div className="flex flex-col lg:flex-row gap-6">
+      <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
         {/* Left Column - Profile Info, Personal Details & Account Info */}
-        <div className="flex-1 space-y-6">
+        <div className="flex-1 space-y-4 sm:space-y-6">
           {/* Profile Card */}
-          <div className="bg-white/5 rounded-xl p-6 border border-white/10">
-            <div className="flex items-center gap-4">
-              <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center overflow-hidden border-2 border-blue-500/30 p-1">
+          <div className="bg-white/5 rounded-xl p-4 sm:p-6 border border-white/10">
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-full flex items-center justify-center overflow-hidden border-2 border-blue-500/30 p-1 flex-shrink-0">
                 {builderLogoUrl && isBuilder ? (
                   <img src={builderLogoUrl} alt="Logo" className="w-full h-full object-contain" />
                 ) : (
-                  <UserIcon className="w-10 h-10 text-blue-400" />
+                  <UserIcon className="w-8 h-8 sm:w-10 sm:h-10 text-blue-400" />
                 )}
               </div>
-              <div className="flex-1">
-                <h2 className="text-xl font-semibold text-white">{profile?.full_name || 'User'}</h2>
-                <p className="text-gray-400">{profile?.email}</p>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${getSubscriptionBadge(profile?.subscription_tier || 'free')}`}>
+              <div className="flex-1 text-center sm:text-left">
+                <h2 className="text-lg sm:text-xl font-semibold text-white">{profile?.full_name || 'User'}</h2>
+                <p className="text-gray-400 text-sm">{profile?.email}</p>
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-2">
+                  <span className={`px-2 sm:px-3 py-1 rounded-full text-xs font-medium capitalize ${getSubscriptionBadge(profile?.subscription_tier || 'free')}`}>
                     {profile?.subscription_tier || 'Free'} Plan
                   </span>
                   {isBuilder && (
-                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-yellow-500/20 text-yellow-400">
+                    <span className="px-2 sm:px-3 py-1 rounded-full text-xs font-medium bg-yellow-500/20 text-yellow-400">
                       <HardHat className="w-3 h-3 inline mr-1" />
                       Licensed Builder
                     </span>
@@ -418,42 +418,42 @@ export default function ProfilePage() {
           </div>
 
           {/* Personal Details Card */}
-          <div className="bg-white/5 rounded-xl p-6 border border-white/10">
-            <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
-              <UserIcon className="w-5 h-5 text-blue-400" />
+          <div className="bg-white/5 rounded-xl p-4 sm:p-6 border border-white/10">
+            <h3 className="text-white font-semibold mb-4 flex items-center gap-2 text-sm sm:text-base">
+              <UserIcon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
               Personal Details
             </h3>
             
             <div className="space-y-4">
               {/* Full Name & Phone */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Full Name</label>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1.5 sm:mb-2">Full Name</label>
                   <input
                     type="text"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="Your full name"
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Phone Number</label>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1.5 sm:mb-2">Phone Number</label>
                   <input
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="Phone number"
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition text-sm"
                   />
                 </div>
               </div>
 
               {/* Email & Address - Same Row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 {/* Email (Read-only) */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1.5 sm:mb-2">
                     Email Address
                     <span className="ml-2 text-xs text-gray-500">(Cannot be changed)</span>
                   </label>
@@ -461,13 +461,13 @@ export default function ProfilePage() {
                     type="email"
                     value={profile?.email || ''}
                     disabled
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-gray-500 cursor-not-allowed"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-gray-500 cursor-not-allowed text-sm"
                   />
                 </div>
 
                 {/* Address with Autocomplete */}
                 <div className="relative" ref={addressInputRef}>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Address</label>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-400 mb-1.5 sm:mb-2">Address</label>
                   <div className="relative">
                     <input
                       type="text"
@@ -475,7 +475,7 @@ export default function ProfilePage() {
                       onChange={(e) => handleAddressChange(e.target.value)}
                       onFocus={() => address.length >= 2 && setShowAddressSuggestions(true)}
                       placeholder="Start typing your address"
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 pr-10 transition"
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 pr-10 transition text-sm"
                     />
                     {isLoadingAddress ? (
                       <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />

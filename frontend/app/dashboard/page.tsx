@@ -323,7 +323,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6 relative">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-4 sm:p-6 relative">
       
       {/* Welcome Modal Overlay */}
       {showWelcomeModal && (
@@ -332,7 +332,7 @@ export default function DashboardPage() {
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
           
           {/* Modal */}
-          <div className="relative bg-slate-800 rounded-2xl shadow-2xl border border-white/10 w-full max-w-lg mx-4 overflow-hidden max-h-[90vh] overflow-y-auto">
+          <div className="relative bg-slate-800 rounded-2xl shadow-2xl border border-white/10 w-full max-w-lg mx-4 overflow-hidden max-h-[85vh] flex flex-col">
             {/* Header */}
             <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-center">
               <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -515,38 +515,38 @@ export default function DashboardPage() {
       {/* Dashboard Content - Blurred when modal is open */}
       <div className={showWelcomeModal ? 'filter blur-sm pointer-events-none' : ''}>
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
-              <Home className="w-6 h-6 text-white" />
+        <div className="flex items-center justify-between mb-6 sm:mb-8">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-600 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Home className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl font-bold text-white truncate">
                 {getGreeting()}, {getDisplayName()}!
               </h1>
-              <p className="text-gray-400 text-sm">
+              <p className="text-gray-400 text-xs sm:text-sm">
                 {stats.total} active project{stats.total !== 1 ? 's' : ''}
               </p>
             </div>
           </div>
-          <button className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center hover:bg-white/20 transition">
-            <Bell className="w-5 h-5 text-gray-300" />
+          <button className="w-9 h-9 sm:w-10 sm:h-10 bg-white/10 rounded-lg flex items-center justify-center hover:bg-white/20 transition flex-shrink-0">
+            <Bell className="w-4 h-4 sm:w-5 sm:h-5 text-gray-300" />
           </button>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
-          <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 text-center">
-            <p className="text-3xl font-bold text-white">{stats.total}</p>
-            <p className="text-sm text-gray-400">Projects</p>
+        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-6 sm:mb-8">
+          <div className="bg-white/5 backdrop-blur-sm rounded-xl p-3 sm:p-4 border border-white/10 text-center">
+            <p className="text-2xl sm:text-3xl font-bold text-white">{stats.total}</p>
+            <p className="text-xs sm:text-sm text-gray-400">Projects</p>
           </div>
-          <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 text-center">
-            <p className="text-3xl font-bold text-white">{stats.generated}</p>
-            <p className="text-sm text-gray-400">Generated</p>
+          <div className="bg-white/5 backdrop-blur-sm rounded-xl p-3 sm:p-4 border border-white/10 text-center">
+            <p className="text-2xl sm:text-3xl font-bold text-white">{stats.generated}</p>
+            <p className="text-xs sm:text-sm text-gray-400">Generated</p>
           </div>
-          <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 text-center">
-            <p className="text-3xl font-bold text-white">{stats.plans}</p>
-            <p className="text-sm text-gray-400">Plans</p>
+          <div className="bg-white/5 backdrop-blur-sm rounded-xl p-3 sm:p-4 border border-white/10 text-center">
+            <p className="text-2xl sm:text-3xl font-bold text-white">{stats.plans}</p>
+            <p className="text-xs sm:text-sm text-gray-400">Plans</p>
           </div>
         </div>
 
