@@ -421,13 +421,13 @@ export default function PlansPage() {
                   const errors = layoutData?.validation?.all_errors || [];
                   
                   return (
-                    <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/30">
+                    <div>
                       <div className="flex items-center gap-2 mb-3">
                         <AlertCircle className="w-4 h-4 text-red-400" />
                         <span className="text-red-400 font-medium">Errors ({errors.length})</span>
                       </div>
                       {errors.length > 0 ? (
-                        <ul className="space-y-2">
+                        <div className="space-y-2">
                           {errors.map((error, index) => {
                             // Parse category from error message (e.g., "Council: ..." or "NCC: ...")
                             const [category, ...messageParts] = error.split(': ');
@@ -435,33 +435,37 @@ export default function PlansPage() {
                             const hasCategory = messageParts.length > 0;
                             
                             return (
-                              <li 
+                              <div 
                                 key={index} 
-                                className="text-sm text-gray-300 flex items-start gap-2 group/item cursor-pointer relative"
+                                className="bg-red-500/10 rounded-xl p-3 border border-red-500/30 group/item cursor-pointer relative overflow-hidden"
                                 onClick={() => {
                                   // TODO: Implement fix action
                                   console.log('Fix error:', error);
                                 }}
                               >
-                                <span className="text-red-400 mt-0.5 group-hover/item:opacity-30 transition-all">•</span>
-                                <div className="flex-1 group-hover/item:blur-[2px] transition-all">
-                                  {hasCategory && (
-                                    <span className="text-red-400/70 text-xs font-medium">[{category}]</span>
-                                  )}
-                                  <p className={hasCategory ? 'mt-0.5' : ''}>{message}</p>
+                                <div className="flex items-start gap-2 group-hover/item:blur-[2px] transition-all">
+                                  <span className="text-red-400 mt-0.5">•</span>
+                                  <div className="flex-1 text-sm text-gray-300">
+                                    {hasCategory && (
+                                      <span className="text-red-400/70 text-xs font-medium">[{category}]</span>
+                                    )}
+                                    <p className={hasCategory ? 'mt-0.5' : ''}>{message}</p>
+                                  </div>
                                 </div>
                                 {/* Fix it overlay */}
-                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity">
-                                  <span className="bg-red-500 text-white px-3 py-1 rounded-lg text-sm font-medium shadow-lg">
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity bg-red-500/20">
+                                  <span className="bg-red-500 text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow-lg">
                                     Fix it
                                   </span>
                                 </div>
-                              </li>
+                              </div>
                             );
                           })}
-                        </ul>
+                        </div>
                       ) : (
-                        <p className="text-gray-400 text-sm">No errors detected</p>
+                        <div className="bg-green-500/10 rounded-xl p-3 border border-green-500/30">
+                          <p className="text-green-400 text-sm">No errors detected ✓</p>
+                        </div>
                       )}
                     </div>
                   );
@@ -472,13 +476,13 @@ export default function PlansPage() {
                   const warnings = layoutData?.validation?.all_warnings || [];
                   
                   return (
-                    <div className="bg-yellow-500/10 rounded-xl p-4 border border-yellow-500/30">
+                    <div>
                       <div className="flex items-center gap-2 mb-3">
                         <AlertTriangle className="w-4 h-4 text-yellow-400" />
                         <span className="text-yellow-400 font-medium">Warnings ({warnings.length})</span>
                       </div>
                       {warnings.length > 0 ? (
-                        <ul className="space-y-2">
+                        <div className="space-y-2">
                           {warnings.map((warning, index) => {
                             // Parse category from warning message
                             const [category, ...messageParts] = warning.split(': ');
@@ -486,33 +490,37 @@ export default function PlansPage() {
                             const hasCategory = messageParts.length > 0;
                             
                             return (
-                              <li 
+                              <div 
                                 key={index} 
-                                className="text-sm text-gray-300 flex items-start gap-2 group/item cursor-pointer relative"
+                                className="bg-yellow-500/10 rounded-xl p-3 border border-yellow-500/30 group/item cursor-pointer relative overflow-hidden"
                                 onClick={() => {
                                   // TODO: Implement fix action
                                   console.log('Fix warning:', warning);
                                 }}
                               >
-                                <span className="text-yellow-400 mt-0.5 group-hover/item:opacity-30 transition-all">•</span>
-                                <div className="flex-1 group-hover/item:blur-[2px] transition-all">
-                                  {hasCategory && (
-                                    <span className="text-yellow-400/70 text-xs font-medium">[{category}]</span>
-                                  )}
-                                  <p className={hasCategory ? 'mt-0.5' : ''}>{message}</p>
+                                <div className="flex items-start gap-2 group-hover/item:blur-[2px] transition-all">
+                                  <span className="text-yellow-400 mt-0.5">•</span>
+                                  <div className="flex-1 text-sm text-gray-300">
+                                    {hasCategory && (
+                                      <span className="text-yellow-400/70 text-xs font-medium">[{category}]</span>
+                                    )}
+                                    <p className={hasCategory ? 'mt-0.5' : ''}>{message}</p>
+                                  </div>
                                 </div>
                                 {/* Fix it overlay */}
-                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity">
-                                  <span className="bg-yellow-500 text-white px-3 py-1 rounded-lg text-sm font-medium shadow-lg">
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity bg-yellow-500/20">
+                                  <span className="bg-yellow-500 text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow-lg">
                                     Fix it
                                   </span>
                                 </div>
-                              </li>
+                              </div>
                             );
                           })}
-                        </ul>
+                        </div>
                       ) : (
-                        <p className="text-gray-400 text-sm">No warnings detected</p>
+                        <div className="bg-green-500/10 rounded-xl p-3 border border-green-500/30">
+                          <p className="text-green-400 text-sm">No warnings detected ✓</p>
+                        </div>
                       )}
                     </div>
                   );
