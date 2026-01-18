@@ -437,26 +437,35 @@ export default function PlansPage() {
                             return (
                               <div 
                                 key={index} 
-                                className="bg-red-500/10 rounded-xl p-3 border border-red-500/30 group/item cursor-pointer relative overflow-hidden"
-                                onClick={() => {
-                                  // TODO: Implement fix action
-                                  console.log('Fix error:', error);
-                                }}
+                                className="bg-red-500/10 rounded-xl p-3 border border-red-500/30"
                               >
-                                <div className="flex items-start gap-2 group-hover/item:blur-[2px] transition-all">
-                                  <span className="text-red-400 mt-0.5">•</span>
+                                <div className="flex items-start justify-between gap-3">
                                   <div className="flex-1 text-sm text-gray-300">
                                     {hasCategory && (
                                       <span className="text-red-400/70 text-xs font-medium">[{category}]</span>
                                     )}
                                     <p className={hasCategory ? 'mt-0.5' : ''}>{message}</p>
                                   </div>
-                                </div>
-                                {/* Fix it overlay */}
-                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity bg-red-500/20">
-                                  <span className="bg-red-500 text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow-lg">
-                                    Fix it
-                                  </span>
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    <button
+                                      onClick={() => {
+                                        // TODO: Implement fix action
+                                        console.log('Fix error:', error);
+                                      }}
+                                      className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-medium rounded-lg transition"
+                                    >
+                                      Fix
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        // TODO: Implement ignore action
+                                        console.log('Ignore error:', error);
+                                      }}
+                                      className="px-3 py-1 bg-white/10 hover:bg-white/20 text-gray-300 text-xs font-medium rounded-lg transition"
+                                    >
+                                      Ignore
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             );
@@ -492,26 +501,35 @@ export default function PlansPage() {
                             return (
                               <div 
                                 key={index} 
-                                className="bg-yellow-500/10 rounded-xl p-3 border border-yellow-500/30 group/item cursor-pointer relative overflow-hidden"
-                                onClick={() => {
-                                  // TODO: Implement fix action
-                                  console.log('Fix warning:', warning);
-                                }}
+                                className="bg-yellow-500/10 rounded-xl p-3 border border-yellow-500/30"
                               >
-                                <div className="flex items-start gap-2 group-hover/item:blur-[2px] transition-all">
-                                  <span className="text-yellow-400 mt-0.5">•</span>
+                                <div className="flex items-start justify-between gap-3">
                                   <div className="flex-1 text-sm text-gray-300">
                                     {hasCategory && (
                                       <span className="text-yellow-400/70 text-xs font-medium">[{category}]</span>
                                     )}
                                     <p className={hasCategory ? 'mt-0.5' : ''}>{message}</p>
                                   </div>
-                                </div>
-                                {/* Fix it overlay */}
-                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity bg-yellow-500/20">
-                                  <span className="bg-yellow-500 text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow-lg">
-                                    Fix it
-                                  </span>
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    <button
+                                      onClick={() => {
+                                        // TODO: Implement fix action
+                                        console.log('Fix warning:', warning);
+                                      }}
+                                      className="px-3 py-1 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-medium rounded-lg transition"
+                                    >
+                                      Fix
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        // TODO: Implement ignore action
+                                        console.log('Ignore warning:', warning);
+                                      }}
+                                      className="px-3 py-1 bg-white/10 hover:bg-white/20 text-gray-300 text-xs font-medium rounded-lg transition"
+                                    >
+                                      Ignore
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             );
