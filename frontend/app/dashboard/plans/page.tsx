@@ -437,35 +437,44 @@ export default function PlansPage() {
                             return (
                               <div 
                                 key={index} 
-                                className="bg-red-500/10 rounded-xl p-3 border border-red-500/30"
+                                className="bg-red-500/10 rounded-xl p-3 border border-red-500/30 group/item relative overflow-hidden cursor-pointer hover:border-red-500/60 transition-all"
                               >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="flex-1 text-sm text-gray-300">
-                                    {hasCategory && (
-                                      <span className="text-red-400/70 text-xs font-medium">[{category}]</span>
-                                    )}
-                                    <p className={hasCategory ? 'mt-0.5' : ''}>{message}</p>
-                                  </div>
-                                  <div className="flex items-center gap-2 flex-shrink-0">
-                                    <button
-                                      onClick={() => {
-                                        // TODO: Implement fix action
-                                        console.log('Fix error:', error);
-                                      }}
-                                      className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-medium rounded-lg transition"
-                                    >
-                                      Fix
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        // TODO: Implement ignore action
-                                        console.log('Ignore error:', error);
-                                      }}
-                                      className="px-3 py-1 bg-white/10 hover:bg-white/20 text-gray-300 text-xs font-medium rounded-lg transition"
-                                    >
-                                      Ignore
-                                    </button>
-                                  </div>
+                                {/* Content - blurs on hover */}
+                                <div className="text-sm text-gray-300 group-hover/item:blur-[2px] group-hover/item:opacity-40 transition-all duration-200">
+                                  {hasCategory && (
+                                    <span className="text-red-400/70 text-xs font-medium">[{category}]</span>
+                                  )}
+                                  <p className={hasCategory ? 'mt-0.5' : ''}>{message}</p>
+                                </div>
+                                
+                                {/* Hover overlay with buttons */}
+                                <div className="absolute inset-0 flex items-center justify-center gap-3 opacity-0 group-hover/item:opacity-100 transition-all duration-200">
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      // TODO: Implement fix action
+                                      console.log('Fix error:', error);
+                                    }}
+                                    className="flex items-center gap-1.5 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                    </svg>
+                                    Fix
+                                  </button>
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      // TODO: Implement ignore action
+                                      console.log('Ignore error:', error);
+                                    }}
+                                    className="flex items-center gap-1.5 bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                    </svg>
+                                    Ignore
+                                  </button>
                                 </div>
                               </div>
                             );
@@ -501,35 +510,44 @@ export default function PlansPage() {
                             return (
                               <div 
                                 key={index} 
-                                className="bg-yellow-500/10 rounded-xl p-3 border border-yellow-500/30"
+                                className="bg-yellow-500/10 rounded-xl p-3 border border-yellow-500/30 group/item relative overflow-hidden cursor-pointer hover:border-yellow-500/60 transition-all"
                               >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="flex-1 text-sm text-gray-300">
-                                    {hasCategory && (
-                                      <span className="text-yellow-400/70 text-xs font-medium">[{category}]</span>
-                                    )}
-                                    <p className={hasCategory ? 'mt-0.5' : ''}>{message}</p>
-                                  </div>
-                                  <div className="flex items-center gap-2 flex-shrink-0">
-                                    <button
-                                      onClick={() => {
-                                        // TODO: Implement fix action
-                                        console.log('Fix warning:', warning);
-                                      }}
-                                      className="px-3 py-1 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-medium rounded-lg transition"
-                                    >
-                                      Fix
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        // TODO: Implement ignore action
-                                        console.log('Ignore warning:', warning);
-                                      }}
-                                      className="px-3 py-1 bg-white/10 hover:bg-white/20 text-gray-300 text-xs font-medium rounded-lg transition"
-                                    >
-                                      Ignore
-                                    </button>
-                                  </div>
+                                {/* Content - blurs on hover */}
+                                <div className="text-sm text-gray-300 group-hover/item:blur-[2px] group-hover/item:opacity-40 transition-all duration-200">
+                                  {hasCategory && (
+                                    <span className="text-yellow-400/70 text-xs font-medium">[{category}]</span>
+                                  )}
+                                  <p className={hasCategory ? 'mt-0.5' : ''}>{message}</p>
+                                </div>
+                                
+                                {/* Hover overlay with buttons */}
+                                <div className="absolute inset-0 flex items-center justify-center gap-3 opacity-0 group-hover/item:opacity-100 transition-all duration-200">
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      // TODO: Implement fix action
+                                      console.log('Fix warning:', warning);
+                                    }}
+                                    className="flex items-center gap-1.5 bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                    </svg>
+                                    Fix
+                                  </button>
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      // TODO: Implement ignore action
+                                      console.log('Ignore warning:', warning);
+                                    }}
+                                    className="flex items-center gap-1.5 bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                    </svg>
+                                    Ignore
+                                  </button>
                                 </div>
                               </div>
                             );
