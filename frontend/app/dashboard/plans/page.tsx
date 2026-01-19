@@ -442,9 +442,9 @@ export default function PlansPage() {
                                 {/* Content - blurs on hover */}
                                 <div className="text-sm text-gray-300 group-hover/item:blur-[2px] group-hover/item:opacity-40 transition-all duration-200">
                                   {hasCategory && (
-                                    <span className="text-red-400/70 text-xs font-medium">[{category}]</span>
+                                    <span className="text-red-400/70 text-xs font-medium mr-1.5">[{category}]</span>
                                   )}
-                                  <p className={hasCategory ? 'mt-0.5' : ''}>{message}</p>
+                                  <span>{message}</span>
                                 </div>
                                 
                                 {/* Hover overlay with buttons */}
@@ -455,7 +455,7 @@ export default function PlansPage() {
                                       // TODO: Implement fix action
                                       console.log('Fix error:', error);
                                     }}
-                                    className="flex items-center gap-1.5 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
+                                    className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
                                   >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
@@ -515,9 +515,9 @@ export default function PlansPage() {
                                 {/* Content - blurs on hover */}
                                 <div className="text-sm text-gray-300 group-hover/item:blur-[2px] group-hover/item:opacity-40 transition-all duration-200">
                                   {hasCategory && (
-                                    <span className="text-yellow-400/70 text-xs font-medium">[{category}]</span>
+                                    <span className="text-yellow-400/70 text-xs font-medium mr-1.5">[{category}]</span>
                                   )}
-                                  <p className={hasCategory ? 'mt-0.5' : ''}>{message}</p>
+                                  <span>{message}</span>
                                 </div>
                                 
                                 {/* Hover overlay with buttons */}
@@ -528,7 +528,7 @@ export default function PlansPage() {
                                       // TODO: Implement fix action
                                       console.log('Fix warning:', warning);
                                     }}
-                                    className="flex items-center gap-1.5 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
+                                    className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
                                   >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
