@@ -132,7 +132,6 @@ export default function PlansPage() {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [downloading, setDownloading] = useState(false);
-  const [ignoringItem, setIgnoringItem] = useState<string | null>(null); // Track which item is being ignored
   
   // Lightbox state (for gallery quick view)
   const [lightboxPlan, setLightboxPlan] = useState<FloorPlanWithProject | null>(null);
@@ -218,82 +217,62 @@ export default function PlansPage() {
     }
   };
 
-  // Handle ignoring an error or warning
+  // Handle ignoring an error or warning - optimistic update with background API call
   const handleIgnoreItem = async (itemType: 'error' | 'warning', itemText: string) => {
     if (!selectedPlan || !layoutData) return;
     
-    setIgnoringItem(itemText);
+    // Immediately update local state (optimistic update)
+    const updatedLayoutData = { ...layoutData };
     
-    try {
-      // Create updated layout data with the item removed
-      const updatedLayoutData = { ...layoutData };
-      
-      if (updatedLayoutData.validation) {
-        if (itemType === 'error' && updatedLayoutData.validation.all_errors) {
-          updatedLayoutData.validation.all_errors = updatedLayoutData.validation.all_errors.filter(
-            e => e !== itemText
-          );
-          // Update error count in summary if exists
-          if (updatedLayoutData.validation.summary) {
-            updatedLayoutData.validation.summary.total_errors = updatedLayoutData.validation.all_errors.length;
-          }
-        } else if (itemType === 'warning' && updatedLayoutData.validation.all_warnings) {
-          updatedLayoutData.validation.all_warnings = updatedLayoutData.validation.all_warnings.filter(
-            w => w !== itemText
-          );
-          // Update warning count in summary if exists
-          if (updatedLayoutData.validation.summary) {
-            updatedLayoutData.validation.summary.total_warnings = updatedLayoutData.validation.all_warnings.length;
-          }
+    if (updatedLayoutData.validation) {
+      if (itemType === 'error' && updatedLayoutData.validation.all_errors) {
+        updatedLayoutData.validation.all_errors = updatedLayoutData.validation.all_errors.filter(
+          e => e !== itemText
+        );
+        if (updatedLayoutData.validation.summary) {
+          updatedLayoutData.validation.summary.total_errors = updatedLayoutData.validation.all_errors.length;
+        }
+      } else if (itemType === 'warning' && updatedLayoutData.validation.all_warnings) {
+        updatedLayoutData.validation.all_warnings = updatedLayoutData.validation.all_warnings.filter(
+          w => w !== itemText
+        );
+        if (updatedLayoutData.validation.summary) {
+          updatedLayoutData.validation.summary.total_warnings = updatedLayoutData.validation.all_warnings.length;
         }
       }
-      
-      // Get auth token from localStorage
-      const token = localStorage.getItem('auth_token') || localStorage.getItem('access_token');
-      
-      // Call API to update the floor plan record
-      // Uses the backend route: /api/v1/plans/{project_id}/plans/{plan_id}/layout-data
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/plans/${selectedPlan.project_id}/plans/${selectedPlan.id}/layout-data`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
-        body: JSON.stringify({
-          layout_data: JSON.stringify(updatedLayoutData)
-        }),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to update floor plan');
-      }
-      
-      // Update local state
-      setLayoutData(updatedLayoutData);
-      
-      // Update the selectedPlan with new layout_data
-      const updatedPlan = {
-        ...selectedPlan,
-        layout_data: JSON.stringify(updatedLayoutData)
-      };
-      setSelectedPlan(updatedPlan);
-      
-      // Update the plans array
-      setPlans(prevPlans => 
-        prevPlans.map(p => 
-          p.id === selectedPlan.id ? updatedPlan : p
-        )
-      );
-      
-      console.log(`Ignored ${itemType}:`, itemText);
-      
-    } catch (err) {
-      console.error(`Error ignoring ${itemType}:`, err);
-      setError(`Failed to ignore ${itemType}. Please try again.`);
-    } finally {
-      setIgnoringItem(null);
     }
+    
+    // Update UI immediately
+    setLayoutData(updatedLayoutData);
+    
+    const updatedPlan = {
+      ...selectedPlan,
+      layout_data: JSON.stringify(updatedLayoutData)
+    };
+    setSelectedPlan(updatedPlan);
+    
+    setPlans(prevPlans => 
+      prevPlans.map(p => 
+        p.id === selectedPlan.id ? updatedPlan : p
+      )
+    );
+    
+    // Background API call - fire and forget with silent error handling
+    const token = localStorage.getItem('auth_token') || localStorage.getItem('access_token');
+    
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/plans/${selectedPlan.project_id}/plans/${selectedPlan.id}/layout-data`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` }),
+      },
+      body: JSON.stringify({
+        layout_data: JSON.stringify(updatedLayoutData)
+      }),
+    }).catch(err => {
+      // Silent error - just log to console
+      console.error(`Failed to persist ignored ${itemType}:`, err);
+    });
   };
 
   // Filter plans for gallery view
@@ -546,16 +525,9 @@ export default function PlansPage() {
                             
                             return (
                               <div 
-                                key={index} 
-                                className={`bg-red-500/10 rounded-xl p-3 border border-red-500/30 group/item relative overflow-hidden cursor-pointer hover:border-red-500/60 transition-all ${ignoringItem === error ? 'opacity-50' : ''}`}
+                                key={error} 
+                                className="bg-red-500/10 rounded-xl p-3 border border-red-500/30 group/item relative overflow-hidden cursor-pointer hover:border-red-500/60 transition-all animate-in fade-in duration-200"
                               >
-                                {/* Loading overlay when ignoring */}
-                                {ignoringItem === error && (
-                                  <div className="absolute inset-0 flex items-center justify-center bg-slate-900/50 z-10">
-                                    <Loader2 className="w-5 h-5 text-white animate-spin" />
-                                  </div>
-                                )}
-                                
                                 {/* Content - blurs on hover */}
                                 <div className="text-sm text-gray-300 group-hover/item:blur-[2px] group-hover/item:opacity-40 transition-all duration-200">
                                   {hasCategory && (
@@ -584,8 +556,7 @@ export default function PlansPage() {
                                       e.stopPropagation();
                                       handleIgnoreItem('error', error);
                                     }}
-                                    disabled={ignoringItem !== null}
-                                    className="flex items-center gap-1.5 bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex items-center gap-1.5 bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
                                   >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
@@ -626,16 +597,9 @@ export default function PlansPage() {
                             
                             return (
                               <div 
-                                key={index} 
-                                className={`bg-yellow-500/10 rounded-xl p-3 border border-yellow-500/30 group/item relative overflow-hidden cursor-pointer hover:border-yellow-500/60 transition-all ${ignoringItem === warning ? 'opacity-50' : ''}`}
+                                key={warning} 
+                                className="bg-yellow-500/10 rounded-xl p-3 border border-yellow-500/30 group/item relative overflow-hidden cursor-pointer hover:border-yellow-500/60 transition-all animate-in fade-in duration-200"
                               >
-                                {/* Loading overlay when ignoring */}
-                                {ignoringItem === warning && (
-                                  <div className="absolute inset-0 flex items-center justify-center bg-slate-900/50 z-10">
-                                    <Loader2 className="w-5 h-5 text-white animate-spin" />
-                                  </div>
-                                )}
-                                
                                 {/* Content - blurs on hover */}
                                 <div className="text-sm text-gray-300 group-hover/item:blur-[2px] group-hover/item:opacity-40 transition-all duration-200">
                                   {hasCategory && (
@@ -664,8 +628,7 @@ export default function PlansPage() {
                                       e.stopPropagation();
                                       handleIgnoreItem('warning', warning);
                                     }}
-                                    disabled={ignoringItem !== null}
-                                    className="flex items-center gap-1.5 bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex items-center gap-1.5 bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
                                   >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
