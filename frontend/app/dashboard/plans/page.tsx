@@ -242,18 +242,16 @@ export default function PlansPage() {
       }
     }
     
-    // Update UI immediately
+    // Update layoutData immediately (this updates the validation panel)
     setLayoutData(updatedLayoutData);
     
-    const updatedPlan = {
-      ...selectedPlan,
-      layout_data: JSON.stringify(updatedLayoutData)
-    };
-    setSelectedPlan(updatedPlan);
-    
+    // Update plans array for persistence (without triggering selectedPlan useEffect)
+    const updatedLayoutDataString = JSON.stringify(updatedLayoutData);
     setPlans(prevPlans => 
       prevPlans.map(p => 
-        p.id === selectedPlan.id ? updatedPlan : p
+        p.id === selectedPlan.id 
+          ? { ...p, layout_data: updatedLayoutDataString }
+          : p
       )
     );
     
@@ -267,7 +265,7 @@ export default function PlansPage() {
         ...(token && { 'Authorization': `Bearer ${token}` }),
       },
       body: JSON.stringify({
-        layout_data: JSON.stringify(updatedLayoutData)
+        layout_data: updatedLayoutDataString
       }),
     }).catch(err => {
       // Silent error - just log to console
