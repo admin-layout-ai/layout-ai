@@ -427,7 +427,7 @@ export default function PlansPage() {
                         <span className="text-red-400 font-medium">Errors ({errors.length})</span>
                       </div>
                       {errors.length > 0 ? (
-                        <div className="space-y-2">
+                        <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(239, 68, 68, 0.3) transparent' }}>
                           {errors.map((error, index) => {
                             // Parse category from error message (e.g., "Council: ..." or "NCC: ...")
                             const [category, ...messageParts] = error.split(': ');
@@ -455,7 +455,7 @@ export default function PlansPage() {
                                       // TODO: Implement fix action
                                       console.log('Fix error:', error);
                                     }}
-                                    className="flex items-center gap-1.5 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
+                                    className="flex items-center gap-1.5 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
                                   >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
@@ -500,7 +500,7 @@ export default function PlansPage() {
                         <span className="text-yellow-400 font-medium">Warnings ({warnings.length})</span>
                       </div>
                       {warnings.length > 0 ? (
-                        <div className="space-y-2">
+                        <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(234, 179, 8, 0.3) transparent' }}>
                           {warnings.map((warning, index) => {
                             // Parse category from warning message
                             const [category, ...messageParts] = warning.split(': ');
@@ -528,7 +528,7 @@ export default function PlansPage() {
                                       // TODO: Implement fix action
                                       console.log('Fix warning:', warning);
                                     }}
-                                    className="flex items-center gap-1.5 bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
+                                    className="flex items-center gap-1.5 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
                                   >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
