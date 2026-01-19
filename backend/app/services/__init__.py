@@ -87,6 +87,14 @@ from .gemini_service import (
     MAX_GENERATION_ATTEMPTS
 )
 
+from .floor_plan_optimizer import (
+    fix_floor_plan_error,
+    parse_error_to_instruction,
+    build_fix_prompt,
+    get_error_category,
+    estimate_fix_difficulty
+)
+
 __all__ = [
     # Azure Storage
     'upload_to_blob',
@@ -139,4 +147,11 @@ __all__ = [
     'analyze_generated_image',
     'extract_floor_plan_json',
     'build_generation_prompt',
+    
+    # Floor Plan Optimizer Service
+    'fix_floor_plan_error',
+    'parse_error_to_instruction',
+    'build_fix_prompt',
+    'get_error_category',
+    'estimate_fix_difficulty',
 ]

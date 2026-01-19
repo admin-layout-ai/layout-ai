@@ -133,6 +133,21 @@ export default function PlansPage() {
   const [imageError, setImageError] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [removingItems, setRemovingItems] = useState<Set<string>>(new Set()); // Track items being animated out
+  const [fixingError, setFixingError] = useState<string | null>(null); // Track which error is being fixed
+  const [fixingMessage, setFixingMessage] = useState<string>(''); // AI message during fix
+
+  // AI messages for the fixing overlay
+  const AI_FIXING_MESSAGES = [
+    "Analyzing floor plan layout...",
+    "Calculating optimal room dimensions...",
+    "Adjusting building envelope...",
+    "Optimizing space utilization...",
+    "Ensuring NCC compliance...",
+    "Validating council requirements...",
+    "Refining room proportions...",
+    "Generating corrected layout...",
+    "Almost there, finalizing changes...",
+  ];
   
   // Lightbox state (for gallery quick view)
   const [lightboxPlan, setLightboxPlan] = useState<FloorPlanWithProject | null>(null);
@@ -287,6 +302,88 @@ export default function PlansPage() {
     });
   };
 
+  // Handle fixing an error or warning using AI
+  const handleFixItem = async (itemType: 'error' | 'warning', itemText: string) => {
+    if (!selectedPlan || !layoutData) return;
+    
+    // Set fixing state and start message rotation
+    setFixingError(itemText);
+    setFixingMessage(AI_FIXING_MESSAGES[0]);
+    
+    // Rotate through AI messages every 3 seconds
+    let messageIndex = 0;
+    const messageInterval = setInterval(() => {
+      messageIndex = (messageIndex + 1) % AI_FIXING_MESSAGES.length;
+      setFixingMessage(AI_FIXING_MESSAGES[messageIndex]);
+    }, 3000);
+    
+    try {
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('access_token');
+      
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/plans/${selectedPlan.project_id}/plans/${selectedPlan.id}/fix-error`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token && { 'Authorization': `Bearer ${token}` }),
+          },
+          body: JSON.stringify({
+            error_text: itemText,
+            error_type: itemType
+          }),
+        }
+      );
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to fix error');
+      }
+      
+      const result = await response.json();
+      
+      // Update the image URL
+      if (result.new_image_url) {
+        // Update selectedPlan with new image URL
+        const updatedPlan = {
+          ...selectedPlan,
+          preview_image_url: result.new_image_url,
+          layout_data: result.updated_layout_data
+        };
+        
+        // Parse and update layoutData
+        if (result.updated_layout_data) {
+          const newLayoutData = JSON.parse(result.updated_layout_data);
+          setLayoutData(newLayoutData);
+        }
+        
+        // Update plans array
+        setPlans(prevPlans =>
+          prevPlans.map(p =>
+            p.id === selectedPlan.id ? updatedPlan : p
+          )
+        );
+        
+        // Trigger image reload by resetting image state
+        setImageLoaded(false);
+        setImageError(false);
+        
+        // Update selectedPlan (this will trigger useEffect but we want the new image)
+        setSelectedPlan(updatedPlan);
+      }
+      
+      console.log('Fixed error:', itemText);
+      
+    } catch (err) {
+      console.error(`Error fixing ${itemType}:`, err);
+      setError(`Failed to fix ${itemType}. Please try again.`);
+    } finally {
+      clearInterval(messageInterval);
+      setFixingError(null);
+      setFixingMessage('');
+    }
+  };
+
   // Filter plans for gallery view
   const filteredPlans = plans.filter(plan => {
     if (searchQuery) {
@@ -367,7 +464,57 @@ export default function PlansPage() {
     const variant = VARIANT_INFO[selectedPlan.variant_number || 1] || VARIANT_INFO[1];
     
     return (
-      <div className="min-h-screen lg:h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 overflow-auto lg:overflow-hidden flex flex-col">
+      <div className="min-h-screen lg:h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 overflow-auto lg:overflow-hidden flex flex-col relative">
+        {/* AI Fixing Overlay */}
+        {fixingError && (
+          <div className="absolute inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center">
+            <div className="text-center p-8 max-w-md">
+              {/* Animated AI Icon */}
+              <div className="relative mb-6">
+                <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center animate-pulse">
+                  <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                </div>
+                {/* Orbiting dots */}
+                <div className="absolute inset-0 animate-spin" style={{ animationDuration: '3s' }}>
+                  <div className="absolute top-0 left-1/2 w-2 h-2 -ml-1 bg-blue-400 rounded-full"></div>
+                </div>
+                <div className="absolute inset-0 animate-spin" style={{ animationDuration: '4s', animationDirection: 'reverse' }}>
+                  <div className="absolute bottom-0 left-1/2 w-2 h-2 -ml-1 bg-purple-400 rounded-full"></div>
+                </div>
+              </div>
+              
+              {/* Title */}
+              <h3 className="text-xl font-semibold text-white mb-2">
+                AI is fixing your floor plan
+              </h3>
+              
+              {/* Animated message */}
+              <p className="text-blue-300 mb-4 h-6 transition-all duration-500">
+                {fixingMessage}
+              </p>
+              
+              {/* Error being fixed */}
+              <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                <p className="text-sm text-gray-400 mb-1">Fixing:</p>
+                <p className="text-sm text-red-300">{fixingError}</p>
+              </div>
+              
+              {/* Progress indicator */}
+              <div className="mt-6 flex justify-center gap-1">
+                <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              </div>
+              
+              <p className="text-xs text-gray-500 mt-4">
+                This may take 30-60 seconds...
+              </p>
+            </div>
+          </div>
+        )}
+        
         {/* Header */}
         <div className="bg-slate-800/50 border-b border-white/10 z-10 backdrop-blur-sm flex-shrink-0">
           <div className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -554,10 +701,10 @@ export default function PlansPage() {
                                   <button 
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      // TODO: Implement fix action
-                                      console.log('Fix error:', error);
+                                      handleFixItem('error', error);
                                     }}
-                                    className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
+                                    disabled={fixingError !== null}
+                                    className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
@@ -627,10 +774,10 @@ export default function PlansPage() {
                                   <button 
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      // TODO: Implement fix action
-                                      console.log('Fix warning:', warning);
+                                      handleFixItem('warning', warning);
                                     }}
-                                    className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
+                                    disabled={fixingError !== null}
+                                    className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />

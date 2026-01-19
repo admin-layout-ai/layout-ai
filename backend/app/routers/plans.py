@@ -68,6 +68,13 @@ from ..services.gemini_service import (
     NANO_BANANA_PRO_MODEL
 )
 
+from ..services.floor_plan_optimizer import (
+    fix_floor_plan_error,
+    parse_error_to_instruction,
+    get_error_category,
+    estimate_fix_difficulty
+)
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/plans", tags=["plans"])
@@ -139,6 +146,12 @@ class FloorPlanResponse(BaseModel):
 class UpdateLayoutDataRequest(BaseModel):
     """Request model for updating floor plan layout_data (e.g., to ignore errors/warnings)."""
     layout_data: str
+
+
+class FixErrorRequest(BaseModel):
+    """Request model for fixing a specific error/warning in a floor plan."""
+    error_text: str
+    error_type: str = "error"  # "error" or "warning"
 
 
 # =============================================================================
@@ -858,3 +871,126 @@ async def get_variant_configs(
             for i, config in enumerate(VARIANT_CONFIGS)
         ]
     }
+
+
+# =============================================================================
+# API ENDPOINTS - ERROR FIXING
+# =============================================================================
+
+@router.post("/{project_id}/plans/{plan_id}/fix-error")
+async def fix_plan_error(
+    project_id: int,
+    plan_id: int,
+    request: FixErrorRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Fix a specific error/warning in a floor plan using AI.
+    
+    This endpoint:
+    1. Gets the current floor plan image
+    2. Generates a fix instruction from the error
+    3. Sends to Gemini to generate a corrected image
+    4. Updates storage and database if successful
+    """
+    from ..services.azure_storage import AzureStorageService
+    
+    db_user = get_db_user(current_user, db)
+    
+    # Get the floor plan and verify ownership
+    plan = db.query(models.FloorPlan).join(models.Project).filter(
+        models.FloorPlan.id == plan_id,
+        models.FloorPlan.project_id == project_id,
+        models.Project.user_id == db_user.id
+    ).first()
+    
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    
+    if not plan.preview_image_url:
+        raise HTTPException(status_code=400, detail="Plan has no image to fix")
+    
+    # Get project for requirements
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    requirements = build_requirements_from_project(project)
+    
+    # Get building envelope
+    building_width, building_depth, setbacks = calculate_building_envelope(
+        requirements.get('land_width', 14),
+        requirements.get('land_depth', 25),
+        requirements.get('council')
+    )
+    
+    # Parse current layout_data
+    layout_data = json.loads(plan.layout_data) if plan.layout_data else {}
+    
+    try:
+        # Log error category for analytics
+        error_category = get_error_category(request.error_text)
+        difficulty = estimate_fix_difficulty(request.error_text)
+        logger.info(f"Fixing {request.error_type} (category: {error_category}, difficulty: {difficulty}): {request.error_text}")
+        
+        # Call the fix service
+        new_image_bytes, fix_instruction, updated_layout_data = fix_floor_plan_error(
+            image_url=plan.preview_image_url,
+            error_text=request.error_text,
+            error_type=request.error_type,
+            requirements=requirements,
+            building_width=building_width,
+            building_depth=building_depth,
+            layout_data=layout_data
+        )
+        
+        # Upload new image to Azure Storage
+        storage_service = AzureStorageService()
+        
+        # Generate filename with timestamp to avoid caching issues
+        timestamp = datetime.utcnow().strftime('%Y%m%d%H%M%S')
+        variant_num = plan.variant_number or 1
+        filename = f"floor_plan_{variant_num}_fixed_{timestamp}.png"
+        
+        new_image_url = storage_service.upload_floor_plan_image(
+            new_image_bytes,
+            db_user.name or db_user.email or "user",
+            project.name,
+            plan_id,
+            filename
+        )
+        
+        if not new_image_url:
+            raise HTTPException(status_code=500, detail="Failed to upload corrected image")
+        
+        logger.info(f"Uploaded corrected image: {new_image_url}")
+        
+        # Update database
+        plan.preview_image_url = new_image_url
+        plan.layout_data = json.dumps(updated_layout_data)
+        plan.updated_at = datetime.utcnow()
+        plan.compliance_notes = (plan.compliance_notes or "") + f"\n[{datetime.utcnow().isoformat()}] Fixed: {request.error_text}"
+        
+        db.commit()
+        db.refresh(plan)
+        
+        return {
+            'success': True,
+            'message': 'Floor plan corrected successfully',
+            'plan_id': plan_id,
+            'new_image_url': new_image_url,
+            'fixed_error': request.error_text,
+            'fix_instruction': fix_instruction,
+            'error_category': error_category,
+            'updated_layout_data': json.dumps(updated_layout_data)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fix floor plan error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to fix error: {str(e)}")
