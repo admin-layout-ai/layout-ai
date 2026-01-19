@@ -302,7 +302,7 @@ export default function PlansPage() {
     });
   };
 
-  // Handle fixing an error or warning using AI
+  // Handle fixing an error or warning using AI (background task with polling)
   const handleFixItem = async (itemType: 'error' | 'warning', itemText: string) => {
     if (!selectedPlan || !layoutData) return;
     
@@ -319,9 +319,11 @@ export default function PlansPage() {
     
     try {
       const token = localStorage.getItem('auth_token') || localStorage.getItem('access_token');
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/plans/${selectedPlan.project_id}/plans/${selectedPlan.id}/fix-error`,
+      // Step 1: Trigger the fix (returns immediately)
+      const triggerResponse = await fetch(
+        `${API_URL}/api/v1/plans/${selectedPlan.project_id}/plans/${selectedPlan.id}/fix-error`,
         {
           method: 'POST',
           headers: {
@@ -335,27 +337,57 @@ export default function PlansPage() {
         }
       );
       
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to fix error');
+      if (!triggerResponse.ok) {
+        const errorData = await triggerResponse.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to start fix');
       }
       
-      const result = await response.json();
+      // Step 2: Poll for completion
+      const pollForCompletion = async (): Promise<any> => {
+        const statusResponse = await fetch(
+          `${API_URL}/api/v1/plans/${selectedPlan.project_id}/plans/${selectedPlan.id}/fix-status`,
+          {
+            headers: {
+              ...(token && { 'Authorization': `Bearer ${token}` }),
+            },
+          }
+        );
+        
+        if (!statusResponse.ok) {
+          throw new Error('Failed to check fix status');
+        }
+        
+        const status = await statusResponse.json();
+        
+        if (status.status === 'fixing') {
+          // Still in progress, wait and poll again
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          return pollForCompletion();
+        } else if (status.status === 'error') {
+          throw new Error(status.error || 'Fix failed');
+        } else if (status.status === 'completed') {
+          return status;
+        }
+        
+        throw new Error('Unknown status');
+      };
+      
+      const result = await pollForCompletion();
       
       // Update the image URL
-      if (result.new_image_url) {
+      if (result.preview_image_url) {
+        // Parse and update layoutData
+        if (result.layout_data) {
+          const newLayoutData = JSON.parse(result.layout_data);
+          setLayoutData(newLayoutData);
+        }
+        
         // Update selectedPlan with new image URL
         const updatedPlan = {
           ...selectedPlan,
-          preview_image_url: result.new_image_url,
-          layout_data: result.updated_layout_data
+          preview_image_url: result.preview_image_url,
+          layout_data: result.layout_data
         };
-        
-        // Parse and update layoutData
-        if (result.updated_layout_data) {
-          const newLayoutData = JSON.parse(result.updated_layout_data);
-          setLayoutData(newLayoutData);
-        }
         
         // Update plans array
         setPlans(prevPlans =>

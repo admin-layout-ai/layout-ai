@@ -4,7 +4,7 @@
 #
 # UPDATED: Now supports generating multiple floor plan variants (default 3)
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -69,8 +69,6 @@ from ..services.gemini_service import (
 )
 
 from ..services.floor_plan_optimizer import (
-    fix_floor_plan_error,
-    parse_error_to_instruction,
     get_error_category,
     estimate_fix_difficulty
 )
@@ -877,25 +875,131 @@ async def get_variant_configs(
 # API ENDPOINTS - ERROR FIXING
 # =============================================================================
 
+def fix_floor_plan_task(
+    plan_id: int,
+    project_id: int,
+    user_id: int,
+    error_text: str,
+    error_type: str
+):
+    """
+    Background task to fix a floor plan error using AI.
+    Similar pattern to generate_floor_plans_task in projects.py.
+    """
+    from ..database import SessionLocal
+    from ..services.azure_storage import AzureStorageService
+    from ..services.floor_plan_optimizer import fix_floor_plan_error, get_error_category
+    
+    db = SessionLocal()
+    try:
+        # Get plan and project
+        plan = db.query(models.FloorPlan).filter(models.FloorPlan.id == plan_id).first()
+        project = db.query(models.Project).filter(models.Project.id == project_id).first()
+        user = db.query(models.User).filter(models.User.id == user_id).first()
+        
+        if not plan or not project:
+            logger.error(f"Plan {plan_id} or Project {project_id} not found for fix")
+            return
+        
+        requirements = build_requirements_from_project(project)
+        
+        # Get building envelope
+        building_width, building_depth, setbacks = calculate_building_envelope(
+            requirements.get('land_width', 14),
+            requirements.get('land_depth', 25),
+            requirements.get('council')
+        )
+        
+        # Parse current layout_data
+        layout_data = json.loads(plan.layout_data) if plan.layout_data else {}
+        
+        logger.info(f"Starting fix for plan {plan_id}: {error_text}")
+        
+        # Call the fix service (synchronous in background task)
+        import asyncio
+        new_image_bytes, fix_instruction, updated_layout_data = asyncio.run(
+            fix_floor_plan_error(
+                image_url=plan.preview_image_url,
+                error_text=error_text,
+                error_type=error_type,
+                requirements=requirements,
+                building_width=building_width,
+                building_depth=building_depth,
+                layout_data=layout_data
+            )
+        )
+        
+        # Upload new image to Azure Storage
+        storage_service = AzureStorageService()
+        
+        timestamp = datetime.utcnow().strftime('%Y%m%d%H%M%S')
+        variant_num = plan.variant_number or 1
+        filename = f"floor_plan_{variant_num}_fixed_{timestamp}.png"
+        
+        new_image_url = storage_service.upload_floor_plan_image(
+            new_image_bytes,
+            user.name or user.email or "user" if user else "user",
+            project.name,
+            plan_id,
+            filename
+        )
+        
+        if not new_image_url:
+            raise Exception("Failed to upload corrected image")
+        
+        logger.info(f"Uploaded corrected image: {new_image_url}")
+        
+        # Update database
+        plan.preview_image_url = new_image_url
+        plan.layout_data = json.dumps(updated_layout_data)
+        plan.updated_at = datetime.utcnow()
+        plan.compliance_notes = (plan.compliance_notes or "") + f"\n[{datetime.utcnow().isoformat()}] Fixed: {error_text}"
+        
+        # Clear the fixing status
+        if updated_layout_data.get('_fixing'):
+            del updated_layout_data['_fixing']
+            plan.layout_data = json.dumps(updated_layout_data)
+        
+        db.commit()
+        logger.info(f"Successfully fixed plan {plan_id}")
+        
+    except Exception as e:
+        logger.error(f"Error fixing plan {plan_id}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        # Update plan to mark fix as failed
+        try:
+            plan = db.query(models.FloorPlan).filter(models.FloorPlan.id == plan_id).first()
+            if plan and plan.layout_data:
+                layout_data = json.loads(plan.layout_data)
+                layout_data['_fix_error'] = str(e)
+                if layout_data.get('_fixing'):
+                    del layout_data['_fixing']
+                plan.layout_data = json.dumps(layout_data)
+                plan.updated_at = datetime.utcnow()
+                db.commit()
+        except:
+            pass
+    finally:
+        db.close()
+
+
 @router.post("/{project_id}/plans/{plan_id}/fix-error")
 async def fix_plan_error(
     project_id: int,
     plan_id: int,
     request: FixErrorRequest,
+    background_tasks: BackgroundTasks,
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Fix a specific error/warning in a floor plan using AI.
+    Trigger fix for a specific error/warning in a floor plan using AI.
     
-    This endpoint:
-    1. Gets the current floor plan image
-    2. Generates a fix instruction from the error
-    3. Sends to Gemini to generate a corrected image
-    4. Updates storage and database if successful
+    Returns immediately and runs the fix in the background.
+    Poll GET /fix-status to check completion.
     """
-    from ..services.azure_storage import AzureStorageService
-    
     db_user = get_db_user(current_user, db)
     
     # Get the floor plan and verify ownership
@@ -911,86 +1015,104 @@ async def fix_plan_error(
     if not plan.preview_image_url:
         raise HTTPException(status_code=400, detail="Plan has no image to fix")
     
-    # Get project for requirements
+    # Check if already fixing
+    if plan.layout_data:
+        layout_data = json.loads(plan.layout_data)
+        if layout_data.get('_fixing'):
+            raise HTTPException(status_code=400, detail="A fix is already in progress")
+    
+    # Get project
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    requirements = build_requirements_from_project(project)
+    # Mark as fixing in layout_data
+    layout_data = json.loads(plan.layout_data) if plan.layout_data else {}
+    layout_data['_fixing'] = {
+        'error_text': request.error_text,
+        'error_type': request.error_type,
+        'started_at': datetime.utcnow().isoformat()
+    }
+    plan.layout_data = json.dumps(layout_data)
+    plan.updated_at = datetime.utcnow()
+    db.commit()
     
-    # Get building envelope
-    building_width, building_depth, setbacks = calculate_building_envelope(
-        requirements.get('land_width', 14),
-        requirements.get('land_depth', 25),
-        requirements.get('council')
+    # Log for analytics
+    error_category = get_error_category(request.error_text)
+    difficulty = estimate_fix_difficulty(request.error_text)
+    logger.info(f"Fix triggered for plan {plan_id} (category: {error_category}, difficulty: {difficulty})")
+    
+    # Add background task
+    background_tasks.add_task(
+        fix_floor_plan_task,
+        plan_id,
+        project_id,
+        db_user.id,
+        request.error_text,
+        request.error_type
     )
     
-    # Parse current layout_data
+    return {
+        'success': True,
+        'message': 'Fix started. This typically takes 30-60 seconds.',
+        'plan_id': plan_id,
+        'status': 'fixing',
+        'error_text': request.error_text,
+        'error_category': error_category
+    }
+
+
+@router.get("/{project_id}/plans/{plan_id}/fix-status")
+async def get_fix_status(
+    project_id: int,
+    plan_id: int,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get the current fix status for a floor plan.
+    Poll this endpoint to check when fix is complete.
+    """
+    db_user = get_db_user(current_user, db)
+    
+    plan = db.query(models.FloorPlan).join(models.Project).filter(
+        models.FloorPlan.id == plan_id,
+        models.FloorPlan.project_id == project_id,
+        models.Project.user_id == db_user.id
+    ).first()
+    
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    
     layout_data = json.loads(plan.layout_data) if plan.layout_data else {}
     
-    try:
-        # Log error category for analytics
-        error_category = get_error_category(request.error_text)
-        difficulty = estimate_fix_difficulty(request.error_text)
-        logger.info(f"Fixing {request.error_type} (category: {error_category}, difficulty: {difficulty}): {request.error_text}")
-        
-        # Call the fix service
-        new_image_bytes, fix_instruction, updated_layout_data = fix_floor_plan_error(
-            image_url=plan.preview_image_url,
-            error_text=request.error_text,
-            error_type=request.error_type,
-            requirements=requirements,
-            building_width=building_width,
-            building_depth=building_depth,
-            layout_data=layout_data
-        )
-        
-        # Upload new image to Azure Storage
-        storage_service = AzureStorageService()
-        
-        # Generate filename with timestamp to avoid caching issues
-        timestamp = datetime.utcnow().strftime('%Y%m%d%H%M%S')
-        variant_num = plan.variant_number or 1
-        filename = f"floor_plan_{variant_num}_fixed_{timestamp}.png"
-        
-        new_image_url = storage_service.upload_floor_plan_image(
-            new_image_bytes,
-            db_user.name or db_user.email or "user",
-            project.name,
-            plan_id,
-            filename
-        )
-        
-        if not new_image_url:
-            raise HTTPException(status_code=500, detail="Failed to upload corrected image")
-        
-        logger.info(f"Uploaded corrected image: {new_image_url}")
-        
-        # Update database
-        plan.preview_image_url = new_image_url
-        plan.layout_data = json.dumps(updated_layout_data)
-        plan.updated_at = datetime.utcnow()
-        plan.compliance_notes = (plan.compliance_notes or "") + f"\n[{datetime.utcnow().isoformat()}] Fixed: {request.error_text}"
-        
-        db.commit()
-        db.refresh(plan)
-        
+    # Check if fixing is in progress
+    if layout_data.get('_fixing'):
         return {
-            'success': True,
-            'message': 'Floor plan corrected successfully',
+            'status': 'fixing',
             'plan_id': plan_id,
-            'new_image_url': new_image_url,
-            'fixed_error': request.error_text,
-            'fix_instruction': fix_instruction,
-            'error_category': error_category,
-            'updated_layout_data': json.dumps(updated_layout_data)
+            'error_text': layout_data['_fixing'].get('error_text'),
+            'started_at': layout_data['_fixing'].get('started_at'),
+            'preview_image_url': plan.preview_image_url
         }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to fix floor plan error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to fix error: {str(e)}")
+    
+    # Check if there was an error
+    if layout_data.get('_fix_error'):
+        error_msg = layout_data.pop('_fix_error')
+        plan.layout_data = json.dumps(layout_data)
+        db.commit()
+        return {
+            'status': 'error',
+            'plan_id': plan_id,
+            'error': error_msg,
+            'preview_image_url': plan.preview_image_url
+        }
+    
+    # Fix completed
+    return {
+        'status': 'completed',
+        'plan_id': plan_id,
+        'preview_image_url': plan.preview_image_url,
+        'layout_data': plan.layout_data,
+        'updated_at': plan.updated_at.isoformat() if plan.updated_at else None
+    }
