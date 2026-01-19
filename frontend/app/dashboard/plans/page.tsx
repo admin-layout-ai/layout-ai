@@ -132,6 +132,7 @@ export default function PlansPage() {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [removingItems, setRemovingItems] = useState<Set<string>>(new Set()); // Track items being animated out
   
   // Lightbox state (for gallery quick view)
   const [lightboxPlan, setLightboxPlan] = useState<FloorPlanWithProject | null>(null);
@@ -217,11 +218,17 @@ export default function PlansPage() {
     }
   };
 
-  // Handle ignoring an error or warning - optimistic update with background API call
+  // Handle ignoring an error or warning - animate out then remove
   const handleIgnoreItem = async (itemType: 'error' | 'warning', itemText: string) => {
     if (!selectedPlan || !layoutData) return;
     
-    // Immediately update local state (optimistic update)
+    // Step 1: Mark item for removal (triggers fade-out animation)
+    setRemovingItems(prev => new Set(prev).add(itemText));
+    
+    // Step 2: Wait for animation to complete (300ms)
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // Step 3: Actually remove the item from data
     const updatedLayoutData = { ...layoutData };
     
     if (updatedLayoutData.validation) {
@@ -242,10 +249,17 @@ export default function PlansPage() {
       }
     }
     
-    // Update layoutData immediately (this updates the validation panel)
+    // Update layoutData (this updates the validation panel)
     setLayoutData(updatedLayoutData);
     
-    // Update plans array for persistence (without triggering selectedPlan useEffect)
+    // Clear from removing set
+    setRemovingItems(prev => {
+      const next = new Set(prev);
+      next.delete(itemText);
+      return next;
+    });
+    
+    // Update plans array for persistence
     const updatedLayoutDataString = JSON.stringify(updatedLayoutData);
     setPlans(prevPlans => 
       prevPlans.map(p => 
@@ -520,11 +534,12 @@ export default function PlansPage() {
                             const [category, ...messageParts] = error.split(': ');
                             const message = messageParts.join(': ') || category;
                             const hasCategory = messageParts.length > 0;
+                            const isRemoving = removingItems.has(error);
                             
                             return (
                               <div 
                                 key={error} 
-                                className="bg-red-500/10 rounded-xl p-3 border border-red-500/30 group/item relative overflow-hidden cursor-pointer hover:border-red-500/60 transition-all animate-in fade-in duration-200"
+                                className={`bg-red-500/10 rounded-xl p-3 border border-red-500/30 group/item relative overflow-hidden cursor-pointer hover:border-red-500/60 transition-all duration-300 ${isRemoving ? 'opacity-0 scale-95 -translate-x-4' : 'opacity-100 scale-100 translate-x-0'}`}
                               >
                                 {/* Content - blurs on hover */}
                                 <div className="text-sm text-gray-300 group-hover/item:blur-[2px] group-hover/item:opacity-40 transition-all duration-200">
@@ -592,11 +607,12 @@ export default function PlansPage() {
                             const [category, ...messageParts] = warning.split(': ');
                             const message = messageParts.join(': ') || category;
                             const hasCategory = messageParts.length > 0;
+                            const isRemoving = removingItems.has(warning);
                             
                             return (
                               <div 
                                 key={warning} 
-                                className="bg-yellow-500/10 rounded-xl p-3 border border-yellow-500/30 group/item relative overflow-hidden cursor-pointer hover:border-yellow-500/60 transition-all animate-in fade-in duration-200"
+                                className={`bg-yellow-500/10 rounded-xl p-3 border border-yellow-500/30 group/item relative overflow-hidden cursor-pointer hover:border-yellow-500/60 transition-all duration-300 ${isRemoving ? 'opacity-0 scale-95 -translate-x-4' : 'opacity-100 scale-100 translate-x-0'}`}
                               >
                                 {/* Content - blurs on hover */}
                                 <div className="text-sm text-gray-300 group-hover/item:blur-[2px] group-hover/item:opacity-40 transition-all duration-200">
