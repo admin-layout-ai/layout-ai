@@ -415,6 +415,37 @@ export default function PlansPage() {
                   <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400" />
                   Validation Results
                 </h3>
+
+                {/* Validation Summary - Now at the top */}
+                {layoutData?.validation?.summary && (
+                  <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                    <h4 className="text-white font-medium text-sm mb-3">Summary</h4>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Council</span>
+                        <span className={layoutData.validation.summary.council_compliant ? 'text-green-400' : 'text-red-400'}>
+                          {layoutData.validation.summary.council_compliant ? '✓' : '✗'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">NCC</span>
+                        <span className={layoutData.validation.summary.ncc_compliant ? 'text-green-400' : 'text-red-400'}>
+                          {layoutData.validation.summary.ncc_compliant ? '✓' : '✗'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Layout</span>
+                        <span className={layoutData.validation.summary.layout_valid ? 'text-green-400' : 'text-red-400'}>
+                          {layoutData.validation.summary.layout_valid ? '✓' : '✗'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Coverage</span>
+                        <span className="text-white">{layoutData.validation.summary.coverage_percent}%</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 
                 {/* Errors Section */}
                 {(() => {
@@ -458,9 +489,9 @@ export default function PlansPage() {
                                     className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
                                   >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                                     </svg>
-                                    Fix
+                                    AI Fix
                                   </button>
                                   <button 
                                     onClick={(e) => {
@@ -531,9 +562,9 @@ export default function PlansPage() {
                                     className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
                                   >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                                     </svg>
-                                    Fix
+                                    AI Fix
                                   </button>
                                   <button 
                                     onClick={(e) => {
@@ -561,37 +592,6 @@ export default function PlansPage() {
                     </div>
                   );
                 })()}
-
-                {/* Validation Summary */}
-                {layoutData?.validation?.summary && (
-                  <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-                    <h4 className="text-white font-medium text-sm mb-3">Validation Summary</h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Council Compliant</span>
-                        <span className={layoutData.validation.summary.council_compliant ? 'text-green-400' : 'text-red-400'}>
-                          {layoutData.validation.summary.council_compliant ? 'Yes' : 'No'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">NCC Compliant</span>
-                        <span className={layoutData.validation.summary.ncc_compliant ? 'text-green-400' : 'text-red-400'}>
-                          {layoutData.validation.summary.ncc_compliant ? 'Yes' : 'No'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Layout Valid</span>
-                        <span className={layoutData.validation.summary.layout_valid ? 'text-green-400' : 'text-red-400'}>
-                          {layoutData.validation.summary.layout_valid ? 'Yes' : 'No'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Coverage</span>
-                        <span className="text-white">{layoutData.validation.summary.coverage_percent}%</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
