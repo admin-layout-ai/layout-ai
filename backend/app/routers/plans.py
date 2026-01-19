@@ -136,6 +136,11 @@ class FloorPlanResponse(BaseModel):
         from_attributes = True
 
 
+class UpdateLayoutDataRequest(BaseModel):
+    """Request model for updating floor plan layout_data (e.g., to ignore errors/warnings)."""
+    layout_data: str
+
+
 # =============================================================================
 # HELPERS
 # =============================================================================
@@ -671,6 +676,58 @@ async def get_plan_validation(
         }
     except Exception as e:
         return {'error': str(e)}
+
+
+@router.put("/{project_id}/plans/{plan_id}/layout-data")
+async def update_plan_layout_data(
+    project_id: int,
+    plan_id: int,
+    request: UpdateLayoutDataRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update the layout_data for a floor plan.
+    Used to persist ignored errors/warnings.
+    """
+    db_user = get_db_user(current_user, db)
+    
+    # Verify plan exists and belongs to user
+    plan = db.query(models.FloorPlan).join(models.Project).filter(
+        models.FloorPlan.id == plan_id,
+        models.FloorPlan.project_id == project_id,
+        models.Project.user_id == db_user.id
+    ).first()
+    
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    
+    try:
+        # Validate that the layout_data is valid JSON
+        json.loads(request.layout_data)
+        
+        # Update the layout_data
+        plan.layout_data = request.layout_data
+        plan.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(plan)
+        
+        logger.info(f"Updated layout_data for plan {plan_id} (project {project_id})")
+        
+        return {
+            'success': True,
+            'message': 'Layout data updated successfully',
+            'plan_id': plan_id,
+            'project_id': project_id
+        }
+        
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON in layout_data")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to update layout_data for plan {plan_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update layout data: {str(e)}")
 
 
 # =============================================================================
