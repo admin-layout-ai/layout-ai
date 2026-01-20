@@ -885,6 +885,8 @@ def fix_floor_plan_task(
     """
     Background task to fix a floor plan error using AI.
     Similar pattern to generate_floor_plans_task in projects.py.
+    
+    NOTE: fix_floor_plan_error is a SYNCHRONOUS function - do NOT use asyncio.run()
     """
     from ..database import SessionLocal
     from ..services.azure_storage import AzureStorageService
@@ -901,6 +903,18 @@ def fix_floor_plan_task(
             logger.error(f"Plan {plan_id} or Project {project_id} not found for fix")
             return
         
+        # Check if plan has an image to fix
+        if not plan.preview_image_url:
+            logger.error(f"Plan {plan_id} has no preview image URL to fix")
+            layout_data = json.loads(plan.layout_data) if plan.layout_data else {}
+            layout_data['_fix_error'] = "No image available to fix"
+            if layout_data.get('_fixing'):
+                del layout_data['_fixing']
+            plan.layout_data = json.dumps(layout_data)
+            plan.updated_at = datetime.utcnow()
+            db.commit()
+            return
+        
         requirements = build_requirements_from_project(project)
         
         # Get building envelope
@@ -914,20 +928,27 @@ def fix_floor_plan_task(
         layout_data = json.loads(plan.layout_data) if plan.layout_data else {}
         
         logger.info(f"Starting fix for plan {plan_id}: {error_text}")
+        logger.info(f"Image URL: {plan.preview_image_url}")
+        logger.info(f"Building envelope: {building_width}m x {building_depth}m")
         
-        # Call the fix service (synchronous in background task)
-        import asyncio
-        new_image_bytes, fix_instruction, updated_layout_data = asyncio.run(
-            fix_floor_plan_error(
-                image_url=plan.preview_image_url,
-                error_text=error_text,
-                error_type=error_type,
-                requirements=requirements,
-                building_width=building_width,
-                building_depth=building_depth,
-                layout_data=layout_data
-            )
+        # =================================================================
+        # FIXED: Call fix_floor_plan_error DIRECTLY - it's SYNCHRONOUS!
+        # Previous code incorrectly used asyncio.run() which caused failures
+        # =================================================================
+        new_image_bytes, fix_instruction, updated_layout_data = fix_floor_plan_error(
+            image_url=plan.preview_image_url,
+            error_text=error_text,
+            error_type=error_type,
+            requirements=requirements,
+            building_width=building_width,
+            building_depth=building_depth,
+            layout_data=layout_data
         )
+        
+        if not new_image_bytes:
+            raise Exception("AI did not return a corrected image")
+        
+        logger.info(f"Received corrected image: {len(new_image_bytes)} bytes")
         
         # Upload new image to Azure Storage
         storage_service = AzureStorageService()
@@ -936,29 +957,34 @@ def fix_floor_plan_task(
         variant_num = plan.variant_number or 1
         filename = f"floor_plan_{variant_num}_fixed_{timestamp}.png"
         
+        # FIXED: Proper user name handling with correct conditional logic
+        if user:
+            user_name = getattr(user, 'full_name', None) or getattr(user, 'name', None) or (user.email.split('@')[0] if user.email else f"user_{user.id}")
+        else:
+            user_name = "unknown_user"
+        
         new_image_url = storage_service.upload_floor_plan_image(
             new_image_bytes,
-            user.name or user.email or "user" if user else "user",
+            user_name,
             project.name,
             plan_id,
             filename
         )
         
         if not new_image_url:
-            raise Exception("Failed to upload corrected image")
+            raise Exception("Failed to upload corrected image to Azure Storage")
         
         logger.info(f"Uploaded corrected image: {new_image_url}")
+        
+        # Clear the fixing status from layout_data BEFORE saving
+        if updated_layout_data.get('_fixing'):
+            del updated_layout_data['_fixing']
         
         # Update database
         plan.preview_image_url = new_image_url
         plan.layout_data = json.dumps(updated_layout_data)
         plan.updated_at = datetime.utcnow()
-        plan.compliance_notes = (plan.compliance_notes or "") + f"\n[{datetime.utcnow().isoformat()}] Fixed: {error_text}"
-        
-        # Clear the fixing status
-        if updated_layout_data.get('_fixing'):
-            del updated_layout_data['_fixing']
-            plan.layout_data = json.dumps(updated_layout_data)
+        plan.compliance_notes = (plan.compliance_notes or "") + f"\n[{datetime.utcnow().isoformat()}] AI Fix applied: {error_text}"
         
         db.commit()
         logger.info(f"Successfully fixed plan {plan_id}")
@@ -979,8 +1005,8 @@ def fix_floor_plan_task(
                 plan.layout_data = json.dumps(layout_data)
                 plan.updated_at = datetime.utcnow()
                 db.commit()
-        except:
-            pass
+        except Exception as inner_e:
+            logger.error(f"Failed to save error status: {inner_e}")
     finally:
         db.close()
 
