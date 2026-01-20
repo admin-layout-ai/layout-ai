@@ -953,9 +953,23 @@ def fix_floor_plan_task(
         # Upload new image to Azure Storage
         storage_service = AzureStorageService()
         
-        timestamp = datetime.utcnow().strftime('%Y%m%d%H%M%S')
-        variant_num = plan.variant_number or 1
-        filename = f"floor_plan_{variant_num}_fixed_{timestamp}.png"
+        # CHANGED: Use the ORIGINAL filename to replace the existing file
+        # Extract filename from the existing preview_image_url
+        original_url = plan.preview_image_url
+        if original_url:
+            # URL format: https://account.blob.core.windows.net/container/path/filename.png
+            # Extract just the filename from the path
+            original_filename = original_url.split('/')[-1]
+            # Remove any query parameters (e.g., ?timestamp=xxx)
+            if '?' in original_filename:
+                original_filename = original_filename.split('?')[0]
+            filename = original_filename
+        else:
+            # Fallback if no existing URL (shouldn't happen)
+            variant_num = plan.variant_number or 1
+            filename = f"floor_plan_{variant_num}.png"
+        
+        logger.info(f"Replacing original file: {filename}")
         
         # FIXED: Proper user name handling with correct conditional logic
         if user:
@@ -974,14 +988,18 @@ def fix_floor_plan_task(
         if not new_image_url:
             raise Exception("Failed to upload corrected image to Azure Storage")
         
-        logger.info(f"Uploaded corrected image: {new_image_url}")
+        logger.info(f"Uploaded corrected image (replaced original): {new_image_url}")
         
         # Clear the fixing status from layout_data BEFORE saving
         if updated_layout_data.get('_fixing'):
             del updated_layout_data['_fixing']
         
-        # Update database
-        plan.preview_image_url = new_image_url
+        # Add fix timestamp to layout_data for cache-busting on frontend
+        updated_layout_data['_last_fix_timestamp'] = datetime.utcnow().isoformat()
+        
+        # Update database - keep the SAME URL since we replaced the file
+        # The frontend will use the timestamp to bust cache
+        plan.preview_image_url = new_image_url  # Should be same as original
         plan.layout_data = json.dumps(updated_layout_data)
         plan.updated_at = datetime.utcnow()
         plan.compliance_notes = (plan.compliance_notes or "") + f"\n[{datetime.utcnow().isoformat()}] AI Fix applied: {error_text}"

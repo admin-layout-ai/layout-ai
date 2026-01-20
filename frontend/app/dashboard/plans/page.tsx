@@ -5,7 +5,7 @@
 // - Gallery: Shows all plans in a grid
 // - Detail: Click a plan to view details (no URL change)
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   Layers, 
@@ -31,9 +31,7 @@ import {
   FileText,
   Ruler,
   Clock,
-  Sparkles,
-  Wand2,
-  RefreshCw
+  Sparkles
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import api, { Project, FloorPlan } from '@/lib/api';
@@ -138,20 +136,7 @@ export default function PlansPage() {
   const [removingItems, setRemovingItems] = useState<Set<string>>(new Set()); // Track items being animated out
   const [fixingError, setFixingError] = useState<string | null>(null); // Track which error is being fixed
   const [fixingMessage, setFixingMessage] = useState<string>(''); // AI message during fix
-  const [fixingStep, setFixingStep] = useState<number>(0); // Current step in fixing process
-  const [fixingProgress, setFixingProgress] = useState<number>(0); // Progress percentage
   const [fixingSuccess, setFixingSuccess] = useState<boolean | null>(null); // Success/failure state
-  const fixingStartTime = useRef<number>(0);
-
-  // AI fixing steps for progress visualization
-  const AI_FIXING_STEPS = [
-    { id: 'download', label: 'Downloading plan', icon: Download },
-    { id: 'analyze', label: 'Analyzing issue', icon: Search },
-    { id: 'calculate', label: 'Calculating fix', icon: Ruler },
-    { id: 'generate', label: 'Generating layout', icon: Wand2 },
-    { id: 'validate', label: 'Validating', icon: CheckCircle },
-    { id: 'upload', label: 'Saving', icon: RefreshCw },
-  ];
 
   // AI messages for the fixing overlay
   const AI_FIXING_MESSAGES = [
@@ -323,13 +308,10 @@ export default function PlansPage() {
   const handleFixItem = async (itemType: 'error' | 'warning', itemText: string) => {
     if (!selectedPlan || !layoutData) return;
     
-    // Reset fixing state
+    // Set fixing state
     setFixingError(itemText);
-    setFixingStep(0);
-    setFixingProgress(0);
     setFixingSuccess(null);
     setFixingMessage(AI_FIXING_MESSAGES[0]);
-    fixingStartTime.current = Date.now();
     
     // Rotate through AI messages every 3 seconds
     let messageIndex = 0;
@@ -337,16 +319,6 @@ export default function PlansPage() {
       messageIndex = (messageIndex + 1) % AI_FIXING_MESSAGES.length;
       setFixingMessage(AI_FIXING_MESSAGES[messageIndex]);
     }, 3000);
-    
-    // Simulate step progression for visual feedback
-    let currentStep = 0;
-    const stepInterval = setInterval(() => {
-      if (currentStep < AI_FIXING_STEPS.length - 1) {
-        currentStep++;
-        setFixingStep(currentStep);
-        setFixingProgress((currentStep / AI_FIXING_STEPS.length) * 100);
-      }
-    }, 5000);
     
     try {
       const token = localStorage.getItem('auth_token') || localStorage.getItem('access_token');
@@ -405,60 +377,45 @@ export default function PlansPage() {
       
       const result = await pollForCompletion();
       
-      // Complete all steps and show success
-      setFixingStep(AI_FIXING_STEPS.length);
-      setFixingProgress(100);
+      // Show success
       setFixingSuccess(true);
       
       // Update the image URL
       if (result.preview_image_url) {
-        // Parse and update layoutData
         if (result.layout_data) {
           const newLayoutData = JSON.parse(result.layout_data);
           setLayoutData(newLayoutData);
         }
         
-        // Update selectedPlan with new image URL
         const updatedPlan = {
           ...selectedPlan,
           preview_image_url: result.preview_image_url,
-          layout_data: result.layout_data
+          layout_data: result.layout_data,
+          updated_at: new Date().toISOString()
         };
         
-        // Update plans array
         setPlans(prevPlans =>
           prevPlans.map(p =>
             p.id === selectedPlan.id ? updatedPlan : p
           )
         );
         
-        // Trigger image reload by resetting image state
         setImageLoaded(false);
         setImageError(false);
-        
-        // Update selectedPlan (this will trigger useEffect but we want the new image)
         setSelectedPlan(updatedPlan);
       }
       
-      console.log('Fixed error:', itemText);
-      
-      // Show success state briefly before closing
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Brief pause to show success
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
     } catch (err) {
       console.error(`Error fixing ${itemType}:`, err);
       setFixingSuccess(false);
-      setError(`Failed to fix ${itemType}. Please try again.`);
-      
-      // Show error state briefly before closing
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 1500));
     } finally {
       clearInterval(messageInterval);
-      clearInterval(stepInterval);
       setFixingError(null);
       setFixingMessage('');
-      setFixingStep(0);
-      setFixingProgress(0);
       setFixingSuccess(null);
     }
   };
@@ -544,156 +501,50 @@ export default function PlansPage() {
     
     return (
       <div className="min-h-screen lg:h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 overflow-auto lg:overflow-hidden flex flex-col relative">
-        {/* Enhanced AI Fixing Overlay */}
+        {/* Simple AI Fixing Overlay */}
         {fixingError && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            {/* Backdrop with animated gradient */}
-            <div className="absolute inset-0 bg-slate-900/90 backdrop-blur-xl">
-              {/* Animated background gradient */}
-              <div className="absolute inset-0 opacity-30">
-                <div className="absolute top-0 -left-1/4 w-1/2 h-1/2 bg-blue-500 rounded-full blur-[120px] animate-pulse" />
-                <div className="absolute bottom-0 -right-1/4 w-1/2 h-1/2 bg-purple-500 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1s' }} />
+          <div className="fixed inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-800 rounded-2xl border border-white/10 p-8 max-w-md w-full text-center shadow-2xl">
+              
+              {/* Simple spinner */}
+              <div className="relative w-16 h-16 mx-auto mb-6">
+                <div className="absolute inset-0 rounded-full border-4 border-blue-500/20" />
+                <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-blue-500 animate-spin" />
+                {fixingSuccess === true ? (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <CheckCircle className="w-8 h-8 text-green-400" />
+                  </div>
+                ) : fixingSuccess === false ? (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <AlertCircle className="w-8 h-8 text-red-400" />
+                  </div>
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Sparkles className="w-6 h-6 text-blue-400" />
+                  </div>
+                )}
               </div>
-            </div>
-            
-            {/* Main content */}
-            <div className="relative z-10 w-full max-w-2xl">
-              <div className="bg-slate-800/90 backdrop-blur-sm rounded-3xl border border-white/10 shadow-2xl overflow-hidden">
-                
-                {/* Progress bar */}
-                <div className="h-1.5 bg-slate-700/50">
-                  <div 
-                    className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 transition-all duration-500 ease-out"
-                    style={{ width: `${fixingProgress}%` }}
-                  />
-                </div>
-                
-                <div className="p-8">
-                  {/* Header with icon */}
-                  <div className="flex items-center justify-center mb-8">
-                    <div className="relative">
-                      {/* Spinning outer ring */}
-                      <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-blue-500 border-r-purple-500 animate-spin" style={{ animationDuration: '2s' }} />
-                      
-                      {/* Icon container */}
-                      <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-purple-500/30">
-                        {fixingSuccess === true ? (
-                          <CheckCircle className="w-10 h-10 text-white" />
-                        ) : fixingSuccess === false ? (
-                          <AlertCircle className="w-10 h-10 text-white" />
-                        ) : (
-                          <Sparkles className="w-10 h-10 text-white animate-pulse" />
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Title */}
-                  <h3 className="text-2xl font-bold text-center mb-2 text-white">
-                    {fixingSuccess === true ? 'Fix Complete!' : 
-                     fixingSuccess === false ? 'Fix Failed' : 
-                     'AI is Fixing Your Plan'}
-                  </h3>
-                  
-                  {/* Animated tip message */}
-                  <p className="text-center text-blue-300 mb-8 h-6 transition-opacity duration-300">
-                    {fixingSuccess !== null ? '' : fixingMessage}
-                  </p>
-                  
-                  {/* Progress steps */}
-                  {fixingSuccess === null && (
-                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-8">
-                      {AI_FIXING_STEPS.map((step, index) => {
-                        const StepIcon = step.icon;
-                        const isActive = index === fixingStep;
-                        const isComplete = index < fixingStep;
-                        
-                        return (
-                          <div 
-                            key={step.id}
-                            className={`flex flex-col items-center p-2 rounded-xl transition-all duration-300 ${
-                              isActive ? 'bg-blue-500/20 scale-105' : 
-                              isComplete ? 'bg-green-500/10' : 'bg-white/5'
-                            }`}
-                          >
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-1 transition-colors ${
-                              isActive ? 'bg-blue-500 text-white' :
-                              isComplete ? 'bg-green-500 text-white' : 'bg-white/10 text-gray-400'
-                            }`}>
-                              {isComplete ? (
-                                <CheckCircle className="w-4 h-4" />
-                              ) : (
-                                <StepIcon className={`w-4 h-4 ${isActive ? 'animate-pulse' : ''}`} />
-                              )}
-                            </div>
-                            <span className={`text-[10px] text-center leading-tight ${
-                              isActive ? 'text-blue-300' : 
-                              isComplete ? 'text-green-300' : 'text-gray-500'
-                            }`}>
-                              {step.label}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  
-                  {/* Error being fixed */}
-                  <div className={`rounded-xl p-4 border ${
-                    fixingSuccess === true ? 'bg-green-500/10 border-green-500/30' :
-                    fixingSuccess === false ? 'bg-red-500/10 border-red-500/30' :
-                    'bg-white/5 border-white/10'
-                  }`}>
-                    <div className="flex items-start gap-3">
-                      <div className={`p-2 rounded-lg flex-shrink-0 ${
-                        fixingSuccess === true ? 'bg-green-500/20' :
-                        fixingSuccess === false ? 'bg-red-500/20' :
-                        'bg-red-500/20'
-                      }`}>
-                        {fixingSuccess === true ? (
-                          <CheckCircle className="w-5 h-5 text-green-400" />
-                        ) : (
-                          <AlertTriangle className="w-5 h-5 text-red-400" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-xs uppercase tracking-wide mb-1 ${
-                          fixingSuccess === true ? 'text-green-400/70' :
-                          fixingSuccess === false ? 'text-red-400/70' :
-                          'text-gray-400'
-                        }`}>
-                          {fixingSuccess === true ? 'Fixed Issue' :
-                           fixingSuccess === false ? 'Failed to Fix' :
-                           'Issue Being Fixed'}
-                        </p>
-                        <p className={`text-sm ${
-                          fixingSuccess === true ? 'text-green-300 line-through opacity-70' :
-                          fixingSuccess === false ? 'text-red-300' :
-                          'text-white'
-                        }`}>
-                          {fixingError}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Time estimate */}
-                  {fixingSuccess === null && (
-                    <div className="flex items-center justify-center gap-2 mt-6 text-gray-500 text-sm">
-                      <Clock className="w-4 h-4" />
-                      <span>This usually takes 30-60 seconds</span>
-                    </div>
-                  )}
-                  
-                  {/* Success message */}
-                  {fixingSuccess === true && (
-                    <div className="text-center mt-6">
-                      <p className="text-green-400 text-sm">
-                        Your floor plan has been updated successfully!
-                      </p>
-                    </div>
-                  )}
-                </div>
+              
+              {/* Title */}
+              <h3 className="text-lg font-semibold text-white mb-2">
+                {fixingSuccess === true ? 'Fixed!' : 
+                 fixingSuccess === false ? 'Fix Failed' : 
+                 'AI is fixing...'}
+              </h3>
+              
+              {/* Message */}
+              <p className="text-gray-400 text-sm mb-4">
+                {fixingSuccess === true ? 'Your floor plan has been updated.' :
+                 fixingSuccess === false ? 'Please try again.' :
+                 fixingMessage}
+              </p>
+              
+              {/* Error being fixed */}
+              <div className="bg-white/5 rounded-lg p-3 text-left">
+                <p className="text-xs text-gray-500 mb-1">Issue:</p>
+                <p className={`text-sm ${fixingSuccess === true ? 'text-green-400 line-through' : 'text-gray-300'}`}>
+                  {fixingError}
+                </p>
               </div>
             </div>
           </div>
@@ -787,7 +638,7 @@ export default function PlansPage() {
               {selectedPlan.preview_image_url ? (
                 <div className="bg-white rounded-xl shadow-xl flex items-center justify-center p-2 overflow-hidden h-full w-full">
                   <img
-                    src={selectedPlan.preview_image_url}
+                    src={`${selectedPlan.preview_image_url}?t=${selectedPlan.updated_at || Date.now()}`}
                     alt="Floor Plan"
                     className="max-h-full max-w-full object-contain transition-transform"
                     style={{ transform: `scale(${scale})` }}
