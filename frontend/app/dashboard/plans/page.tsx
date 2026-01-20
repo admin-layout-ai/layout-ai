@@ -380,17 +380,20 @@ export default function PlansPage() {
       // Show success
       setFixingSuccess(true);
       
-      // Update the image URL
+      // Update the plan with new data including compliance
       if (result.preview_image_url) {
         if (result.layout_data) {
           const newLayoutData = JSON.parse(result.layout_data);
           setLayoutData(newLayoutData);
         }
         
+        // Include all updated fields from the fix result
         const updatedPlan = {
           ...selectedPlan,
           preview_image_url: result.preview_image_url,
           layout_data: result.layout_data,
+          compliance_data: result.compliance_data,
+          is_compliant: result.is_compliant,
           updated_at: new Date().toISOString()
         };
         
@@ -403,6 +406,11 @@ export default function PlansPage() {
         setImageLoaded(false);
         setImageError(false);
         setSelectedPlan(updatedPlan);
+        
+        // Log if the fix was successful
+        if (result.fix_resolved) {
+          console.log('Fix successfully resolved the error');
+        }
       }
       
       // Brief pause to show success

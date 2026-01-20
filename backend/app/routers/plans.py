@@ -994,18 +994,95 @@ def fix_floor_plan_task(
         if updated_layout_data.get('_fixing'):
             del updated_layout_data['_fixing']
         
-        # Add fix timestamp to layout_data for cache-busting on frontend
-        updated_layout_data['_last_fix_timestamp'] = datetime.utcnow().isoformat()
+        # =================================================================
+        # RE-RUN VALIDATION after fix to update compliance status
+        # =================================================================
+        from ..services.layout_validation import run_full_validation
         
-        # Update database - keep the SAME URL since we replaced the file
-        # The frontend will use the timestamp to bust cache
-        plan.preview_image_url = new_image_url  # Should be same as original
+        logger.info(f"Re-running validation after fix...")
+        
+        # Build floor_plan_json from updated_layout_data for validation
+        floor_plan_json = {
+            'rooms': updated_layout_data.get('rooms', []),
+            'building_envelope': updated_layout_data.get('building_envelope', {
+                'width': building_width,
+                'depth': building_depth
+            }),
+            'verification': updated_layout_data.get('verification', {})
+        }
+        
+        # Get land dimensions from project
+        land_width = requirements.get('land_width', 14)
+        land_depth = requirements.get('land_depth', 25)
+        land_area = land_width * land_depth
+        council_name = requirements.get('council', 'Blacktown City Council')
+        postcode = project.postcode if hasattr(project, 'postcode') else None
+        
+        # Run full validation
+        validation_result = run_full_validation(
+            floor_plan_json=floor_plan_json,
+            requirements=requirements,
+            land_width=land_width,
+            land_depth=land_depth,
+            land_area=land_area,
+            council_name=council_name,
+            postcode=postcode
+        )
+        
+        logger.info(f"Validation result - Compliant: {validation_result.get('overall_compliant')}, "
+                    f"Errors: {len(validation_result.get('all_errors', []))}, "
+                    f"Warnings: {len(validation_result.get('all_warnings', []))}")
+        
+        # Check if the specific error we fixed is now resolved
+        new_errors = validation_result.get('all_errors', [])
+        error_fixed = not any(error_text.lower() in e.lower() for e in new_errors)
+        
+        if error_fixed:
+            logger.info(f"Error '{error_text[:50]}...' has been successfully resolved!")
+        else:
+            logger.warning(f"Error '{error_text[:50]}...' may still be present after fix")
+        
+        # Update layout_data with new validation results
+        updated_layout_data['validation'] = validation_result
+        updated_layout_data['_last_fix_timestamp'] = datetime.utcnow().isoformat()
+        updated_layout_data['_last_fix_error'] = error_text
+        updated_layout_data['_last_fix_resolved'] = error_fixed
+        
+        # Build compliance_data object
+        compliance_data = {
+            'overall_compliant': validation_result.get('overall_compliant', False),
+            'layout_validation': validation_result.get('layout_validation', {}),
+            'council_validation': validation_result.get('council_validation', {}),
+            'ncc_validation': validation_result.get('ncc_validation', {}),
+            'summary': validation_result.get('summary', {}),
+            'all_errors': validation_result.get('all_errors', []),
+            'all_warnings': validation_result.get('all_warnings', []),
+            'last_validated': datetime.utcnow().isoformat(),
+            'fix_applied': {
+                'error_text': error_text,
+                'error_type': error_type,
+                'fixed_at': datetime.utcnow().isoformat(),
+                'error_resolved': error_fixed
+            }
+        }
+        
+        # Update database with all fields
+        plan.preview_image_url = new_image_url
         plan.layout_data = json.dumps(updated_layout_data)
+        plan.compliance_data = json.dumps(compliance_data)
+        plan.is_compliant = validation_result.get('overall_compliant', False)
         plan.updated_at = datetime.utcnow()
-        plan.compliance_notes = (plan.compliance_notes or "") + f"\n[{datetime.utcnow().isoformat()}] AI Fix applied: {error_text}"
+        
+        # Update compliance notes with fix info and new status
+        fix_status = "RESOLVED" if error_fixed else "ATTEMPTED"
+        new_note = f"\n[{datetime.utcnow().isoformat()}] AI Fix {fix_status}: {error_text}"
+        new_note += f"\n  - New error count: {len(new_errors)}"
+        new_note += f"\n  - New warning count: {len(validation_result.get('all_warnings', []))}"
+        new_note += f"\n  - Overall compliant: {validation_result.get('overall_compliant', False)}"
+        plan.compliance_notes = (plan.compliance_notes or "") + new_note
         
         db.commit()
-        logger.info(f"Successfully fixed plan {plan_id}")
+        logger.info(f"Successfully fixed plan {plan_id} - is_compliant: {plan.is_compliant}")
         
     except Exception as e:
         logger.error(f"Error fixing plan {plan_id}: {str(e)}")
@@ -1152,11 +1229,14 @@ async def get_fix_status(
             'preview_image_url': plan.preview_image_url
         }
     
-    # Fix completed
+    # Fix completed - return all updated data including compliance
     return {
         'status': 'completed',
         'plan_id': plan_id,
         'preview_image_url': plan.preview_image_url,
         'layout_data': plan.layout_data,
-        'updated_at': plan.updated_at.isoformat() if plan.updated_at else None
+        'compliance_data': plan.compliance_data,
+        'is_compliant': plan.is_compliant,
+        'updated_at': plan.updated_at.isoformat() if plan.updated_at else None,
+        'fix_resolved': layout_data.get('_last_fix_resolved', False)
     }
