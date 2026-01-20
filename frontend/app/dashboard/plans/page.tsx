@@ -137,6 +137,7 @@ export default function PlansPage() {
   const [fixingError, setFixingError] = useState<string | null>(null); // Track which error is being fixed
   const [fixingMessage, setFixingMessage] = useState<string>(''); // AI message during fix
   const [fixingSuccess, setFixingSuccess] = useState<boolean | null>(null); // Success/failure state
+  const [customChangeText, setCustomChangeText] = useState(''); // Custom change request text
 
   // AI messages for the fixing overlay
   const AI_FIXING_MESSAGES = [
@@ -856,6 +857,43 @@ export default function PlansPage() {
                     </div>
                   );
                 })()}
+
+                {/* Custom Change Request */}
+                <div className="mt-4 pt-4 border-t border-white/10">
+                  <h4 className="text-white font-medium text-sm mb-3 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-purple-400" />
+                    Request Additional Changes
+                  </h4>
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={customChangeText}
+                        onChange={(e) => setCustomChangeText(e.target.value.slice(0, 100))}
+                        placeholder="e.g., Make the kitchen larger..."
+                        maxLength={100}
+                        disabled={fixingError !== null}
+                        className="w-full bg-white/5 border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">
+                        {customChangeText.length}/100
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (customChangeText.trim()) {
+                          handleFixItem('error', `Custom: ${customChangeText.trim()}`);
+                          setCustomChangeText('');
+                        }
+                      }}
+                      disabled={!customChangeText.trim() || fixingError !== null}
+                      className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      Apply Change
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
