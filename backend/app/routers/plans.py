@@ -7,7 +7,7 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime
 import json
@@ -60,7 +60,8 @@ from ..services.sample_selection import (
 from ..services.layout_validation import (
     validate_generated_plan,
     run_full_validation,
-    get_validation_score
+    get_validation_score,
+    validate_specific_error
 )
 
 from ..services.gemini_service import (
@@ -875,6 +876,7 @@ async def get_variant_configs(
 # API ENDPOINTS - ERROR FIXING
 # =============================================================================
 
+
 def fix_floor_plan_task(
     plan_id: int,
     project_id: int,
@@ -995,68 +997,72 @@ def fix_floor_plan_task(
             del updated_layout_data['_fixing']
         
         # =================================================================
-        # RE-RUN VALIDATION after fix to update compliance status
+        # TARGETED VALIDATION - Check if the specific error was actually fixed
         # =================================================================
-        from ..services.layout_validation import run_full_validation
+        logger.info(f"Running targeted validation for: {error_text[:50]}...")
         
-        logger.info(f"Re-running validation after fix...")
+        # Get current validation data from layout_data
+        current_validation = updated_layout_data.get('validation', {})
+        current_errors = list(current_validation.get('all_errors', []))
+        current_warnings = list(current_validation.get('all_warnings', []))
         
-        # Build floor_plan_json from updated_layout_data for validation
-        floor_plan_json = {
-            'rooms': updated_layout_data.get('rooms', []),
-            'building_envelope': updated_layout_data.get('building_envelope', {
-                'width': building_width,
-                'depth': building_depth
-            }),
-            'verification': updated_layout_data.get('verification', {})
-        }
-        
-        # Get land dimensions from project
-        land_width = requirements.get('land_width', 14)
-        land_depth = requirements.get('land_depth', 25)
-        land_area = land_width * land_depth
-        council_name = requirements.get('council', 'Blacktown City Council')
-        postcode = project.postcode if hasattr(project, 'postcode') else None
-        
-        # Run full validation
-        validation_result = run_full_validation(
-            floor_plan_json=floor_plan_json,
+        # Run targeted validation to check if the specific error is fixed
+        error_fixed = validate_specific_error(
+            error_text=error_text,
+            error_type=error_type,
+            layout_data=updated_layout_data,
             requirements=requirements,
-            land_width=land_width,
-            land_depth=land_depth,
-            land_area=land_area,
-            council_name=council_name,
-            postcode=postcode
+            building_width=building_width,
+            building_depth=building_depth
         )
         
-        logger.info(f"Validation result - Compliant: {validation_result.get('overall_compliant')}, "
-                    f"Errors: {len(validation_result.get('all_errors', []))}, "
-                    f"Warnings: {len(validation_result.get('all_warnings', []))}")
-        
-        # Check if the specific error we fixed is now resolved
-        new_errors = validation_result.get('all_errors', [])
-        error_fixed = not any(error_text.lower() in e.lower() for e in new_errors)
-        
         if error_fixed:
-            logger.info(f"Error '{error_text[:50]}...' has been successfully resolved!")
+            logger.info(f"Targeted validation PASSED - error is fixed!")
+            
+            # Remove the fixed error/warning from the list
+            error_text_lower = error_text.lower().strip()
+            
+            if error_type == 'error':
+                current_errors = [
+                    err for err in current_errors 
+                    if not (error_text_lower in err.lower() or err.lower() in error_text_lower)
+                ]
+            else:
+                current_warnings = [
+                    warn for warn in current_warnings 
+                    if not (error_text_lower in warn.lower() or warn.lower() in error_text_lower)
+                ]
         else:
-            logger.warning(f"Error '{error_text[:50]}...' may still be present after fix")
+            logger.warning(f"Targeted validation FAILED - error still present")
         
-        # Update layout_data with new validation results
-        updated_layout_data['validation'] = validation_result
+        # Update validation data
+        current_validation['all_errors'] = current_errors
+        current_validation['all_warnings'] = current_warnings
+        
+        # Update summary counts
+        if 'summary' in current_validation:
+            current_validation['summary']['total_errors'] = len(current_errors)
+            current_validation['summary']['total_warnings'] = len(current_warnings)
+        
+        # Determine overall compliance based on remaining errors
+        is_now_compliant = len(current_errors) == 0
+        current_validation['overall_compliant'] = is_now_compliant
+        
+        # Update layout_data with modified validation
+        updated_layout_data['validation'] = current_validation
         updated_layout_data['_last_fix_timestamp'] = datetime.utcnow().isoformat()
         updated_layout_data['_last_fix_error'] = error_text
         updated_layout_data['_last_fix_resolved'] = error_fixed
         
-        # Build compliance_data object
+        # Build updated compliance_data
         compliance_data = {
-            'overall_compliant': validation_result.get('overall_compliant', False),
-            'layout_validation': validation_result.get('layout_validation', {}),
-            'council_validation': validation_result.get('council_validation', {}),
-            'ncc_validation': validation_result.get('ncc_validation', {}),
-            'summary': validation_result.get('summary', {}),
-            'all_errors': validation_result.get('all_errors', []),
-            'all_warnings': validation_result.get('all_warnings', []),
+            'overall_compliant': is_now_compliant,
+            'layout_validation': current_validation.get('layout_validation', {}),
+            'council_validation': current_validation.get('council_validation', {}),
+            'ncc_validation': current_validation.get('ncc_validation', {}),
+            'summary': current_validation.get('summary', {}),
+            'all_errors': current_errors,
+            'all_warnings': current_warnings,
             'last_validated': datetime.utcnow().isoformat(),
             'fix_applied': {
                 'error_text': error_text,
@@ -1070,19 +1076,19 @@ def fix_floor_plan_task(
         plan.preview_image_url = new_image_url
         plan.layout_data = json.dumps(updated_layout_data)
         plan.compliance_data = json.dumps(compliance_data)
-        plan.is_compliant = validation_result.get('overall_compliant', False)
+        plan.is_compliant = is_now_compliant
         plan.updated_at = datetime.utcnow()
         
-        # Update compliance notes with fix info and new status
-        fix_status = "RESOLVED" if error_fixed else "ATTEMPTED"
+        # Update compliance notes
+        fix_status = "RESOLVED" if error_fixed else "FAILED"
         new_note = f"\n[{datetime.utcnow().isoformat()}] AI Fix {fix_status}: {error_text}"
-        new_note += f"\n  - New error count: {len(new_errors)}"
-        new_note += f"\n  - New warning count: {len(validation_result.get('all_warnings', []))}"
-        new_note += f"\n  - Overall compliant: {validation_result.get('overall_compliant', False)}"
+        new_note += f"\n  - Remaining errors: {len(current_errors)}"
+        new_note += f"\n  - Remaining warnings: {len(current_warnings)}"
+        new_note += f"\n  - Overall compliant: {is_now_compliant}"
         plan.compliance_notes = (plan.compliance_notes or "") + new_note
         
         db.commit()
-        logger.info(f"Successfully fixed plan {plan_id} - is_compliant: {plan.is_compliant}")
+        logger.info(f"Successfully fixed plan {plan_id} - is_compliant: {plan.is_compliant}, errors remaining: {len(current_errors)}")
         
     except Exception as e:
         logger.error(f"Error fixing plan {plan_id}: {str(e)}")

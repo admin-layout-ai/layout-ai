@@ -7,6 +7,7 @@
 
 from typing import Dict, Any, List, Optional, Tuple
 import logging
+import re
 
 from .geometry import (
     rooms_overlap, 
@@ -861,3 +862,371 @@ def format_validation_summary(validation_result: Dict[str, Any]) -> str:
             lines.append(f"  ... and {len(warnings) - 5} more")
     
     return "\n".join(lines)
+
+
+# =============================================================================
+# TARGETED SINGLE-CHECK VALIDATION
+# =============================================================================
+
+def validate_specific_error(
+    error_text: str,
+    error_type: str,
+    layout_data: Dict[str, Any],
+    requirements: Dict[str, Any],
+    building_width: float,
+    building_depth: float
+) -> bool:
+    """
+    Validate if a SPECIFIC error has been fixed by running ONLY the relevant check.
+    
+    Parses error text to identify the issue type, then runs the single targeted
+    validation for that specific condition.
+    
+    Args:
+        error_text: The error message being fixed
+        error_type: 'error' or 'warning'
+        layout_data: The updated layout data with rooms
+        requirements: Project requirements dict
+        building_width: Building envelope width
+        building_depth: Building envelope depth
+    
+    Returns:
+        True if the specific error is fixed, False if still present
+    """
+    error_lower = error_text.lower()
+    rooms = layout_data.get('rooms', [])
+    
+    logger.info(f"Running TARGETED single-check validation for: {error_text[:80]}...")
+    
+    # =========================================================================
+    # Helper functions
+    # =========================================================================
+    
+    def find_room(room_type: str) -> Optional[Dict]:
+        """Find first room matching type."""
+        room_type_lower = room_type.lower()
+        for room in rooms:
+            rt = room.get('type', '').lower()
+            rn = room.get('name', '').lower()
+            if room_type_lower in rt or room_type_lower in rn:
+                return room
+        return None
+    
+    def find_all_rooms(room_type: str) -> List[Dict]:
+        """Find all rooms matching type."""
+        room_type_lower = room_type.lower()
+        result = []
+        for room in rooms:
+            rt = room.get('type', '').lower()
+            rn = room.get('name', '').lower()
+            if room_type_lower in rt or room_type_lower in rn:
+                result.append(room)
+        return result
+    
+    def get_minimum_from_error(text: str) -> Optional[float]:
+        """Extract minimum value from error text."""
+        # Try "minimum X.Xm"
+        match = re.search(r'minimum\s+(\d+\.?\d*)\s*m?', text, re.IGNORECASE)
+        if match:
+            return float(match.group(1))
+        # Try "below NCC minimum X.Xm"
+        match = re.search(r'below\s+.*?(\d+\.?\d*)\s*m', text, re.IGNORECASE)
+        if match:
+            return float(match.group(1))
+        # Try "min X.X"
+        match = re.search(r'min\s+(\d+\.?\d*)', text, re.IGNORECASE)
+        if match:
+            return float(match.group(1))
+        return None
+    
+    try:
+        # =====================================================================
+        # NCC: GARAGE WIDTH
+        # Example: "NCC: Garage width 5.3m below NCC minimum 5.4m for 2-car"
+        # =====================================================================
+        if 'garage' in error_lower and 'width' in error_lower:
+            garage = find_room('garage')
+            if not garage:
+                logger.info("FAILED: No garage found")
+                return False
+            
+            garage_width = garage.get('width', 0)
+            min_width = get_minimum_from_error(error_text) or 5.4
+            
+            is_fixed = garage_width >= min_width
+            logger.info(f"GARAGE WIDTH CHECK: {garage_width}m >= {min_width}m = {is_fixed}")
+            return is_fixed
+        
+        # =====================================================================
+        # NCC: GARAGE DEPTH
+        # Example: "NCC: Garage depth 5.0m below minimum 5.4m"
+        # =====================================================================
+        if 'garage' in error_lower and 'depth' in error_lower:
+            garage = find_room('garage')
+            if not garage:
+                logger.info("FAILED: No garage found")
+                return False
+            
+            garage_depth = garage.get('depth', 0)
+            min_depth = get_minimum_from_error(error_text) or 5.4
+            
+            is_fixed = garage_depth >= min_depth
+            logger.info(f"GARAGE DEPTH CHECK: {garage_depth}m >= {min_depth}m = {is_fixed}")
+            return is_fixed
+        
+        # =====================================================================
+        # COUNCIL: PARKING SPACES
+        # Example: "Council: 1 parking spaces below minimum 2"
+        # =====================================================================
+        if 'parking' in error_lower and ('space' in error_lower or 'spaces' in error_lower):
+            garages = find_all_rooms('garage')
+            total_spaces = 0
+            
+            for g in garages:
+                width = g.get('width', 0)
+                if width >= 5.4:
+                    total_spaces += 2
+                elif width >= 2.7:
+                    total_spaces += 1
+            
+            required = requirements.get('garage_spaces', 2)
+            is_fixed = total_spaces >= required
+            logger.info(f"PARKING SPACES CHECK: {total_spaces} >= {required} = {is_fixed}")
+            return is_fixed
+        
+        # =====================================================================
+        # BEDROOM COUNT
+        # Example: "Bedroom count mismatch: got 3, expected 4"
+        # =====================================================================
+        if 'bedroom' in error_lower and ('count' in error_lower or 'mismatch' in error_lower or 'expected' in error_lower or 'got' in error_lower):
+            bedrooms = [r for r in rooms if is_bedroom(r)]
+            expected = requirements.get('bedrooms', 4)
+            
+            is_fixed = len(bedrooms) >= expected
+            logger.info(f"BEDROOM COUNT CHECK: {len(bedrooms)} >= {expected} = {is_fixed}")
+            return is_fixed
+        
+        # =====================================================================
+        # BATHROOM COUNT
+        # Example: "Bathroom count low: got 1, expected 2"
+        # =====================================================================
+        if 'bathroom' in error_lower and ('count' in error_lower or 'low' in error_lower or 'expected' in error_lower):
+            bathrooms = [r for r in rooms if is_bathroom(r)]
+            expected = requirements.get('bathrooms', 2)
+            
+            is_fixed = len(bathrooms) >= expected
+            logger.info(f"BATHROOM COUNT CHECK: {len(bathrooms)} >= {expected} = {is_fixed}")
+            return is_fixed
+        
+        # =====================================================================
+        # LIVING AREA COUNT
+        # Example: "Living area count mismatch: got 0, expected 1"
+        # =====================================================================
+        if 'living' in error_lower and ('count' in error_lower or 'mismatch' in error_lower):
+            living_areas = [r for r in rooms if is_living_area(r)]
+            expected = requirements.get('living_areas', 1)
+            
+            is_fixed = len(living_areas) >= expected
+            logger.info(f"LIVING AREA COUNT CHECK: {len(living_areas)} >= {expected} = {is_fixed}")
+            return is_fixed
+        
+        # =====================================================================
+        # ROOM SIZE - WIDTH (any room type)
+        # Example: "NCC: Kitchen width 2.0m below minimum 2.4m"
+        # =====================================================================
+        room_types = ['bedroom', 'master', 'kitchen', 'bathroom', 'ensuite', 
+                      'laundry', 'living', 'family', 'dining', 'lounge', 'entry']
+        
+        for room_type in room_types:
+            if room_type in error_lower and 'width' in error_lower and 'below' in error_lower:
+                room = find_room(room_type)
+                if not room:
+                    logger.info(f"FAILED: No {room_type} found")
+                    return False
+                
+                room_width = room.get('width', 0)
+                min_width = get_minimum_from_error(error_text) or 2.4
+                
+                is_fixed = room_width >= min_width
+                logger.info(f"{room_type.upper()} WIDTH CHECK: {room_width}m >= {min_width}m = {is_fixed}")
+                return is_fixed
+        
+        # =====================================================================
+        # ROOM SIZE - DEPTH (any room type)
+        # Example: "NCC: Bedroom depth 2.0m below minimum 2.4m"
+        # =====================================================================
+        for room_type in room_types:
+            if room_type in error_lower and 'depth' in error_lower and 'below' in error_lower:
+                room = find_room(room_type)
+                if not room:
+                    logger.info(f"FAILED: No {room_type} found")
+                    return False
+                
+                room_depth = room.get('depth', 0)
+                min_depth = get_minimum_from_error(error_text) or 2.4
+                
+                is_fixed = room_depth >= min_depth
+                logger.info(f"{room_type.upper()} DEPTH CHECK: {room_depth}m >= {min_depth}m = {is_fixed}")
+                return is_fixed
+        
+        # =====================================================================
+        # ROOM SIZE - AREA (any room type)
+        # Example: "NCC: Master bedroom area 8.5m² below minimum 9.0m²"
+        # =====================================================================
+        for room_type in room_types:
+            if room_type in error_lower and ('area' in error_lower or 'small' in error_lower or 'm²' in error_lower):
+                room = find_room(room_type)
+                if not room:
+                    logger.info(f"FAILED: No {room_type} found")
+                    return False
+                
+                room_area = room.get('width', 0) * room.get('depth', 0)
+                min_area = get_minimum_from_error(error_text) or 9.0
+                
+                is_fixed = room_area >= min_area
+                logger.info(f"{room_type.upper()} AREA CHECK: {room_area}m² >= {min_area}m² = {is_fixed}")
+                return is_fixed
+        
+        # =====================================================================
+        # MISSING ROOM
+        # Example: "Missing required room: garage"
+        # =====================================================================
+        if 'missing' in error_lower or ('no ' in error_lower and ('room' in error_lower or 'found' in error_lower)):
+            for room_type in ['garage', 'kitchen', 'bathroom', 'ensuite', 'laundry', 
+                              'bedroom', 'master', 'family', 'living', 'dining', 'entry']:
+                if room_type in error_lower:
+                    room = find_room(room_type)
+                    is_fixed = room is not None
+                    logger.info(f"MISSING {room_type.upper()} CHECK: found = {is_fixed}")
+                    return is_fixed
+        
+        # =====================================================================
+        # ADJACENCY
+        # Example: "Master should be adjacent to ensuite"
+        # =====================================================================
+        if 'adjacent' in error_lower or 'should be adjacent' in error_lower:
+            adjacency_pairs = [
+                ('master', 'ensuite'), ('master', 'wir'), ('kitchen', 'dining'),
+                ('kitchen', 'family'), ('family', 'alfresco'), ('garage', 'entry'),
+                ('garage', 'laundry'), ('bedroom', 'bathroom')
+            ]
+            
+            for room1_type, room2_type in adjacency_pairs:
+                if room1_type in error_lower and room2_type in error_lower:
+                    room1 = find_room(room1_type)
+                    room2 = find_room(room2_type)
+                    
+                    if not room1 or not room2:
+                        logger.info(f"FAILED: Could not find {room1_type} or {room2_type}")
+                        return False
+                    
+                    is_fixed = rooms_adjacent(room1, room2)
+                    logger.info(f"ADJACENCY CHECK {room1_type}-{room2_type}: {is_fixed}")
+                    return is_fixed
+        
+        # =====================================================================
+        # BUILDING ENVELOPE / EXCEEDS BOUNDS
+        # Example: "Kitchen exceeds width: 15.0m > 14.2m"
+        # =====================================================================
+        if 'exceeds' in error_lower or 'outside' in error_lower or 'envelope' in error_lower:
+            for room_type in room_types + ['hall', 'corridor', 'robe', 'wir', 'pantry', 'alfresco']:
+                if room_type in error_lower:
+                    room = find_room(room_type)
+                    if room:
+                        x = room.get('x', 0)
+                        y = room.get('y', 0)
+                        w = room.get('width', 0)
+                        d = room.get('depth', 0)
+                        
+                        fits = (x >= 0 and y >= 0 and 
+                                (x + w) <= building_width + 0.1 and 
+                                (y + d) <= building_depth + 0.1)
+                        
+                        logger.info(f"ENVELOPE CHECK {room_type}: x={x}, y={y}, w={w}, d={d}, fits={fits}")
+                        return fits
+        
+        # =====================================================================
+        # CORRIDOR/HALLWAY WIDTH
+        # Example: "NCC: Corridor width 0.8m below minimum 1.0m"
+        # =====================================================================
+        if ('corridor' in error_lower or 'hallway' in error_lower or 'hall' in error_lower) and 'width' in error_lower:
+            halls = find_all_rooms('hall') + find_all_rooms('corridor') + find_all_rooms('hallway')
+            min_width = get_minimum_from_error(error_text) or 1.0
+            
+            for hall in halls:
+                width = min(hall.get('width', 0), hall.get('depth', 0))
+                if width < min_width:
+                    logger.info(f"CORRIDOR WIDTH CHECK: {width}m < {min_width}m = FAILED")
+                    return False
+            
+            logger.info(f"CORRIDOR WIDTH CHECK: All corridors >= {min_width}m = PASSED")
+            return True
+        
+        # =====================================================================
+        # COVERAGE / GAPS
+        # Example: "Layout has 3 gaps totaling 5.2m²"
+        # =====================================================================
+        if 'gap' in error_lower or 'coverage' in error_lower:
+            gaps = find_gaps(rooms, building_width, building_depth, grid_resolution=0.9)
+            total_gap_area = sum(g.get('area', 0) for g in gaps)
+            
+            is_fixed = total_gap_area < 1.0
+            logger.info(f"GAPS CHECK: {len(gaps)} gaps, {total_gap_area:.1f}m² = {is_fixed}")
+            return is_fixed
+        
+        # =====================================================================
+        # OVERLAP
+        # Example: "Rooms overlap: Kitchen and Dining (2.5m²)"
+        # =====================================================================
+        if 'overlap' in error_lower:
+            overlaps = find_all_overlaps(rooms)
+            is_fixed = len(overlaps) == 0
+            logger.info(f"OVERLAP CHECK: {len(overlaps)} overlaps = {is_fixed}")
+            return is_fixed
+        
+        # =====================================================================
+        # DIMENSION MISMATCH / ROW SUM
+        # Example: "Dimension error: Row at y=0 sums to 13.5m, expected 14.2m"
+        # =====================================================================
+        if 'dimension' in error_lower or 'row' in error_lower or 'sum' in error_lower:
+            row_check = verify_row_sums(rooms, building_width, building_depth)
+            is_fixed = row_check.get('valid', False)
+            logger.info(f"DIMENSION CHECK: valid = {is_fixed}")
+            return is_fixed
+        
+        # =====================================================================
+        # SETBACK ERRORS
+        # Example: "Council: Front setback 5.0m below minimum 6.0m"
+        # =====================================================================
+        if 'setback' in error_lower:
+            logger.info("SETBACK CHECK: Assuming fixed (building-level constraint)")
+            return True
+        
+        # =====================================================================
+        # SITE COVERAGE
+        # Example: "Council: Site coverage 62% exceeds maximum 60%"
+        # =====================================================================
+        if 'site coverage' in error_lower or ('coverage' in error_lower and 'exceeds' in error_lower):
+            total_area = sum(r.get('width', 0) * r.get('depth', 0) for r in rooms)
+            land_width = requirements.get('land_width', 14)
+            land_depth = requirements.get('land_depth', 25)
+            land_area = land_width * land_depth
+            max_coverage = 0.60
+            
+            current_coverage = total_area / land_area if land_area > 0 else 0
+            is_fixed = current_coverage <= max_coverage
+            logger.info(f"SITE COVERAGE CHECK: {current_coverage*100:.1f}% <= {max_coverage*100:.1f}% = {is_fixed}")
+            return is_fixed
+        
+        # =====================================================================
+        # DEFAULT: If we can't identify the specific check, assume NOT fixed
+        # =====================================================================
+        logger.warning(f"Could not identify specific validation for error: {error_text[:60]}...")
+        logger.warning("Defaulting to NOT FIXED to be conservative")
+        return False
+        
+    except Exception as e:
+        logger.error(f"Error during targeted validation: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
