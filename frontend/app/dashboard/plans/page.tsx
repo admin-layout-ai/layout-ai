@@ -863,27 +863,6 @@ export default function PlansPage() {
                   </div>
                 </div>
 
-                {/* Compliance Status */}
-                <div className={`rounded-xl p-4 border ${
-                  selectedPlan.is_compliant 
-                    ? 'bg-green-500/10 border-green-500/30' 
-                    : 'bg-orange-500/10 border-orange-500/30'
-                }`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    {selectedPlan.is_compliant ? (
-                      <CheckCircle className="w-5 h-5 text-green-400" />
-                    ) : (
-                      <AlertCircle className="w-5 h-5 text-orange-400" />
-                    )}
-                    <span className={`font-medium ${selectedPlan.is_compliant ? 'text-green-400' : 'text-orange-400'}`}>
-                      {selectedPlan.is_compliant ? 'Compliant' : 'Needs Review'}
-                    </span>
-                  </div>
-                  {selectedPlan.compliance_notes && (
-                    <p className="text-gray-400 text-sm">{selectedPlan.compliance_notes}</p>
-                  )}
-                </div>
-
                 {/* Plan Summary */}
                 <div className="bg-white/5 rounded-xl p-4 border border-white/10">
                   <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
