@@ -681,24 +681,36 @@ export default function PlansPage() {
                   <div className="bg-white/5 rounded-xl p-4 border border-white/10">
                     <h4 className="text-white font-medium text-sm mb-3">Summary</h4>
                     <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Council</span>
-                        <span className={layoutData.validation.summary.council_compliant ? 'text-green-400' : 'text-red-400'}>
-                          {layoutData.validation.summary.council_compliant ? '✓' : '✗'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">NCC</span>
-                        <span className={layoutData.validation.summary.ncc_compliant ? 'text-green-400' : 'text-red-400'}>
-                          {layoutData.validation.summary.ncc_compliant ? '✓' : '✗'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Layout</span>
-                        <span className={layoutData.validation.summary.layout_valid ? 'text-green-400' : 'text-red-400'}>
-                          {layoutData.validation.summary.layout_valid ? '✓' : '✗'}
-                        </span>
-                      </div>
+                      {(() => {
+                        // Calculate compliance from actual errors instead of relying on stored flags
+                        const errors = layoutData?.validation?.all_errors || [];
+                        const hasCouncilErrors = errors.some((e: string) => e.toLowerCase().includes('council'));
+                        const hasNccErrors = errors.some((e: string) => e.toLowerCase().includes('ncc'));
+                        const hasLayoutErrors = errors.some((e: string) => !e.toLowerCase().includes('council') && !e.toLowerCase().includes('ncc'));
+                        
+                        return (
+                          <>
+                            <div className="flex justify-between">
+                              <span className="text-gray-400">Council</span>
+                              <span className={!hasCouncilErrors ? 'text-green-400' : 'text-red-400'}>
+                                {!hasCouncilErrors ? '✓' : '✗'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-400">NCC</span>
+                              <span className={!hasNccErrors ? 'text-green-400' : 'text-red-400'}>
+                                {!hasNccErrors ? '✓' : '✗'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-400">Layout</span>
+                              <span className={!hasLayoutErrors ? 'text-green-400' : 'text-red-400'}>
+                                {!hasLayoutErrors ? '✓' : '✗'}
+                              </span>
+                            </div>
+                          </>
+                        );
+                      })()}
                       <div className="flex justify-between">
                         <span className="text-gray-400">Coverage</span>
                         <span className="text-white">{layoutData.validation.summary.coverage_percent}%</span>

@@ -1039,16 +1039,46 @@ def fix_floor_plan_task(
         current_validation['all_errors'] = current_errors
         current_validation['all_warnings'] = current_warnings
         
-        # Update summary counts
-        if 'summary' in current_validation:
-            current_validation['summary']['total_errors'] = len(current_errors)
-            current_validation['summary']['total_warnings'] = len(current_warnings)
+        # Update summary counts AND compliance flags based on remaining errors
+        if 'summary' not in current_validation:
+            current_validation['summary'] = {}
+        
+        current_validation['summary']['total_errors'] = len(current_errors)
+        current_validation['summary']['total_warnings'] = len(current_warnings)
+        
+        # Check remaining errors to update Council/NCC/Layout compliance flags
+        has_council_errors = any('council' in err.lower() for err in current_errors)
+        has_ncc_errors = any('ncc' in err.lower() for err in current_errors)
+        has_layout_errors = any(
+            not ('council' in err.lower() or 'ncc' in err.lower()) 
+            for err in current_errors
+        )
+        
+        current_validation['summary']['council_compliant'] = not has_council_errors
+        current_validation['summary']['ncc_compliant'] = not has_ncc_errors
+        current_validation['summary']['layout_valid'] = not has_layout_errors
         
         # Determine overall compliance based on remaining errors
         is_now_compliant = len(current_errors) == 0
         current_validation['overall_compliant'] = is_now_compliant
         
-        # Update layout_data with modified validation
+        # Update nested validation objects to reflect current state
+        council_validation = current_validation.get('council_validation', {})
+        council_validation['valid'] = not has_council_errors
+        council_validation['errors'] = [e for e in current_errors if 'council' in e.lower()]
+        current_validation['council_validation'] = council_validation
+        
+        ncc_validation = current_validation.get('ncc_validation', {})
+        ncc_validation['compliant'] = not has_ncc_errors
+        ncc_validation['errors'] = [e for e in current_errors if 'ncc' in e.lower()]
+        current_validation['ncc_validation'] = ncc_validation
+        
+        layout_validation = current_validation.get('layout_validation', {})
+        layout_validation['valid'] = not has_layout_errors
+        layout_validation['errors'] = [e for e in current_errors if not ('council' in e.lower() or 'ncc' in e.lower())]
+        current_validation['layout_validation'] = layout_validation
+        
+        # Update layout_data with modified validation (includes all nested updates)
         updated_layout_data['validation'] = current_validation
         updated_layout_data['_last_fix_timestamp'] = datetime.utcnow().isoformat()
         updated_layout_data['_last_fix_error'] = error_text
@@ -1057,9 +1087,9 @@ def fix_floor_plan_task(
         # Build updated compliance_data
         compliance_data = {
             'overall_compliant': is_now_compliant,
-            'layout_validation': current_validation.get('layout_validation', {}),
-            'council_validation': current_validation.get('council_validation', {}),
-            'ncc_validation': current_validation.get('ncc_validation', {}),
+            'layout_validation': layout_validation,
+            'council_validation': council_validation,
+            'ncc_validation': ncc_validation,
             'summary': current_validation.get('summary', {}),
             'all_errors': current_errors,
             'all_warnings': current_warnings,
