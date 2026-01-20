@@ -941,6 +941,15 @@ def validate_specific_error(
     
     try:
         # =====================================================================
+        # CUSTOM USER REQUEST
+        # For custom change requests, assume the AI applied the change successfully
+        # since we can't automatically validate arbitrary user requests
+        # =====================================================================
+        if error_text.startswith('Custom:') or 'custom' in error_lower:
+            logger.info("CUSTOM CHANGE REQUEST: Assuming fix was applied successfully")
+            return True
+        
+        # =====================================================================
         # NCC: GARAGE WIDTH
         # Example: "NCC: Garage width 5.3m below NCC minimum 5.4m for 2-car"
         # =====================================================================

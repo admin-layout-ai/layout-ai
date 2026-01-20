@@ -155,6 +155,16 @@ def parse_error_to_instruction(error_text: str) -> str:
             "Minimum size should be 24m² (e.g., 6m x 4m)."
         )
     
+    # Custom user request - pass through the request directly
+    if error_text.startswith('Custom:'):
+        custom_request = error_text.replace('Custom:', '').strip()
+        return (
+            f"USER REQUEST: {custom_request}. "
+            f"Apply this change to the floor plan while maintaining structural integrity, "
+            f"proper room proportions, and NCC compliance. Ensure all rooms remain accessible "
+            f"and the overall layout remains functional."
+        )
+    
     # Generic fallback - use the error text directly
     return (
         f"FIX this issue: {error_text}. "

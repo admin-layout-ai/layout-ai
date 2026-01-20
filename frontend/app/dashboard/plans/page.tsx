@@ -672,10 +672,22 @@ export default function PlansPage() {
             {/* Errors & Warnings Panel - 40% */}
             <div className="w-full lg:w-[40%] p-3 sm:p-4 lg:p-6 border-t lg:border-t-0 lg:border-l border-white/10 overflow-y-auto">
               <div className="space-y-4">
-                <h3 className="text-white font-semibold flex items-center gap-2 text-sm sm:text-base">
-                  <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400" />
-                  Validation Results
-                </h3>
+                {(() => {
+                  const errors = layoutData?.validation?.all_errors || [];
+                  const warnings = layoutData?.validation?.all_warnings || [];
+                  const hasIssues = errors.length > 0 || warnings.length > 0;
+                  
+                  return (
+                    <h3 className="text-white font-semibold flex items-center gap-2 text-sm sm:text-base">
+                      {hasIssues ? (
+                        <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400" />
+                      ) : (
+                        <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-400" />
+                      )}
+                      Validation Results
+                    </h3>
+                  );
+                })()}
 
                 {/* Validation Summary - Now at the top */}
                 {layoutData?.validation?.summary && (
@@ -720,9 +732,11 @@ export default function PlansPage() {
                   </div>
                 )}
                 
-                {/* Errors Section */}
+                {/* Errors Section - Only show if there are errors */}
                 {(() => {
                   const errors = layoutData?.validation?.all_errors || [];
+                  
+                  if (errors.length === 0) return null;
                   
                   return (
                     <div>
@@ -730,68 +744,64 @@ export default function PlansPage() {
                         <AlertCircle className="w-4 h-4 text-red-400" />
                         <span className="text-red-400 font-medium">Errors ({errors.length})</span>
                       </div>
-                      {errors.length > 0 ? (
-                        <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(239, 68, 68, 0.3) transparent' }}>
-                          {errors.map((error, index) => {
-                            // Parse category from error message (e.g., "Council: ..." or "NCC: ...")
-                            const [category, ...messageParts] = error.split(': ');
-                            const message = messageParts.join(': ') || category;
-                            const hasCategory = messageParts.length > 0;
-                            const isRemoving = removingItems.has(error);
-                            
-                            return (
-                              <div 
-                                key={error} 
-                                className={`bg-red-500/10 rounded-xl p-3 border border-red-500/30 group/item relative overflow-hidden cursor-pointer hover:border-red-500/60 transition-all duration-300 ${isRemoving ? 'opacity-0 scale-95 -translate-x-4' : 'opacity-100 scale-100 translate-x-0'}`}
-                              >
-                                {/* Content - blurs on hover */}
-                                <div className="text-sm text-gray-300 group-hover/item:blur-[2px] group-hover/item:opacity-40 transition-all duration-200">
-                                  {hasCategory && (
-                                    <span className="text-red-400/70 text-xs font-medium mr-1.5">[{category}]</span>
-                                  )}
-                                  <span>{message}</span>
-                                </div>
-                                
-                                {/* Hover overlay with buttons */}
-                                <div className="absolute inset-0 flex items-center justify-center gap-3 opacity-0 group-hover/item:opacity-100 transition-all duration-200">
-                                  <button 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleFixItem('error', error);
-                                    }}
-                                    disabled={fixingError !== null}
-                                    className="flex items-center gap-1.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    <Sparkles className="w-4 h-4" />
-                                    AI Fix
-                                  </button>
-                                  <button 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleIgnoreItem('error', error);
-                                    }}
-                                    className="flex items-center gap-1.5 bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
-                                  >
-                                    <X className="w-4 h-4" />
-                                    Ignore
-                                  </button>
-                                </div>
+                      <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(239, 68, 68, 0.3) transparent' }}>
+                        {errors.map((error, index) => {
+                          // Parse category from error message (e.g., "Council: ..." or "NCC: ...")
+                          const [category, ...messageParts] = error.split(': ');
+                          const message = messageParts.join(': ') || category;
+                          const hasCategory = messageParts.length > 0;
+                          const isRemoving = removingItems.has(error);
+                          
+                          return (
+                            <div 
+                              key={error} 
+                              className={`bg-red-500/10 rounded-xl p-3 border border-red-500/30 group/item relative overflow-hidden cursor-pointer hover:border-red-500/60 transition-all duration-300 ${isRemoving ? 'opacity-0 scale-95 -translate-x-4' : 'opacity-100 scale-100 translate-x-0'}`}
+                            >
+                              {/* Content - blurs on hover */}
+                              <div className="text-sm text-gray-300 group-hover/item:blur-[2px] group-hover/item:opacity-40 transition-all duration-200">
+                                {hasCategory && (
+                                  <span className="text-red-400/70 text-xs font-medium mr-1.5">[{category}]</span>
+                                )}
+                                <span>{message}</span>
                               </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="bg-green-500/10 rounded-xl p-3 border border-green-500/30">
-                          <p className="text-green-400 text-sm">No errors detected ✓</p>
-                        </div>
-                      )}
+                              
+                              {/* Hover overlay with buttons */}
+                              <div className="absolute inset-0 flex items-center justify-center gap-3 opacity-0 group-hover/item:opacity-100 transition-all duration-200">
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleFixItem('error', error);
+                                  }}
+                                  disabled={fixingError !== null}
+                                  className="flex items-center gap-1.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  <Sparkles className="w-4 h-4" />
+                                  AI Fix
+                                </button>
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleIgnoreItem('error', error);
+                                  }}
+                                  className="flex items-center gap-1.5 bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
+                                >
+                                  <X className="w-4 h-4" />
+                                  Ignore
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })()}
 
-                {/* Warnings Section */}
+                {/* Warnings Section - Only show if there are warnings */}
                 {(() => {
                   const warnings = layoutData?.validation?.all_warnings || [];
+                  
+                  if (warnings.length === 0) return null;
                   
                   return (
                     <div>
@@ -799,61 +809,55 @@ export default function PlansPage() {
                         <AlertTriangle className="w-4 h-4 text-yellow-400" />
                         <span className="text-yellow-400 font-medium">Warnings ({warnings.length})</span>
                       </div>
-                      {warnings.length > 0 ? (
-                        <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(234, 179, 8, 0.3) transparent' }}>
-                          {warnings.map((warning, index) => {
-                            // Parse category from warning message
-                            const [category, ...messageParts] = warning.split(': ');
-                            const message = messageParts.join(': ') || category;
-                            const hasCategory = messageParts.length > 0;
-                            const isRemoving = removingItems.has(warning);
-                            
-                            return (
-                              <div 
-                                key={warning} 
-                                className={`bg-yellow-500/10 rounded-xl p-3 border border-yellow-500/30 group/item relative overflow-hidden cursor-pointer hover:border-yellow-500/60 transition-all duration-300 ${isRemoving ? 'opacity-0 scale-95 -translate-x-4' : 'opacity-100 scale-100 translate-x-0'}`}
-                              >
-                                {/* Content - blurs on hover */}
-                                <div className="text-sm text-gray-300 group-hover/item:blur-[2px] group-hover/item:opacity-40 transition-all duration-200">
-                                  {hasCategory && (
-                                    <span className="text-yellow-400/70 text-xs font-medium mr-1.5">[{category}]</span>
-                                  )}
-                                  <span>{message}</span>
-                                </div>
-                                
-                                {/* Hover overlay with buttons */}
-                                <div className="absolute inset-0 flex items-center justify-center gap-3 opacity-0 group-hover/item:opacity-100 transition-all duration-200">
-                                  <button 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleFixItem('warning', warning);
-                                    }}
-                                    disabled={fixingError !== null}
-                                    className="flex items-center gap-1.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    <Sparkles className="w-4 h-4" />
-                                    AI Fix
-                                  </button>
-                                  <button 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleIgnoreItem('warning', warning);
-                                    }}
-                                    className="flex items-center gap-1.5 bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
-                                  >
-                                    <X className="w-4 h-4" />
-                                    Ignore
-                                  </button>
-                                </div>
+                      <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(234, 179, 8, 0.3) transparent' }}>
+                        {warnings.map((warning, index) => {
+                          // Parse category from warning message
+                          const [category, ...messageParts] = warning.split(': ');
+                          const message = messageParts.join(': ') || category;
+                          const hasCategory = messageParts.length > 0;
+                          const isRemoving = removingItems.has(warning);
+                          
+                          return (
+                            <div 
+                              key={warning} 
+                              className={`bg-yellow-500/10 rounded-xl p-3 border border-yellow-500/30 group/item relative overflow-hidden cursor-pointer hover:border-yellow-500/60 transition-all duration-300 ${isRemoving ? 'opacity-0 scale-95 -translate-x-4' : 'opacity-100 scale-100 translate-x-0'}`}
+                            >
+                              {/* Content - blurs on hover */}
+                              <div className="text-sm text-gray-300 group-hover/item:blur-[2px] group-hover/item:opacity-40 transition-all duration-200">
+                                {hasCategory && (
+                                  <span className="text-yellow-400/70 text-xs font-medium mr-1.5">[{category}]</span>
+                                )}
+                                <span>{message}</span>
                               </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="bg-green-500/10 rounded-xl p-3 border border-green-500/30">
-                          <p className="text-green-400 text-sm">No warnings detected ✓</p>
-                        </div>
-                      )}
+                              
+                              {/* Hover overlay with buttons */}
+                              <div className="absolute inset-0 flex items-center justify-center gap-3 opacity-0 group-hover/item:opacity-100 transition-all duration-200">
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleFixItem('warning', warning);
+                                  }}
+                                  disabled={fixingError !== null}
+                                  className="flex items-center gap-1.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  <Sparkles className="w-4 h-4" />
+                                  AI Fix
+                                </button>
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleIgnoreItem('warning', warning);
+                                  }}
+                                  className="flex items-center gap-1.5 bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-transform hover:scale-105"
+                                >
+                                  <X className="w-4 h-4" />
+                                  Ignore
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })()}
@@ -861,21 +865,21 @@ export default function PlansPage() {
                 {/* Custom Change Request */}
                 <div className="mt-4 pt-4 border-t border-white/10">
                   <h4 className="text-white font-medium text-sm mb-3 flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-purple-400" />
+                    <Sparkles className="w-4 h-4 text-blue-400" />
                     Request Additional Changes
                   </h4>
                   <div className="space-y-2">
                     <div className="relative">
-                      <input
-                        type="text"
+                      <textarea
                         value={customChangeText}
                         onChange={(e) => setCustomChangeText(e.target.value.slice(0, 100))}
                         placeholder="e.g., Make the kitchen larger..."
                         maxLength={100}
+                        rows={3}
                         disabled={fixingError !== null}
-                        className="w-full bg-white/5 border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full bg-white/5 border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 disabled:opacity-50 disabled:cursor-not-allowed resize-none"
                       />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">
+                      <span className="absolute right-2 bottom-2 text-xs text-gray-500">
                         {customChangeText.length}/100
                       </span>
                     </div>
@@ -887,7 +891,7 @@ export default function PlansPage() {
                         }
                       }}
                       disabled={!customChangeText.trim() || fixingError !== null}
-                      className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Sparkles className="w-4 h-4" />
                       Apply Change
