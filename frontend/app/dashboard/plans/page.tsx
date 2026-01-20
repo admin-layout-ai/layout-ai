@@ -1082,37 +1082,15 @@ export default function PlansPage() {
       {/* Plans List */}
       {!isLoading && !error && filteredPlans.length > 0 && (
         <div className="flex flex-col gap-2">
-          {/* List Header */}
-          <div className="hidden sm:flex items-center gap-4 px-3 py-2 text-xs text-gray-500 font-medium border-b border-white/10">
-            <div className="w-32 flex-shrink-0">Preview</div>
-            <div className="flex-1">Project Details</div>
-            <div className="w-32 flex-shrink-0 text-right">Status</div>
-          </div>
-          
           {filteredPlans.map((plan) => {
             const variant = VARIANT_INFO[plan.variant_number || 1] || VARIANT_INFO[1];
             
             return (
               <div
                 key={plan.id}
-                className="bg-white/5 rounded-lg border border-white/10 overflow-hidden hover:border-blue-500/50 transition cursor-pointer flex items-center gap-4 p-3"
+                className="bg-white/5 rounded-lg border border-white/10 overflow-hidden hover:border-blue-500/50 transition cursor-pointer flex items-center gap-4 p-4"
                 onClick={() => handleViewPlan(plan)}
               >
-                {/* Thumbnail */}
-                <div className="w-24 h-18 sm:w-32 sm:h-24 flex-shrink-0 bg-slate-800 rounded-lg overflow-hidden">
-                  {plan.preview_image_url ? (
-                    <img
-                      src={plan.preview_image_url}
-                      alt={plan.plan_type || 'Floor Plan'}
-                      className="w-full h-full object-contain bg-white"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <ImageIcon className="w-6 h-6 text-gray-600" />
-                    </div>
-                  )}
-                </div>
-                
                 {/* Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
