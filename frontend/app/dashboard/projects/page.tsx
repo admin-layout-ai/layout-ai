@@ -1242,46 +1242,56 @@ export default function ProjectsPage() {
           )}
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="flex flex-col gap-2">
           {filteredProjects.map((proj) => (
             <div
               key={proj.id}
-              className="bg-white/5 rounded-xl border border-white/10 p-4 hover:border-blue-500/50 transition cursor-pointer group"
+              className="bg-white/5 rounded-lg border border-white/10 overflow-hidden hover:border-blue-500/50 transition cursor-pointer flex items-center gap-4 p-4"
               onClick={() => router.push(`/dashboard/projects/${proj.id}`)}
             >
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 bg-gradient-to-br from-blue-600/20 to-purple-600/20 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/10">
-                  <Home className="w-7 h-7 text-blue-400" />
+              {/* Info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="font-medium text-white truncate text-sm">
+                    {proj.name}
+                  </h3>
                 </div>
                 
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-white font-semibold truncate group-hover:text-blue-400 transition">{proj.name}</h3>
-                  <p className="text-gray-400 text-sm flex items-center gap-1 mt-0.5">
-                    <MapPin className="w-3.5 h-3.5" />
-                    {proj.suburb}, {proj.state} {proj.postcode}
-                  </p>
-                </div>
+                <p className="text-gray-400 text-xs flex items-center gap-1 mb-2">
+                  <MapPin className="w-3 h-3" />
+                  {proj.suburb}, {proj.state} {proj.postcode}
+                </p>
                 
-                <div className="hidden sm:flex items-center gap-6 text-gray-400 text-sm">
+                {/* Stats Row */}
+                <div className="flex items-center gap-4 text-xs text-gray-400">
+                  {proj.land_width && proj.land_depth && (
+                    <span className="flex items-center gap-1">
+                      <Ruler className="w-3.5 h-3.5" />
+                      {proj.land_width}×{proj.land_depth}m
+                    </span>
+                  )}
                   {proj.bedrooms && (
-                    <span className="flex items-center gap-1.5">
-                      <Bed className="w-4 h-4" /> {proj.bedrooms}
+                    <span className="flex items-center gap-1">
+                      <Bed className="w-3.5 h-3.5" />
+                      {proj.bedrooms} Beds
                     </span>
                   )}
                   {proj.bathrooms && (
-                    <span className="flex items-center gap-1.5">
-                      <Bath className="w-4 h-4" /> {proj.bathrooms}
+                    <span className="flex items-center gap-1">
+                      <Bath className="w-3.5 h-3.5" />
+                      {proj.bathrooms} Baths
                     </span>
                   )}
                 </div>
-                
+              </div>
+              
+              {/* Status & Date */}
+              <div className="flex-shrink-0 flex items-center gap-3">
                 {getStatusBadge(proj.status)}
-                
-                <span className="text-gray-500 text-sm hidden md:block">
+                <span className="text-gray-500 text-xs hidden md:block">
                   {formatDate(proj.created_at)}
                 </span>
-                
-                <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-blue-400 transition" />
+                <ChevronRight className="w-5 h-5 text-gray-500" />
               </div>
             </div>
           ))}
