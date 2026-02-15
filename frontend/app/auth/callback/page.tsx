@@ -119,15 +119,38 @@ export default function CallbackPage() {
       // Dispatch event for other tabs/components
       window.dispatchEvent(new Event('auth-updated'));
 
+      setStatus('Checking account...');
+
+      // Check if user already exists in DB by azure_ad_id
+      let userExistsInDb = false;
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+        const res = await fetch(`${apiUrl}/api/users/me`, {
+          headers: { 'Authorization': `Bearer ${idToken}` },
+        });
+        if (res.ok) {
+          const dbUser = await res.json();
+          // User exists — update local user_info with DB email if token email was empty
+          if (dbUser.email && (!user.email || user.email.length === 0)) {
+            user.email = dbUser.email;
+            localStorage.setItem('user_info', JSON.stringify(user));
+          }
+          userExistsInDb = true;
+        }
+      } catch (err) {
+        console.warn('Could not check user in DB, falling back to token email check:', err);
+      }
+
       setStatus('Redirecting...');
 
       // Check for stored redirect path
       const storedRedirect = sessionStorage.getItem('auth_redirect');
       sessionStorage.removeItem('auth_redirect');
 
-      // If no email, redirect to collect it first
-      if (!user.email || user.email.length === 0) {
-        console.log('No email in token, redirecting to complete-email');
+      // If user exists in DB, go straight to dashboard (no email collection needed)
+      // If user does NOT exist and has no email in token, redirect to collect email
+      if (!userExistsInDb && (!user.email || user.email.length === 0)) {
+        console.log('New user with no email in token, redirecting to complete-email');
         router.push('/auth/complete-email');
         return;
       }
