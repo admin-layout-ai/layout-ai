@@ -1,6 +1,6 @@
 // frontend/app/page.tsx
-// Updated to match Portal page dark gradient theme
-// User reviews moved here from portal page
+// Merged: Portal page content integrated into main landing page
+// All sign-in/sign-up actions now open popup modal instead of navigating away
 
 "use client"
 
@@ -18,12 +18,26 @@ import {
   Star,
   Users,
   Clock,
-  FileText
+  FileText,
+  LayoutDashboard,
+  FolderOpen,
+  Download,
+  Bell,
+  CreditCard
 } from 'lucide-react';
+import AuthModal from '@/components/AuthModal';
 
 const LandingPage = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [email, setEmail] = useState('');
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+
+  const openAuth = (mode: 'signin' | 'signup') => {
+    setMobileMenuOpen(false);
+    setAuthMode(mode);
+    setAuthModalOpen(true);
+  };
 
   const handleWaitlist = () => {
     if (email) {
@@ -49,12 +63,18 @@ const LandingPage = () => {
               <a href="#how-it-works" className="text-gray-300 hover:text-white transition">How It Works</a>
               <a href="#pricing" className="text-gray-300 hover:text-white transition">Pricing</a>
               <a href="#reviews" className="text-gray-300 hover:text-white transition">Reviews</a>
-              <a 
-                href="/portal"
+              <button 
+                onClick={() => openAuth('signin')}
+                className="text-gray-300 hover:text-white transition font-medium"
+              >
+                Sign In
+              </button>
+              <button 
+                onClick={() => openAuth('signup')}
                 className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition font-medium"
               >
-                Customer Portal
-              </a>
+                Get Started
+              </button>
             </div>
 
             {/* Mobile Menu Button */}
@@ -69,16 +89,22 @@ const LandingPage = () => {
           {/* Mobile Menu */}
           {mobileMenuOpen && (
             <div className="md:hidden py-4 space-y-3 border-t border-white/10">
-              <a href="#features" className="block py-2 text-gray-300 hover:text-white">Features</a>
-              <a href="#how-it-works" className="block py-2 text-gray-300 hover:text-white">How It Works</a>
-              <a href="#pricing" className="block py-2 text-gray-300 hover:text-white">Pricing</a>
-              <a href="#reviews" className="block py-2 text-gray-300 hover:text-white">Reviews</a>
-              <a 
-                href="/portal"
+              <a href="#features" className="block py-2 text-gray-300 hover:text-white" onClick={() => setMobileMenuOpen(false)}>Features</a>
+              <a href="#how-it-works" className="block py-2 text-gray-300 hover:text-white" onClick={() => setMobileMenuOpen(false)}>How It Works</a>
+              <a href="#pricing" className="block py-2 text-gray-300 hover:text-white" onClick={() => setMobileMenuOpen(false)}>Pricing</a>
+              <a href="#reviews" className="block py-2 text-gray-300 hover:text-white" onClick={() => setMobileMenuOpen(false)}>Reviews</a>
+              <button 
+                onClick={() => openAuth('signin')}
+                className="block w-full text-left py-2 text-gray-300 hover:text-white"
+              >
+                Sign In
+              </button>
+              <button 
+                onClick={() => openAuth('signup')}
                 className="block w-full bg-blue-600 text-white px-6 py-2 rounded-lg text-center mt-4"
               >
-                Customer Portal
-              </a>
+                Get Started
+              </button>
             </div>
           )}
         </nav>
@@ -106,18 +132,35 @@ const LandingPage = () => {
               all automated and ready for council approval.
             </p>
             
+            {/* CTA Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+              <button 
+                onClick={() => openAuth('signup')}
+                className="inline-flex items-center justify-center gap-2 bg-blue-600 text-white px-8 py-4 rounded-xl hover:bg-blue-700 transition font-semibold text-lg cursor-pointer"
+              >
+                Create Account
+                <ArrowRight className="w-5 h-5" />
+              </button>
+              <button 
+                onClick={() => openAuth('signin')}
+                className="inline-flex items-center justify-center gap-2 bg-white text-blue-600 px-8 py-4 rounded-xl hover:bg-gray-100 transition font-semibold text-lg shadow-lg shadow-white/20 cursor-pointer"
+              >
+                Sign In
+              </button>
+            </div>
+
             {/* Email Signup */}
             <div className="flex flex-col sm:flex-row gap-3 max-w-lg mx-auto mb-8">
               <input 
                 type="email" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email" 
+                placeholder="Enter your email for updates" 
                 className="flex-1 px-6 py-4 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <button 
                 onClick={handleWaitlist}
-                className="bg-blue-600 text-white px-8 py-4 rounded-xl hover:bg-blue-700 transition font-semibold whitespace-nowrap"
+                className="bg-white/10 text-white px-8 py-4 rounded-xl hover:bg-white/20 transition font-semibold whitespace-nowrap border border-white/20"
               >
                 Join Waitlist
               </button>
@@ -265,6 +308,194 @@ const LandingPage = () => {
         </div>
       </section>
 
+      {/* Dashboard Preview Section (from Portal) */}
+      <section id="dashboard" className="py-24 px-4 sm:px-6 lg:px-8 bg-black/20">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <div>
+              <div className="inline-flex items-center gap-2 mb-6 px-4 py-2 bg-blue-500/20 border border-blue-400/30 rounded-full">
+                <LayoutDashboard className="w-5 h-5 text-blue-400" />
+                <span className="text-blue-300 font-medium">Your Command Center</span>
+              </div>
+
+              <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
+                A Dashboard Built for <span className="text-blue-400">Productivity</span>
+              </h2>
+              <p className="text-gray-300 mb-8 text-lg">
+                Every feature is designed to save you time and help you win more projects. 
+                From quick project creation to instant plan generation.
+              </p>
+              
+              <ul className="space-y-4">
+                {[
+                  "Create a new project in under 30 seconds",
+                  "Generate AI floor plans with a simple questionnaire",
+                  "Compare 3-5 design options side by side",
+                  "Download council-ready documentation instantly",
+                  "Track all your projects and orders in real-time",
+                  "Access from any device - desktop, tablet, or mobile"
+                ].map((item, idx) => (
+                  <li key={idx} className="flex items-start gap-3">
+                    <CheckCircle className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0" />
+                    <span className="text-gray-300">{item}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-10 flex flex-col sm:flex-row gap-4">
+                <button 
+                  onClick={() => openAuth('signup')}
+                  className="inline-flex items-center justify-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition font-semibold cursor-pointer"
+                >
+                  Create Account
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+                <button 
+                  onClick={() => openAuth('signin')}
+                  className="inline-flex items-center justify-center gap-2 bg-white/10 text-white px-6 py-3 rounded-lg hover:bg-white/20 transition font-semibold border border-white/20 cursor-pointer"
+                >
+                  Sign In to Dashboard
+                </button>
+              </div>
+            </div>
+
+            {/* Dashboard Preview Mockup */}
+            <div className="relative">
+              <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-white/10 shadow-2xl">
+                <div className="space-y-4">
+                  {/* Header */}
+                  <div className="flex items-center justify-between pb-4 border-b border-white/10">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                        <Home className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-white font-semibold">Welcome back, Builder!</p>
+                        <p className="text-gray-400 text-sm">3 active projects</p>
+                      </div>
+                    </div>
+                    <Bell className="w-5 h-5 text-gray-400" />
+                  </div>
+
+                  {/* Stats */}
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: "Projects", value: "12" },
+                      { label: "Completed", value: "8" },
+                      { label: "Plans", value: "24" },
+                    ].map((stat, idx) => (
+                      <div key={idx} className="bg-white/5 rounded-lg p-3 text-center">
+                        <p className="text-2xl font-bold text-white">{stat.value}</p>
+                        <p className="text-xs text-gray-400">{stat.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Recent Projects */}
+                  <div className="space-y-2">
+                    <p className="text-gray-400 text-sm font-medium">Recent Projects</p>
+                    {[
+                      { name: "Smith Residence", status: "Completed", color: "bg-green-500" },
+                      { name: "Oakwood Duplex", status: "In Progress", color: "bg-blue-500" },
+                      { name: "Riverside Villa", status: "Draft", color: "bg-yellow-500" },
+                    ].map((project, idx) => (
+                      <div key={idx} className="flex items-center justify-between bg-white/5 rounded-lg p-3">
+                        <span className="text-white text-sm">{project.name}</span>
+                        <span className={`${project.color} text-white text-xs px-2 py-1 rounded`}>
+                          {project.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Decorative */}
+              <div className="absolute -top-4 -right-4 w-24 h-24 bg-blue-500/20 rounded-full blur-2xl"></div>
+              <div className="absolute -bottom-4 -left-4 w-32 h-32 bg-purple-500/20 rounded-full blur-2xl"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Portal Features Grid (from Portal) */}
+      <section className="py-24 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">Powerful Tools in One Place</h2>
+            <p className="text-xl text-gray-400">Streamline your entire floor plan workflow</p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-6 border border-white/10 hover:border-blue-500/50 transition group">
+              <div className="w-14 h-14 bg-blue-500/20 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-500/30 transition">
+                <LayoutDashboard className="w-7 h-7 text-blue-400" />
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">Interactive Dashboard</h3>
+              <p className="text-gray-400 text-sm">
+                Get a bird&apos;s eye view of all your projects, statistics, and recent activity. 
+                Track project status from draft to completion at a glance.
+              </p>
+            </div>
+
+            <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-6 border border-white/10 hover:border-green-500/50 transition group">
+              <div className="w-14 h-14 bg-green-500/20 rounded-xl flex items-center justify-center mb-4 group-hover:bg-green-500/30 transition">
+                <FolderOpen className="w-7 h-7 text-green-400" />
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">Project Management</h3>
+              <p className="text-gray-400 text-sm">
+                Create unlimited projects, organize them by client or location, 
+                and manage every detail of your floor plan requirements.
+              </p>
+            </div>
+
+            <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-6 border border-white/10 hover:border-purple-500/50 transition group">
+              <div className="w-14 h-14 bg-purple-500/20 rounded-xl flex items-center justify-center mb-4 group-hover:bg-purple-500/30 transition">
+                <Zap className="w-7 h-7 text-purple-400" />
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">AI Floor Plan Generation</h3>
+              <p className="text-gray-400 text-sm">
+                Answer a quick questionnaire and let our AI generate 3-5 unique, 
+                NCC-compliant floor plan options tailored to your block.
+              </p>
+            </div>
+
+            <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-6 border border-white/10 hover:border-orange-500/50 transition group">
+              <div className="w-14 h-14 bg-orange-500/20 rounded-xl flex items-center justify-center mb-4 group-hover:bg-orange-500/30 transition">
+                <Download className="w-7 h-7 text-orange-400" />
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">Multi-Format Downloads</h3>
+              <p className="text-gray-400 text-sm">
+                Download your floor plans in PDF for presentations, DXF for AutoCAD editing, 
+                or 3D renders for client visualizations.
+              </p>
+            </div>
+
+            <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-6 border border-white/10 hover:border-emerald-500/50 transition group">
+              <div className="w-14 h-14 bg-emerald-500/20 rounded-xl flex items-center justify-center mb-4 group-hover:bg-emerald-500/30 transition">
+                <FileText className="w-7 h-7 text-emerald-400" />
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">Compliance Reports</h3>
+              <p className="text-gray-400 text-sm">
+                Generate detailed compliance reports showing NCC adherence, 
+                setbacks, and council requirements - ready for submission.
+              </p>
+            </div>
+
+            <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-6 border border-white/10 hover:border-pink-500/50 transition group">
+              <div className="w-14 h-14 bg-pink-500/20 rounded-xl flex items-center justify-center mb-4 group-hover:bg-pink-500/30 transition">
+                <CreditCard className="w-7 h-7 text-pink-400" />
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">Easy Billing & Invoices</h3>
+              <p className="text-gray-400 text-sm">
+                Secure payments with instant receipts. View payment history, 
+                download invoices, and manage your subscription all in one place.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Pricing */}
       <section id="pricing" className="py-24 px-4 sm:px-6 lg:px-8 bg-black/20">
         <div className="max-w-7xl mx-auto">
@@ -289,12 +520,12 @@ const LandingPage = () => {
                   </li>
                 ))}
               </ul>
-              <a 
-                href="/portal"
-                className="block w-full bg-white/10 text-white py-3 rounded-xl hover:bg-white/20 transition text-center font-semibold border border-white/20"
+              <button 
+                onClick={() => openAuth('signup')}
+                className="block w-full bg-white/10 text-white py-3 rounded-xl hover:bg-white/20 transition text-center font-semibold border border-white/20 cursor-pointer"
               >
                 Get Started
-              </a>
+              </button>
             </div>
 
             {/* Standard Plan - Popular */}
@@ -315,12 +546,12 @@ const LandingPage = () => {
                   </li>
                 ))}
               </ul>
-              <a 
-                href="/portal"
-                className="block w-full bg-white text-blue-600 py-3 rounded-xl hover:bg-gray-100 transition text-center font-semibold"
+              <button 
+                onClick={() => openAuth('signup')}
+                className="block w-full bg-white text-blue-600 py-3 rounded-xl hover:bg-gray-100 transition text-center font-semibold cursor-pointer"
               >
                 Get Started
-              </a>
+              </button>
             </div>
 
             {/* Enterprise Plan */}
@@ -349,7 +580,7 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* Reviews Section - Moved from Portal */}
+      {/* Reviews Section */}
       <section id="reviews" className="py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
@@ -408,18 +639,18 @@ const LandingPage = () => {
             Join hundreds of Australian builders already using AI to win more projects
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a 
-              href="/portal"
-              className="inline-flex items-center justify-center gap-2 bg-white text-blue-600 px-8 py-4 rounded-xl hover:bg-gray-100 transition font-semibold text-lg"
-            >
-              Access Customer Portal
-              <ArrowRight className="w-5 h-5" />
-            </a>
             <button 
-              onClick={() => alert('Book a demo at demo@layout-ai.com.au')}
-              className="inline-flex items-center justify-center gap-2 bg-transparent text-white px-8 py-4 rounded-xl hover:bg-white/10 transition font-semibold text-lg border-2 border-white"
+              onClick={() => openAuth('signup')}
+              className="inline-flex items-center justify-center gap-2 bg-white text-blue-600 px-8 py-4 rounded-xl hover:bg-gray-100 transition font-semibold text-lg cursor-pointer"
             >
-              Book a Demo
+              Create Account
+              <ArrowRight className="w-5 h-5" />
+            </button>
+            <button 
+              onClick={() => openAuth('signin')}
+              className="inline-flex items-center justify-center gap-2 bg-transparent text-white px-8 py-4 rounded-xl hover:bg-white/10 transition font-semibold text-lg border-2 border-white cursor-pointer"
+            >
+              Sign In
             </button>
           </div>
         </div>
@@ -441,7 +672,11 @@ const LandingPage = () => {
               <ul className="space-y-2 text-sm text-gray-400">
                 <li><a href="#features" className="hover:text-white transition">Features</a></li>
                 <li><a href="#pricing" className="hover:text-white transition">Pricing</a></li>
-                <li><a href="/portal" className="hover:text-white transition">Customer Portal</a></li>
+                <li>
+                  <button onClick={() => openAuth('signin')} className="hover:text-white transition">
+                    Dashboard
+                  </button>
+                </li>
               </ul>
             </div>
             <div>
@@ -466,6 +701,14 @@ const LandingPage = () => {
           </div>
         </div>
       </footer>
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        mode={authMode}
+        onSwitchMode={(mode) => setAuthMode(mode)}
+      />
     </div>
   );
 };

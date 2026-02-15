@@ -998,27 +998,40 @@ def fix_floor_plan_task(
         
         # =================================================================
         # TARGETED VALIDATION - Check if the specific error was actually fixed
+        # Skip validation entirely for custom user requests
         # =================================================================
-        logger.info(f"Running targeted validation for: {error_text[:50]}...")
+        
+        # Check if this is a custom command - skip validation if so
+        is_custom_command = error_text.startswith('Custom:')
+        
+        if is_custom_command:
+            logger.info(f"Custom command detected - skipping validation, assuming success")
+            error_fixed = True
+        else:
+            logger.info(f"Running targeted validation for: {error_text[:50]}...")
+            
+            # Run targeted validation to check if the specific error is fixed
+            error_fixed = validate_specific_error(
+                error_text=error_text,
+                error_type=error_type,
+                layout_data=updated_layout_data,
+                requirements=requirements,
+                building_width=building_width,
+                building_depth=building_depth
+            )
+            
+            if error_fixed:
+                logger.info(f"Targeted validation PASSED - error is fixed!")
+            else:
+                logger.warning(f"Targeted validation FAILED - error still present")
         
         # Get current validation data from layout_data
         current_validation = updated_layout_data.get('validation', {})
         current_errors = list(current_validation.get('all_errors', []))
         current_warnings = list(current_validation.get('all_warnings', []))
         
-        # Run targeted validation to check if the specific error is fixed
-        error_fixed = validate_specific_error(
-            error_text=error_text,
-            error_type=error_type,
-            layout_data=updated_layout_data,
-            requirements=requirements,
-            building_width=building_width,
-            building_depth=building_depth
-        )
-        
-        if error_fixed:
-            logger.info(f"Targeted validation PASSED - error is fixed!")
-            
+        # Only remove errors from list if not a custom command (custom commands don't add errors)
+        if error_fixed and not is_custom_command:
             # Remove the fixed error/warning from the list
             error_text_lower = error_text.lower().strip()
             
@@ -1032,8 +1045,6 @@ def fix_floor_plan_task(
                     warn for warn in current_warnings 
                     if not (error_text_lower in warn.lower() or warn.lower() in error_text_lower)
                 ]
-        else:
-            logger.warning(f"Targeted validation FAILED - error still present")
         
         # Update validation data
         current_validation['all_errors'] = current_errors
