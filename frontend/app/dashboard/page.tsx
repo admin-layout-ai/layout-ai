@@ -25,7 +25,6 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [profileData, setProfileData] = useState<ApiUser | null>(null);
-  const [userEmail, setUserEmail] = useState<string>('');
   const [stats, setStats] = useState<DashboardStats>({
     total: 0,
     generated: 0,
@@ -60,32 +59,29 @@ export default function DashboardPage() {
         return;
       }
 
-      // Get email from localStorage (set by complete-email page)
+      // Get display name from localStorage for pre-fill (not for identity)
       const userInfo = localStorage.getItem('user_info');
-      let email = '';
       let userName = '';
       
       if (userInfo) {
         try {
           const storedUser = JSON.parse(userInfo);
-          email = storedUser.email || '';
+          console.log('User info from localStorage:', storedUser);
           
           // Get name for pre-fill
-          if (storedUser.name && storedUser.name !== 'User' && storedUser.name !== 'unknown') {
+          if (storedUser.userName && storedUser.userName !== 'User' && storedUser.userName !== 'unknown') {
+            userName = storedUser.userName;
+          } else if (storedUser.name && storedUser.name !== 'User' && storedUser.name !== 'unknown') {
             userName = storedUser.name;
           } else if (storedUser.givenName || storedUser.familyName) {
             userName = `${storedUser.givenName || ''} ${storedUser.familyName || ''}`.trim();
           }
-          
-          console.log('User info from localStorage:', { email, userName });
         } catch (e) {
           console.error('Error parsing user info:', e);
         }
       }
 
-      setUserEmail(email);
-
-      // Check if user exists in database
+      // Check if user exists in database (uses azure_ad_id from JWT token)
       try {
         const userData = await api.getCurrentUser();
         console.log('Existing user found:', userData);
@@ -158,18 +154,17 @@ export default function DashboardPage() {
       const token = localStorage.getItem('auth_token');
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
-      // Try to update first, if fails then create
+      // Profile payload - no email needed, backend identifies user via azure_ad_id in JWT
       const profilePayload = {
         full_name: formFullName.trim(),
-        email: userEmail, // Pass email from localStorage
         phone: formPhone.trim() || null,
         address: formAddress.trim() || null,
         company_name: formIsBuilder ? (formCompanyName.trim() || null) : null,
         is_builder: formIsBuilder,
-        abn_acn: formIsBuilder ? (formAbnAcn.replace(/\s/g, '').trim() || null) : null, // Remove spaces for storage
+        abn_acn: formIsBuilder ? (formAbnAcn.replace(/\s/g, '').trim() || null) : null,
       };
 
-      console.log('Saving profile with email:', userEmail);
+      console.log('Saving profile...');
 
       let updatedUser: ApiUser;
 
@@ -198,13 +193,15 @@ export default function DashboardPage() {
       console.log('Profile saved:', updatedUser);
       setProfileData(updatedUser);
 
-      // Update localStorage
+      // Update localStorage with profile data
       const userInfo = localStorage.getItem('user_info');
       if (userInfo) {
         const localUser = JSON.parse(userInfo);
         localUser.dbId = updatedUser.id;
         localUser.name = updatedUser.full_name;
-        localUser.email = updatedUser.email;
+        if (updatedUser.email) {
+          localUser.email = updatedUser.email;
+        }
         localStorage.setItem('user_info', JSON.stringify(localUser));
       }
 
@@ -334,11 +331,6 @@ export default function DashboardPage() {
               <p className="text-blue-100 text-sm">
                 Just a few more details to get started with AI-powered floor plans
               </p>
-              {userEmail && (
-                <p className="text-blue-200 text-xs mt-2">
-                  Email: {userEmail}
-                </p>
-              )}
             </div>
 
             {/* Form */}
