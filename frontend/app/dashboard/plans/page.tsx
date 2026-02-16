@@ -481,7 +481,7 @@ export default function PlansPage() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `floor_plan_${plan.project?.name || plan.project_id}_v${plan.variant_number || 1}.png`;
+      a.download = `floor_plan_${plan.project?.name || plan.project_id}_v${plan.variant_number || 1}.svg`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

@@ -553,6 +553,37 @@ def generate_cad_svg(layout_data: Dict, output_path: str):
     return True
 
 
+# =============================================================================
+# STRING / PNG OUTPUT FUNCTIONS
+# =============================================================================
+
+def generate_cad_svg_bytes(layout_data: Dict) -> bytes:
+    """
+    Generate CAD SVG and return as UTF-8 bytes ready for upload/storage.
+    
+    Args:
+        layout_data: Dict with 'rooms' array (same format as generate_cad_svg)
+    
+    Returns:
+        SVG file content as bytes
+    """
+    import tempfile
+    import os
+    
+    fd, temp_path = tempfile.mkstemp(suffix='.svg')
+    os.close(fd)
+    
+    try:
+        generate_cad_svg(layout_data, temp_path)
+        with open(temp_path, 'rb') as f:
+            return f.read()
+    finally:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+
+
 if __name__ == "__main__":
     layout_json = '''
     {

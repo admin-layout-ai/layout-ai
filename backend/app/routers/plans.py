@@ -49,14 +49,6 @@ from ..services.NCC import (
     get_ncc_requirements_summary
 )
 
-from ..services.room_sizing import (
-    calculate_room_sizes
-)
-
-from ..services.sample_selection import (
-    select_best_sample
-)
-
 from ..services.layout_validation import (
     validate_generated_plan,
     run_full_validation,
@@ -64,15 +56,22 @@ from ..services.layout_validation import (
     validate_specific_error
 )
 
-from ..services.gemini_service import (
-    generate_with_validation,
-    NANO_BANANA_PRO_MODEL
+from ..services.tile_layout_engine import (
+    generate_tile_layout,
+    layout_to_floor_plan_json
+)
+
+from ..services.cad_floor_plan_generator import (
+    generate_cad_svg_bytes
 )
 
 from ..services.floor_plan_optimizer import (
     get_error_category,
     estimate_fix_difficulty
 )
+
+# Model version label for DB records (replaces Gemini model name)
+CAD_GENERATOR_VERSION = "CAD-TileEngine-v1"
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +88,8 @@ logger.info("Floor Plan Router: Modular architecture loaded - Multi-variant supp
 DEFAULT_VARIANT_COUNT = 3
 
 # Variant configurations for different design approaches
+# Each variant uses slightly different tile sizes and envelope adjustments
+# to produce genuinely different floor plan layouts from the tile engine.
 VARIANT_CONFIGS = [
     {
         'name': 'Optimal Layout',
@@ -96,6 +97,9 @@ VARIANT_CONFIGS = [
         'temperature': 0.3,
         'style_emphasis': 'efficiency',
         'room_size_bias': 0.0,  # No bias - use calculated sizes
+        'tile_size': 0.90,       # Default tile size
+        'envelope_adjust_w': 0.0,
+        'envelope_adjust_d': 0.0,
     },
     {
         'name': 'Spacious Living',
@@ -103,6 +107,9 @@ VARIANT_CONFIGS = [
         'temperature': 0.4,
         'style_emphasis': 'living_space',
         'room_size_bias': 0.1,  # 10% larger living areas
+        'tile_size': 0.85,       # Slightly smaller tiles = more granularity
+        'envelope_adjust_w': 0.3,
+        'envelope_adjust_d': -0.2,
     },
     {
         'name': 'Master Retreat',
@@ -110,6 +117,9 @@ VARIANT_CONFIGS = [
         'temperature': 0.35,
         'style_emphasis': 'master_suite',
         'room_size_bias': 0.15,  # 15% larger master areas
+        'tile_size': 0.95,       # Slightly larger tiles = bigger rooms
+        'envelope_adjust_w': -0.2,
+        'envelope_adjust_d': 0.3,
     },
 ]
 
@@ -246,14 +256,22 @@ def generate_single_variant(
     start_time: datetime
 ) -> Optional[models.FloorPlan]:
     """
-    Generate a single floor plan variant.
+    Generate a single floor plan variant using tile engine + CAD renderer.
+    
+    Flow:
+    1. Generate tile-based layout (algorithmic, no AI)
+    2. Convert to floor plan JSON
+    3. Run full validation (Council + NCC)
+    4. Render CAD SVG → PNG
+    5. Upload PNG to blob storage
+    6. Save database record
     
     Args:
         db: Database session
         project: Project model
         user: User model
         requirements: Base requirements dict
-        samples: Loaded sample plans
+        samples: Loaded sample plans (kept for interface compat, not used for generation)
         building_width: Building envelope width
         building_depth: Building envelope depth
         setbacks: Calculated setbacks
@@ -267,27 +285,39 @@ def generate_single_variant(
     logger.info(f"Generating variant {variant_number}: {variant_config['name']}")
     
     try:
-        # Calculate room sizes with variant adjustments
-        base_room_sizes = calculate_room_sizes(building_width, building_depth, requirements)
-        room_sizes = apply_variant_config(base_room_sizes, variant_config)
+        # =====================================================================
+        # STEP 1: Generate tile layout with variant-specific adjustments
+        # =====================================================================
         
-        # Generate with validation using variant-specific temperature
-        result = generate_with_validation(
-            samples=samples,
-            requirements=requirements,
-            room_sizes=room_sizes,
-            building_width=building_width,
-            building_depth=building_depth,
-            setbacks=setbacks,
-            validation_func=validate_generated_plan,
-            temperature=variant_config.get('temperature', 0.3)
+        # Each variant uses slightly different building dimensions and tile sizes
+        # to produce genuinely different layouts
+        adj_width = building_width + variant_config.get('envelope_adjust_w', 0)
+        adj_depth = building_depth + variant_config.get('envelope_adjust_d', 0)
+        tile_size = variant_config.get('tile_size', 0.90)
+        
+        # Clamp to reasonable bounds
+        adj_width = max(8.0, adj_width)
+        adj_depth = max(15.0, adj_depth)
+        
+        logger.info(
+            f"Variant {variant_number} envelope: {adj_width:.1f}m × {adj_depth:.1f}m "
+            f"(tile={tile_size}m)"
         )
         
-        floor_plan_json = result.get('floor_plan_json', {})
-        image_bytes = result.get('image_bytes')
-        validation = result.get('validation', {})
+        tile_layout = generate_tile_layout(
+            adj_width, adj_depth, requirements, tile_size
+        )
+        floor_plan_json = layout_to_floor_plan_json(tile_layout, requirements)
         
-        # Run full validation (Council + NCC)
+        logger.info(
+            f"Tile layout generated: {len(tile_layout.rooms)} rooms, "
+            f"{tile_layout.cols}×{tile_layout.rows} grid"
+        )
+        
+        # =====================================================================
+        # STEP 2: Run full validation (Council + NCC)
+        # =====================================================================
+        
         land_area = requirements['land_width'] * requirements['land_depth']
         full_validation = run_full_validation(
             floor_plan_json,
@@ -299,7 +329,21 @@ def generate_single_variant(
             requirements.get('postcode')
         )
         
-        # Build metadata
+        # =====================================================================
+        # STEP 3: Render CAD floor plan → PNG bytes
+        # =====================================================================
+        
+        image_bytes = generate_cad_svg_bytes(floor_plan_json)
+        
+        if image_bytes:
+            logger.info(f"CAD SVG generated: {len(image_bytes)} bytes")
+        else:
+            logger.warning(f"CAD SVG generation returned empty bytes")
+        
+        # =====================================================================
+        # STEP 4: Build metadata and create DB record
+        # =====================================================================
+        
         end_time = datetime.utcnow()
         generation_time = (end_time - start_time).total_seconds()
         
@@ -309,11 +353,11 @@ def generate_single_variant(
         floor_plan_json['variant_name'] = variant_config['name']
         floor_plan_json['variant_description'] = variant_config['description']
         floor_plan_json['generated_at'] = end_time.isoformat()
-        floor_plan_json['ai_model'] = NANO_BANANA_PRO_MODEL
+        floor_plan_json['ai_model'] = CAD_GENERATOR_VERSION
         floor_plan_json['validation'] = full_validation
         floor_plan_json['building_envelope'] = {
-            'width': building_width,
-            'depth': building_depth
+            'width': adj_width,
+            'depth': adj_depth
         }
         
         # Extract summary
@@ -356,7 +400,7 @@ def generate_single_variant(
             is_compliant=full_validation.get('overall_compliant', False),
             compliance_notes="; ".join(compliance_notes[:3]),
             generation_time_seconds=generation_time,
-            ai_model_version=NANO_BANANA_PRO_MODEL,
+            ai_model_version=CAD_GENERATOR_VERSION,
             created_at=end_time
         )
         
@@ -364,33 +408,22 @@ def generate_single_variant(
         db.flush()
         plan_id = floor_plan.id
         
-        # Upload image to blob storage with variant number in filename
+        # =====================================================================
+        # STEP 5: Upload PNG to blob storage
+        # =====================================================================
+        
         if user and image_bytes:
             user_name = user.full_name or (user.email.split('@')[0] if user.email else f"user_{user.id}")
-            # Use variant number in filename: floor_plan_1.png, floor_plan_2.png, etc.
-            variant_filename = f"floor_plan_{variant_number}.png"
-            png_url = upload_floor_plan_image(
+            variant_filename = f"floor_plan_{variant_number}.svg"
+            svg_url = upload_floor_plan_image(
                 image_bytes, user_name, project.name, plan_id, variant_filename
             )
             
-            if png_url:
-                floor_plan.preview_image_url = png_url
-                floor_plan_json['rendered_images'] = {'png': png_url}
+            if svg_url:
+                floor_plan.preview_image_url = svg_url
+                floor_plan_json['rendered_images'] = {'svg': svg_url}
                 floor_plan.layout_data = json.dumps(floor_plan_json)
-                logger.info(f"Variant {variant_number}: Uploaded image: {png_url}")
-        
-        # Fallback: use sample image
-        if not floor_plan.preview_image_url and samples and user:
-            best_sample = select_best_sample(samples, requirements)
-            if best_sample and best_sample.get('image_bytes'):
-                user_name = user.full_name or user.email.split('@')[0]
-                variant_filename = f"floor_plan_{variant_number}.png"
-                png_url = upload_floor_plan_image(
-                    best_sample['image_bytes'], user_name, project.name, plan_id, variant_filename
-                )
-                if png_url:
-                    floor_plan.preview_image_url = png_url
-                    logger.info(f"Variant {variant_number}: Used sample image as fallback")
+                logger.info(f"Variant {variant_number}: Uploaded CAD SVG: {svg_url}")
         
         logger.info(
             f"Created variant {variant_number} (plan_id={plan_id}) in {generation_time:.1f}s, "
@@ -465,10 +498,8 @@ def create_multiple_floor_plans_for_project(
     created_plans = []
     
     try:
-        # 1. Load sample plans (once for all variants)
-        logger.info("Loading sample floor plans...")
-        samples = load_all_sample_plans()
-        logger.info(f"Loaded {len(samples)} sample plans")
+        # 1. Samples are no longer needed for generation (kept for interface compat)
+        samples = []
         
         # 2. Calculate building envelope (same for all variants)
         building_width, building_depth, setbacks = calculate_building_envelope(
@@ -483,12 +514,6 @@ def create_multiple_floor_plans_for_project(
         
         for i, config in enumerate(configs_to_use, start=1):
             logger.info(f"=== Generating Variant {i}/{variant_count}: {config['name']} ===")
-            
-            # Add delay between variants to avoid API rate limiting
-            if i > 1:
-                import time
-                logger.info(f"Waiting 5 seconds before generating variant {i}...")
-                time.sleep(5)
             
             try:
                 floor_plan = generate_single_variant(
@@ -885,18 +910,21 @@ def fix_floor_plan_task(
     error_type: str
 ):
     """
-    Background task to fix a floor plan error using AI.
-    Similar pattern to generate_floor_plans_task in projects.py.
+    Background task to fix a floor plan error by regenerating the layout + CAD.
     
-    NOTE: fix_floor_plan_error is a SYNCHRONOUS function - do NOT use asyncio.run()
+    Flow:
+    1. Parse the error to determine what adjustment is needed
+    2. Regenerate tile layout with adjusted parameters
+    3. Re-render with CAD generator → PNG
+    4. Upload new PNG (replaces existing)
+    5. Re-validate and update DB
     """
     from ..database import SessionLocal
     from ..services.azure_storage import AzureStorageService
-    from ..services.floor_plan_optimizer import fix_floor_plan_error, get_error_category
     
     db = SessionLocal()
     try:
-        # Get plan and project
+        # Get plan, project, and user
         plan = db.query(models.FloorPlan).filter(models.FloorPlan.id == plan_id).first()
         project = db.query(models.Project).filter(models.Project.id == project_id).first()
         user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -905,22 +933,10 @@ def fix_floor_plan_task(
             logger.error(f"Plan {plan_id} or Project {project_id} not found for fix")
             return
         
-        # Check if plan has an image to fix
-        if not plan.preview_image_url:
-            logger.error(f"Plan {plan_id} has no preview image URL to fix")
-            layout_data = json.loads(plan.layout_data) if plan.layout_data else {}
-            layout_data['_fix_error'] = "No image available to fix"
-            if layout_data.get('_fixing'):
-                del layout_data['_fixing']
-            plan.layout_data = json.dumps(layout_data)
-            plan.updated_at = datetime.utcnow()
-            db.commit()
-            return
-        
         requirements = build_requirements_from_project(project)
         
         # Get building envelope
-        building_width, building_depth, setbacks = calculate_building_envelope(
+        building_width, building_depth, setbacks_dict = calculate_building_envelope(
             requirements.get('land_width', 14),
             requirements.get('land_depth', 25),
             requirements.get('council')
@@ -930,50 +946,91 @@ def fix_floor_plan_task(
         layout_data = json.loads(plan.layout_data) if plan.layout_data else {}
         
         logger.info(f"Starting fix for plan {plan_id}: {error_text}")
-        logger.info(f"Image URL: {plan.preview_image_url}")
         logger.info(f"Building envelope: {building_width}m x {building_depth}m")
         
         # =================================================================
-        # FIXED: Call fix_floor_plan_error DIRECTLY - it's SYNCHRONOUS!
-        # Previous code incorrectly used asyncio.run() which caused failures
+        # DETERMINE ADJUSTMENT based on error type
         # =================================================================
-        new_image_bytes, fix_instruction, updated_layout_data = fix_floor_plan_error(
-            image_url=plan.preview_image_url,
-            error_text=error_text,
-            error_type=error_type,
-            requirements=requirements,
-            building_width=building_width,
-            building_depth=building_depth,
-            layout_data=layout_data
-        )
+        
+        is_custom_command = error_text.startswith('Custom:')
+        error_lower = error_text.lower()
+        
+        # Adjust building dimensions based on error
+        adj_width = building_width
+        adj_depth = building_depth
+        tile_size = 0.90
+        
+        if 'site coverage' in error_lower and 'exceeds' in error_lower:
+            # Reduce building footprint by 5%
+            adj_width *= 0.95
+            adj_depth *= 0.95
+            logger.info(f"Fix: Reducing envelope to {adj_width:.1f}m × {adj_depth:.1f}m for coverage")
+        elif 'room' in error_lower and ('small' in error_lower or 'minimum' in error_lower):
+            # Slightly larger tiles = bigger rooms
+            tile_size = 0.95
+            logger.info(f"Fix: Increasing tile size to {tile_size}m for larger rooms")
+        elif 'parking' in error_lower or 'garage' in error_lower:
+            # Widen building for garage
+            adj_width = max(adj_width, 12.0)
+            logger.info(f"Fix: Ensuring minimum width {adj_width:.1f}m for garage")
+        elif is_custom_command:
+            # Custom command: use a slightly different tile size for a fresh layout
+            tile_size = 0.88
+            logger.info(f"Fix: Custom command - regenerating with tile_size={tile_size}m")
+        else:
+            # General: try a slightly different tile size for fresh layout
+            tile_size = 0.92
+            logger.info(f"Fix: General regeneration with tile_size={tile_size}m")
+        
+        # Clamp
+        adj_width = max(8.0, adj_width)
+        adj_depth = max(15.0, adj_depth)
+        
+        # =================================================================
+        # REGENERATE: Tile layout → CAD → PNG
+        # =================================================================
+        
+        tile_layout = generate_tile_layout(adj_width, adj_depth, requirements, tile_size)
+        updated_layout_data = layout_to_floor_plan_json(tile_layout, requirements)
+        
+        # Carry over project metadata from original layout
+        updated_layout_data['project_id'] = layout_data.get('project_id', project.id)
+        updated_layout_data['project_name'] = layout_data.get('project_name', project.name)
+        updated_layout_data['variant_number'] = layout_data.get('variant_number', plan.variant_number)
+        updated_layout_data['variant_name'] = layout_data.get('variant_name', plan.plan_type)
+        updated_layout_data['ai_model'] = CAD_GENERATOR_VERSION
+        updated_layout_data['building_envelope'] = {
+            'width': adj_width,
+            'depth': adj_depth
+        }
+        
+        # Render CAD → PNG
+        new_image_bytes = generate_cad_svg_bytes(updated_layout_data)
         
         if not new_image_bytes:
-            raise Exception("AI did not return a corrected image")
+            raise Exception("CAD generator returned empty SVG")
         
-        logger.info(f"Received corrected image: {len(new_image_bytes)} bytes")
+        logger.info(f"Regenerated CAD SVG: {len(new_image_bytes)} bytes")
         
-        # Upload new image to Azure Storage
+        # =================================================================
+        # UPLOAD new PNG to Azure Storage (replace existing)
+        # =================================================================
+        
         storage_service = AzureStorageService()
         
-        # CHANGED: Use the ORIGINAL filename to replace the existing file
-        # Extract filename from the existing preview_image_url
+        # Use original filename to replace existing file
         original_url = plan.preview_image_url
         if original_url:
-            # URL format: https://account.blob.core.windows.net/container/path/filename.png
-            # Extract just the filename from the path
             original_filename = original_url.split('/')[-1]
-            # Remove any query parameters (e.g., ?timestamp=xxx)
             if '?' in original_filename:
                 original_filename = original_filename.split('?')[0]
             filename = original_filename
         else:
-            # Fallback if no existing URL (shouldn't happen)
             variant_num = plan.variant_number or 1
-            filename = f"floor_plan_{variant_num}.png"
+            filename = f"floor_plan_{variant_num}.svg"
         
-        logger.info(f"Replacing original file: {filename}")
+        logger.info(f"Replacing image file: {filename}")
         
-        # FIXED: Proper user name handling with correct conditional logic
         if user:
             user_name = getattr(user, 'full_name', None) or getattr(user, 'name', None) or (user.email.split('@')[0] if user.email else f"user_{user.id}")
         else:
@@ -990,118 +1047,69 @@ def fix_floor_plan_task(
         if not new_image_url:
             raise Exception("Failed to upload corrected image to Azure Storage")
         
-        logger.info(f"Uploaded corrected image (replaced original): {new_image_url}")
+        logger.info(f"Uploaded corrected image: {new_image_url}")
         
-        # Clear the fixing status from layout_data BEFORE saving
+        # =================================================================
+        # RE-VALIDATE and update DB
+        # =================================================================
+        
+        # Clear the fixing status
         if updated_layout_data.get('_fixing'):
             del updated_layout_data['_fixing']
         
-        # =================================================================
-        # TARGETED VALIDATION - Check if the specific error was actually fixed
-        # Skip validation entirely for custom user requests
-        # =================================================================
+        # Run full validation on the new layout
+        land_area = requirements['land_width'] * requirements['land_depth']
+        full_validation = run_full_validation(
+            updated_layout_data,
+            requirements,
+            requirements['land_width'],
+            requirements['land_depth'],
+            land_area,
+            requirements.get('council'),
+            requirements.get('postcode')
+        )
         
-        # Check if this is a custom command - skip validation if so
-        is_custom_command = error_text.startswith('Custom:')
+        updated_layout_data['validation'] = full_validation
         
+        # Check if the specific error was fixed
         if is_custom_command:
-            logger.info(f"Custom command detected - skipping validation, assuming success")
             error_fixed = True
         else:
-            logger.info(f"Running targeted validation for: {error_text[:50]}...")
-            
-            # Run targeted validation to check if the specific error is fixed
             error_fixed = validate_specific_error(
                 error_text=error_text,
                 error_type=error_type,
                 layout_data=updated_layout_data,
                 requirements=requirements,
-                building_width=building_width,
-                building_depth=building_depth
+                building_width=adj_width,
+                building_depth=adj_depth
             )
             
             if error_fixed:
                 logger.info(f"Targeted validation PASSED - error is fixed!")
             else:
-                logger.warning(f"Targeted validation FAILED - error still present")
+                logger.warning(f"Targeted validation FAILED - error may still be present")
         
-        # Get current validation data from layout_data
-        current_validation = updated_layout_data.get('validation', {})
-        current_errors = list(current_validation.get('all_errors', []))
-        current_warnings = list(current_validation.get('all_warnings', []))
+        # Get current errors/warnings from new validation
+        current_errors = list(full_validation.get('all_errors', []))
+        current_warnings = list(full_validation.get('all_warnings', []))
         
-        # Only remove errors from list if not a custom command (custom commands don't add errors)
-        if error_fixed and not is_custom_command:
-            # Remove the fixed error/warning from the list
-            error_text_lower = error_text.lower().strip()
-            
-            if error_type == 'error':
-                current_errors = [
-                    err for err in current_errors 
-                    if not (error_text_lower in err.lower() or err.lower() in error_text_lower)
-                ]
-            else:
-                current_warnings = [
-                    warn for warn in current_warnings 
-                    if not (error_text_lower in warn.lower() or warn.lower() in error_text_lower)
-                ]
-        
-        # Update validation data
-        current_validation['all_errors'] = current_errors
-        current_validation['all_warnings'] = current_warnings
-        
-        # Update summary counts AND compliance flags based on remaining errors
-        if 'summary' not in current_validation:
-            current_validation['summary'] = {}
-        
-        current_validation['summary']['total_errors'] = len(current_errors)
-        current_validation['summary']['total_warnings'] = len(current_warnings)
-        
-        # Check remaining errors to update Council/NCC/Layout compliance flags
-        has_council_errors = any('council' in err.lower() for err in current_errors)
-        has_ncc_errors = any('ncc' in err.lower() for err in current_errors)
-        has_layout_errors = any(
-            not ('council' in err.lower() or 'ncc' in err.lower()) 
-            for err in current_errors
-        )
-        
-        current_validation['summary']['council_compliant'] = not has_council_errors
-        current_validation['summary']['ncc_compliant'] = not has_ncc_errors
-        current_validation['summary']['layout_valid'] = not has_layout_errors
-        
-        # Determine overall compliance based on remaining errors
-        is_now_compliant = len(current_errors) == 0
-        current_validation['overall_compliant'] = is_now_compliant
-        
-        # Update nested validation objects to reflect current state
-        council_validation = current_validation.get('council_validation', {})
-        council_validation['valid'] = not has_council_errors
-        council_validation['errors'] = [e for e in current_errors if 'council' in e.lower()]
-        current_validation['council_validation'] = council_validation
-        
-        ncc_validation = current_validation.get('ncc_validation', {})
-        ncc_validation['compliant'] = not has_ncc_errors
-        ncc_validation['errors'] = [e for e in current_errors if 'ncc' in e.lower()]
-        current_validation['ncc_validation'] = ncc_validation
-        
-        layout_validation = current_validation.get('layout_validation', {})
-        layout_validation['valid'] = not has_layout_errors
-        layout_validation['errors'] = [e for e in current_errors if not ('council' in e.lower() or 'ncc' in e.lower())]
-        current_validation['layout_validation'] = layout_validation
-        
-        # Update layout_data with modified validation (includes all nested updates)
-        updated_layout_data['validation'] = current_validation
+        # Update metadata
         updated_layout_data['_last_fix_timestamp'] = datetime.utcnow().isoformat()
         updated_layout_data['_last_fix_error'] = error_text
         updated_layout_data['_last_fix_resolved'] = error_fixed
         
-        # Build updated compliance_data
+        # Determine overall compliance
+        is_now_compliant = len(current_errors) == 0
+        
+        # Build compliance_data
+        has_council_errors = any('council' in err.lower() for err in current_errors)
+        has_ncc_errors = any('ncc' in err.lower() for err in current_errors)
+        
         compliance_data = {
             'overall_compliant': is_now_compliant,
-            'layout_validation': layout_validation,
-            'council_validation': council_validation,
-            'ncc_validation': ncc_validation,
-            'summary': current_validation.get('summary', {}),
+            'council_compliant': not has_council_errors,
+            'ncc_compliant': not has_ncc_errors,
+            'validation': full_validation,
             'all_errors': current_errors,
             'all_warnings': current_warnings,
             'last_validated': datetime.utcnow().isoformat(),
@@ -1113,7 +1121,7 @@ def fix_floor_plan_task(
             }
         }
         
-        # Update database with all fields
+        # Update database
         plan.preview_image_url = new_image_url
         plan.layout_data = json.dumps(updated_layout_data)
         plan.compliance_data = json.dumps(compliance_data)
@@ -1122,7 +1130,7 @@ def fix_floor_plan_task(
         
         # Update compliance notes
         fix_status = "RESOLVED" if error_fixed else "FAILED"
-        new_note = f"\n[{datetime.utcnow().isoformat()}] AI Fix {fix_status}: {error_text}"
+        new_note = f"\n[{datetime.utcnow().isoformat()}] CAD Fix {fix_status}: {error_text}"
         new_note += f"\n  - Remaining errors: {len(current_errors)}"
         new_note += f"\n  - Remaining warnings: {len(current_warnings)}"
         new_note += f"\n  - Overall compliant: {is_now_compliant}"
@@ -1179,9 +1187,6 @@ async def fix_plan_error(
     
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
-    
-    if not plan.preview_image_url:
-        raise HTTPException(status_code=400, detail="Plan has no image to fix")
     
     # Check if already fixing
     if plan.layout_data:

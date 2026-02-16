@@ -193,7 +193,12 @@ class AzureStorageService:
             Public URL of the uploaded image
         """
         blob_path = get_blob_path(user_name, project_name, plan_id, filename)
-        content_type = "image/png" if filename.endswith(".png") else "image/jpeg"
+        if filename.endswith(".svg"):
+            content_type = "image/svg+xml"
+        elif filename.endswith(".png"):
+            content_type = "image/png"
+        else:
+            content_type = "image/jpeg"
         return self.upload_floor_plan(image_bytes, blob_path, content_type)
     
     def upload_floor_plan_pdf(
