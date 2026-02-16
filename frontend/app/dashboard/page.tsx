@@ -83,17 +83,9 @@ export default function DashboardPage() {
         }
       }
 
-      // If no email, redirect to complete-email page
-      if (!email || email.length === 0) {
-        console.log('No email in localStorage, redirecting to complete-email');
-        router.push('/auth/complete-email');
-        return;
-      }
-
       setUserEmail(email);
 
-      // Check if user exists in database by calling a simple endpoint
-      // We'll try to get the user, and handle the response
+      // Check if user exists in database
       try {
         const userData = await api.getCurrentUser();
         console.log('Existing user found:', userData);
