@@ -17,6 +17,7 @@ import {
   Undo2,
   Pencil,
   ArrowLeft,
+  Move,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -80,6 +81,15 @@ export default function SvgEditor({
   const svgRef = useRef<SVGSVGElement>(null);
   const svgContentGroupRef = useRef<SVGGElement>(null);
 
+  // Drag state for mouse-based door movement
+  const isDragging = useRef(false);
+  const wasDragged = useRef(false);
+  const dragDoorId = useRef<number | null>(null);
+  const dragOffset = useRef({ x: 0, y: 0 });
+
+  // Arrow key nudge step in SVG units (recalculated from envelope)
+  const nudgeStep = useRef(1);
+
   // ── Inject original SVG content via DOM (React can't handle SVG namespaces) ─
 
   useEffect(() => {
@@ -115,12 +125,15 @@ export default function SvgEditor({
           if (vb && vb.length === 4) {
             setSvgViewBox({ x: vb[0], y: vb[1], w: vb[2], h: vb[3] });
             const svgUnitsPerMeter = vb[2] / envelopeWidth;
-            setDoorWidth(Math.round(svgUnitsPerMeter * 0.82));
+            setDoorWidth(Math.round(svgUnitsPerMeter * 0.82)); // 820mm standard door
+            nudgeStep.current = Math.max(1, Math.round(svgUnitsPerMeter * 0.05)); // 50mm per arrow press
           } else {
             const w = parseFloat(svgEl.getAttribute('width') || '800');
             const h = parseFloat(svgEl.getAttribute('height') || '1000');
             setSvgViewBox({ x: 0, y: 0, w, h });
-            setDoorWidth(Math.round(w * 0.04));
+            const fallbackUnitsPerMeter = w / envelopeWidth;
+            setDoorWidth(Math.round(fallbackUnitsPerMeter * 0.82));
+            nudgeStep.current = Math.max(1, Math.round(fallbackUnitsPerMeter * 0.05));
           }
         }
 
@@ -143,6 +156,12 @@ export default function SvgEditor({
 
   const handleCanvasClick = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
+      // Don't place a door if we just finished dragging one
+      if (wasDragged.current) {
+        wasDragged.current = false;
+        return;
+      }
+
       if (activeTool !== 'door') {
         setSelectedDoorId(null);
         return;
@@ -206,6 +225,105 @@ export default function SvgEditor({
       return prev.slice(0, -1);
     });
   }, [selectedDoorId]);
+
+  // ── Keyboard arrow keys → nudge selected door ─────────────────────────────
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (selectedDoorId === null) return;
+      const step = e.shiftKey ? nudgeStep.current * 5 : nudgeStep.current; // Shift = 5x bigger step
+      let dx = 0, dy = 0;
+
+      switch (e.key) {
+        case 'ArrowUp':    dy = -step; break;
+        case 'ArrowDown':  dy = step;  break;
+        case 'ArrowLeft':  dx = -step; break;
+        case 'ArrowRight': dx = step;  break;
+        case 'Delete':
+        case 'Backspace':  handleDeleteSelected(); return;
+        case 'r':
+        case 'R':          handleRotateSelected(); return;
+        default: return;
+      }
+
+      e.preventDefault();
+      setPlacedDoors(prev =>
+        prev.map(d =>
+          d.id === selectedDoorId
+            ? { ...d, x: d.x + dx, y: d.y + dy }
+            : d,
+        ),
+      );
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedDoorId, handleDeleteSelected, handleRotateSelected]);
+
+  // ── Mouse drag → move selected door ───────────────────────────────────────
+
+  // Convert screen coords to SVG coords
+  const screenToSvg = useCallback((clientX: number, clientY: number) => {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+    return pt.matrixTransform(ctm.inverse());
+  }, []);
+
+  const handleDoorMouseDown = useCallback(
+    (e: React.MouseEvent, doorId: number) => {
+      e.stopPropagation();
+      e.preventDefault();
+
+      // Select the door
+      setSelectedDoorId(doorId);
+      setActiveTool('select');
+
+      // Calculate offset between click point and door origin
+      const svgPt = screenToSvg(e.clientX, e.clientY);
+      if (!svgPt) return;
+
+      const door = placedDoors.find(d => d.id === doorId);
+      if (!door) return;
+
+      isDragging.current = true;
+      wasDragged.current = false;
+      dragDoorId.current = doorId;
+      dragOffset.current = { x: svgPt.x - door.x, y: svgPt.y - door.y };
+    },
+    [placedDoors, screenToSvg],
+  );
+
+  const handleSvgMouseMove = useCallback(
+    (e: React.MouseEvent<SVGSVGElement>) => {
+      if (!isDragging.current || dragDoorId.current === null) return;
+
+      wasDragged.current = true;
+      const svgPt = screenToSvg(e.clientX, e.clientY);
+      if (!svgPt) return;
+
+      const newX = Math.round(svgPt.x - dragOffset.current.x);
+      const newY = Math.round(svgPt.y - dragOffset.current.y);
+
+      setPlacedDoors(prev =>
+        prev.map(d =>
+          d.id === dragDoorId.current
+            ? { ...d, x: newX, y: newY }
+            : d,
+        ),
+      );
+    },
+    [screenToSvg],
+  );
+
+  const handleSvgMouseUp = useCallback(() => {
+    isDragging.current = false;
+    dragDoorId.current = null;
+  }, []);
 
   // ── Save ──────────────────────────────────────────────────────────────────
 
@@ -299,9 +417,13 @@ export default function SvgEditor({
             ref={svgRef}
             viewBox={`${svgViewBox.x} ${svgViewBox.y} ${svgViewBox.w} ${svgViewBox.h}`}
             className="w-full h-full"
-            style={{ cursor: activeTool === 'door' ? 'crosshair' : 'default' }}
+            style={{ cursor: isDragging.current ? 'grabbing' : activeTool === 'door' ? 'crosshair' : 'default' }}
             onClick={handleCanvasClick}
+            onMouseMove={handleSvgMouseMove}
+            onMouseUp={handleSvgMouseUp}
+            onMouseLeave={handleSvgMouseUp}
             preserveAspectRatio="xMidYMid meet"
+            tabIndex={0}
           >
             <g ref={svgContentGroupRef} />
 
@@ -314,7 +436,8 @@ export default function SvgEditor({
                     key={door.id}
                     transform={`translate(${door.x}, ${door.y}) rotate(${door.rotation})`}
                     onClick={e => handleDoorClick(e, door.id)}
-                    style={{ cursor: 'pointer' }}
+                    onMouseDown={e => handleDoorMouseDown(e, door.id)}
+                    style={{ cursor: selected ? 'grab' : 'pointer' }}
                   >
                     {selected && (
                       <rect
@@ -455,6 +578,16 @@ export default function SvgEditor({
                 <Undo2 className="w-4 h-4" />
                 <span className="text-xs">Undo</span>
               </button>
+            </div>
+            {/* Keyboard shortcut hints */}
+            <div className="mt-3 pt-3 border-t border-white/5 space-y-1">
+              <div className="flex items-center gap-2 text-gray-500 text-[10px]">
+                <Move className="w-3 h-3" />
+                <span>Arrow keys to nudge · Shift+Arrow = 5× faster</span>
+              </div>
+              <div className="flex items-center gap-2 text-gray-500 text-[10px]">
+                <span className="ml-5">Drag door with mouse · R = rotate · Del = delete</span>
+              </div>
             </div>
           </div>
 
