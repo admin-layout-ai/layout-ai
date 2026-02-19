@@ -18,6 +18,7 @@ import {
   Pencil,
   ArrowLeft,
   Move,
+  FlipHorizontal2,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -28,6 +29,7 @@ export interface PlacedDoor {
   y: number;
   rotation: number; // 0 | 90 | 180 | 270
   width: number;    // door width in SVG coordinate units
+  flipped: boolean; // mirror the swing direction
 }
 
 export interface SvgEditorSaveResult {
@@ -81,14 +83,14 @@ export default function SvgEditor({
   const svgRef = useRef<SVGSVGElement>(null);
   const svgContentGroupRef = useRef<SVGGElement>(null);
 
-  // Drag state for mouse-based door movement
+  // Drag state
   const isDragging = useRef(false);
   const wasDragged = useRef(false);
   const dragDoorId = useRef<number | null>(null);
   const dragOffset = useRef({ x: 0, y: 0 });
 
-  // Arrow key nudge step in SVG units (recalculated from envelope)
   const nudgeStep = useRef(1);
+  const [wallClearHeight, setWallClearHeight] = useState(8);
 
   // ── Inject original SVG content via DOM (React can't handle SVG namespaces) ─
 
@@ -125,14 +127,16 @@ export default function SvgEditor({
           if (vb && vb.length === 4) {
             setSvgViewBox({ x: vb[0], y: vb[1], w: vb[2], h: vb[3] });
             const svgUnitsPerMeter = vb[2] / envelopeWidth;
-            setDoorWidth(Math.round(svgUnitsPerMeter * 0.82)); // 820mm standard door
-            nudgeStep.current = Math.max(1, Math.round(svgUnitsPerMeter * 0.05)); // 50mm per arrow press
+            setDoorWidth(Math.round(svgUnitsPerMeter * 0.82));
+            setWallClearHeight(Math.max(4, Math.round(svgUnitsPerMeter * 0.18)));
+            nudgeStep.current = Math.max(1, Math.round(svgUnitsPerMeter * 0.05));
           } else {
             const w = parseFloat(svgEl.getAttribute('width') || '800');
             const h = parseFloat(svgEl.getAttribute('height') || '1000');
             setSvgViewBox({ x: 0, y: 0, w, h });
             const fallbackUnitsPerMeter = w / envelopeWidth;
             setDoorWidth(Math.round(fallbackUnitsPerMeter * 0.82));
+            setWallClearHeight(Math.max(4, Math.round(fallbackUnitsPerMeter * 0.18)));
             nudgeStep.current = Math.max(1, Math.round(fallbackUnitsPerMeter * 0.05));
           }
         }
@@ -156,7 +160,6 @@ export default function SvgEditor({
 
   const handleCanvasClick = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
-      // Don't place a door if we just finished dragging one
       if (wasDragged.current) {
         wasDragged.current = false;
         return;
@@ -183,6 +186,7 @@ export default function SvgEditor({
         y: Math.round(svgPt.y),
         rotation: doorRotation,
         width: doorWidth,
+        flipped: false,
       };
 
       setPlacedDoors(prev => [...prev, newDoor]);
@@ -226,12 +230,21 @@ export default function SvgEditor({
     });
   }, [selectedDoorId]);
 
+  const handleFlipSelected = useCallback(() => {
+    if (selectedDoorId === null) return;
+    setPlacedDoors(prev =>
+      prev.map(d =>
+        d.id === selectedDoorId ? { ...d, flipped: !d.flipped } : d,
+      ),
+    );
+  }, [selectedDoorId]);
+
   // ── Keyboard arrow keys → nudge selected door ─────────────────────────────
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (selectedDoorId === null) return;
-      const step = e.shiftKey ? nudgeStep.current * 5 : nudgeStep.current; // Shift = 5x bigger step
+      const step = e.shiftKey ? nudgeStep.current * 5 : nudgeStep.current;
       let dx = 0, dy = 0;
 
       switch (e.key) {
@@ -243,6 +256,8 @@ export default function SvgEditor({
         case 'Backspace':  handleDeleteSelected(); return;
         case 'r':
         case 'R':          handleRotateSelected(); return;
+        case 'f':
+        case 'F':          handleFlipSelected(); return;
         default: return;
       }
 
@@ -258,11 +273,10 @@ export default function SvgEditor({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedDoorId, handleDeleteSelected, handleRotateSelected]);
+  }, [selectedDoorId, handleDeleteSelected, handleRotateSelected, handleFlipSelected]);
 
   // ── Mouse drag → move selected door ───────────────────────────────────────
 
-  // Convert screen coords to SVG coords
   const screenToSvg = useCallback((clientX: number, clientY: number) => {
     const svg = svgRef.current;
     if (!svg) return null;
@@ -278,12 +292,9 @@ export default function SvgEditor({
     (e: React.MouseEvent, doorId: number) => {
       e.stopPropagation();
       e.preventDefault();
-
-      // Select the door
       setSelectedDoorId(doorId);
       setActiveTool('select');
 
-      // Calculate offset between click point and door origin
       const svgPt = screenToSvg(e.clientX, e.clientY);
       if (!svgPt) return;
 
@@ -301,18 +312,15 @@ export default function SvgEditor({
   const handleSvgMouseMove = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
       if (!isDragging.current || dragDoorId.current === null) return;
-
       wasDragged.current = true;
+
       const svgPt = screenToSvg(e.clientX, e.clientY);
       if (!svgPt) return;
-
-      const newX = Math.round(svgPt.x - dragOffset.current.x);
-      const newY = Math.round(svgPt.y - dragOffset.current.y);
 
       setPlacedDoors(prev =>
         prev.map(d =>
           d.id === dragDoorId.current
-            ? { ...d, x: newX, y: newY }
+            ? { ...d, x: Math.round(svgPt.x - dragOffset.current.x), y: Math.round(svgPt.y - dragOffset.current.y) }
             : d,
         ),
       );
@@ -335,7 +343,10 @@ export default function SvgEditor({
       const doorsSvg = placedDoors
         .map(door => {
           const w = door.width;
-          return `<g transform="translate(${door.x}, ${door.y}) rotate(${door.rotation})" class="door-element" data-door-id="${door.id}">
+          const wch = wallClearHeight;
+          const flipScale = door.flipped ? ' scale(1,-1)' : '';
+          return `<g transform="translate(${door.x}, ${door.y}) rotate(${door.rotation})${flipScale}" class="door-element" data-door-id="${door.id}">
+  <rect x="-1" y="${-wch / 2}" width="${w + 2}" height="${wch}" fill="#FFFFFF" stroke="none"/>
   <line x1="0" y1="0" x2="${w}" y2="0" stroke="#000000" stroke-width="2" fill="none"/>
   <path d="M ${w},0 A ${w},${w} 0 0,1 0,${-w}" fill="none" stroke="#000000" stroke-width="1"/>
   <circle cx="0" cy="0" r="2" fill="#000000"/>
@@ -430,15 +441,24 @@ export default function SvgEditor({
             <g id="doors-overlay">
               {placedDoors.map(door => {
                 const w = door.width;
+                const wch = wallClearHeight;
                 const selected = door.id === selectedDoorId;
+                const flipScale = door.flipped ? ' scale(1,-1)' : '';
                 return (
                   <g
                     key={door.id}
-                    transform={`translate(${door.x}, ${door.y}) rotate(${door.rotation})`}
+                    transform={`translate(${door.x}, ${door.y}) rotate(${door.rotation})${flipScale}`}
                     onClick={e => handleDoorClick(e, door.id)}
                     onMouseDown={e => handleDoorMouseDown(e, door.id)}
                     style={{ cursor: selected ? 'grab' : 'pointer' }}
                   >
+                    {/* White rect to clear the wall underneath */}
+                    <rect
+                      x={-1} y={-wch / 2}
+                      width={w + 2} height={wch}
+                      fill="#FFFFFF" stroke="none"
+                    />
+                    {/* Selection highlight */}
                     {selected && (
                       <rect
                         x={-6} y={-w - 6}
@@ -448,11 +468,13 @@ export default function SvgEditor({
                         strokeDasharray="6,3" rx="3"
                       />
                     )}
+                    {/* Door leaf */}
                     <line
                       x1="0" y1="0" x2={w} y2="0"
                       stroke={selected ? '#2563eb' : '#000'}
                       strokeWidth={selected ? 3 : 2}
                     />
+                    {/* Swing arc */}
                     <path
                       d={`M ${w},0 A ${w},${w} 0 0,0 0,${-w}`}
                       fill="none"
@@ -460,6 +482,7 @@ export default function SvgEditor({
                       strokeWidth={selected ? 1.5 : 1}
                       strokeDasharray="4,3"
                     />
+                    {/* Hinge */}
                     <circle
                       cx="0" cy="0"
                       r={selected ? 4 : 3}
@@ -527,44 +550,33 @@ export default function SvgEditor({
             </div>
           </div>
 
-          {/* Door Rotation */}
-          <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-            <h4 className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-3">Door Rotation</h4>
-            <div className="grid grid-cols-4 gap-2">
-              {[0, 90, 180, 270].map(angle => (
-                <button
-                  key={angle}
-                  onClick={() => setDoorRotation(angle)}
-                  className={`py-2 rounded-lg text-sm font-mono transition ${
-                    doorRotation === angle
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 border border-white/10'
-                  }`}
-                >
-                  {angle}°
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Selected Door Actions */}
           <div className="bg-white/5 rounded-xl p-4 border border-white/10">
             <h4 className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-3">Actions</h4>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               <button
                 onClick={handleRotateSelected}
                 disabled={selectedDoorId === null}
                 className="flex flex-col items-center gap-1.5 p-3 rounded-lg text-sm transition bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-gray-400 hover:text-white"
-                title="Rotate selected 90°"
+                title="Rotate selected 90° (R)"
               >
                 <RotateCw className="w-4 h-4" />
                 <span className="text-xs">Rotate</span>
               </button>
               <button
+                onClick={handleFlipSelected}
+                disabled={selectedDoorId === null}
+                className="flex flex-col items-center gap-1.5 p-3 rounded-lg text-sm transition bg-white/5 border border-white/10 hover:bg-blue-500/10 hover:border-blue-500/30 disabled:opacity-30 disabled:cursor-not-allowed text-gray-400 hover:text-blue-400"
+                title="Flip / mirror swing direction (F)"
+              >
+                <FlipHorizontal2 className="w-4 h-4" />
+                <span className="text-xs">Flip</span>
+              </button>
+              <button
                 onClick={handleDeleteSelected}
                 disabled={selectedDoorId === null}
                 className="flex flex-col items-center gap-1.5 p-3 rounded-lg text-sm transition bg-white/5 border border-white/10 hover:bg-red-500/10 hover:border-red-500/30 disabled:opacity-30 disabled:cursor-not-allowed text-gray-400 hover:text-red-400"
-                title="Delete selected"
+                title="Delete selected (Del)"
               >
                 <Trash2 className="w-4 h-4" />
                 <span className="text-xs">Delete</span>
@@ -579,14 +591,13 @@ export default function SvgEditor({
                 <span className="text-xs">Undo</span>
               </button>
             </div>
-            {/* Keyboard shortcut hints */}
             <div className="mt-3 pt-3 border-t border-white/5 space-y-1">
               <div className="flex items-center gap-2 text-gray-500 text-[10px]">
                 <Move className="w-3 h-3" />
-                <span>Arrow keys to nudge · Shift+Arrow = 5× faster</span>
+                <span>Arrow keys to nudge · Shift = 5× faster</span>
               </div>
-              <div className="flex items-center gap-2 text-gray-500 text-[10px]">
-                <span className="ml-5">Drag door with mouse · R = rotate · Del = delete</span>
+              <div className="text-gray-500 text-[10px] ml-5">
+                Drag to move · R = rotate · F = flip · Del = delete
               </div>
             </div>
           </div>
@@ -613,7 +624,7 @@ export default function SvgEditor({
                       <DoorOpen className="w-3 h-3" />
                       Door {idx + 1}
                     </span>
-                    <span className="font-mono">{door.rotation}°</span>
+                    <span className="font-mono text-[10px]">{door.rotation}°{door.flipped ? ' ↔' : ''}</span>
                   </button>
                 ))}
               </div>
