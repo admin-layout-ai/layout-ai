@@ -678,18 +678,6 @@ export default function PlansPage() {
               >
                 <Info className="w-5 h-5" />
               </button>
-
-              {/* Edit Mode */}
-              {selectedPlan.preview_image_url && !isEditMode && (
-                <button
-                  onClick={handleEnterEditMode}
-                  className="px-3 sm:px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2 text-sm"
-                  title="Edit floor plan"
-                >
-                  <Pencil className="w-4 h-4" />
-                  <span className="hidden sm:inline">Edit</span>
-                </button>
-              )}
               
               {/* Download */}
               {selectedPlan.preview_image_url && (
@@ -712,23 +700,26 @@ export default function PlansPage() {
 
         {/* Main Content */}
         <div className="flex flex-col lg:flex-row flex-1 overflow-auto lg:overflow-hidden">
-          {/* Left Section: Floor Plan (60%) + Errors Panel (40%) */}
+          {/* Left Section: Floor Plan (60%) + Errors/Editor Panel (40%) */}
           <div className="flex-1 flex flex-col lg:flex-row overflow-visible lg:overflow-hidden">
-            {/* Floor Plan Image / Edit Canvas */}
+
+            {isEditMode && selectedPlan.preview_image_url ? (
+              /* ── EDIT MODE: SvgEditor renders its own 60/40 split ──── */
+              <SvgEditor
+                svgUrl={`${selectedPlan.preview_image_url}?t=${selectedPlan.updated_at || Date.now()}`}
+                projectId={selectedPlan.project_id}
+                planId={selectedPlan.id}
+                existingDoors={layoutData?.doors as PlacedDoor[] | undefined}
+                envelopeWidth={layoutData?.building_envelope?.width}
+                onSave={handleEditorSave}
+                onCancel={handleExitEditMode}
+              />
+            ) : (
+              /* ── NORMAL MODE: Image + Validation panel ────────────── */
+              <>
+            {/* Floor Plan Image */}
             <div className="w-full lg:w-[60%] p-3 sm:p-4 lg:p-6 flex flex-col overflow-visible lg:overflow-hidden min-h-[300px] sm:min-h-[400px]">
-              
-              {isEditMode && selectedPlan.preview_image_url ? (
-                <SvgEditor
-                  svgUrl={`${selectedPlan.preview_image_url}?t=${selectedPlan.updated_at || Date.now()}`}
-                  projectId={selectedPlan.project_id}
-                  planId={selectedPlan.id}
-                  existingDoors={layoutData?.doors as PlacedDoor[] | undefined}
-                  envelopeWidth={layoutData?.building_envelope?.width}
-                  onSave={handleEditorSave}
-                  onCancel={handleExitEditMode}
-                />
-              ) : (
-                <div className="flex items-center justify-center h-full">
+              <div className="flex items-center justify-center h-full">
                   {selectedPlan.preview_image_url ? (
                     <div className="bg-white rounded-xl shadow-xl flex items-center justify-center p-2 overflow-hidden h-full w-full">
                       <img
@@ -752,8 +743,7 @@ export default function PlansPage() {
                       <p className="text-gray-400 text-sm">No image available for this floor plan</p>
                     </div>
                   )}
-                </div>
-              )}
+              </div>
             </div>
 
             {/* Errors & Warnings Panel - 40% */}
@@ -985,8 +975,27 @@ export default function PlansPage() {
                     </button>
                   </div>
                 </div>
+
+                {/* Floor Plan Editor Button */}
+                {selectedPlan.preview_image_url && (
+                  <div className="mt-4 pt-4 border-t border-white/10">
+                    <button
+                      onClick={handleEnterEditMode}
+                      className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-xl text-sm font-medium transition"
+                    >
+                      <Pencil className="w-4 h-4" />
+                      Floor Plan Editor
+                    </button>
+                    <p className="text-center text-gray-500 text-xs mt-2">
+                      Add doors and annotations to your floor plan
+                    </p>
+                  </div>
+                )}
+
               </div>
             </div>
+              </>
+            )}
           </div>
 
           {/* Details Sidebar - Fixed width */}

@@ -1,6 +1,8 @@
 // frontend/components/SvgEditor.tsx
 // Self-contained SVG floor plan editor with door placement tools.
-// All editing state, handlers, toolbar, and canvas live here.
+// Renders a 60/40 split: canvas on the left, controls on the right.
+// The parent wraps this inside the same flex container used for the
+// normal image + validation layout so it slots in seamlessly.
 
 'use client';
 
@@ -13,6 +15,8 @@ import {
   MousePointer,
   DoorOpen,
   Undo2,
+  Pencil,
+  ArrowLeft,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -32,7 +36,7 @@ export interface SvgEditorSaveResult {
 }
 
 export interface SvgEditorProps {
-  /** Azure blob URL (with optional cache-bust param) of the SVG to edit */
+  /** Azure blob URL of the SVG to edit */
   svgUrl: string;
   /** IDs used to call the save endpoint */
   projectId: number;
@@ -43,7 +47,7 @@ export interface SvgEditorProps {
   envelopeWidth?: number;
   /** Called after a successful save with the new preview URL + door data */
   onSave: (result: SvgEditorSaveResult) => void;
-  /** Called when the user clicks Cancel */
+  /** Called when the user clicks Cancel / Back */
   onCancel: () => void;
 }
 
@@ -115,7 +119,6 @@ export default function SvgEditor({
           }
         }
 
-        // Seed previously-placed doors
         if (existingDoors && existingDoors.length > 0) {
           setPlacedDoors(existingDoors);
           setNextDoorId(Math.max(...existingDoors.map(d => d.id)) + 1);
@@ -129,7 +132,7 @@ export default function SvgEditor({
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);          // run once on mount
+  }, []);
 
   // ── Canvas click → place door ─────────────────────────────────────────────
 
@@ -206,7 +209,6 @@ export default function SvgEditor({
     setIsSaving(true);
 
     try {
-      // Build door SVG elements for the final file
       const doorsSvg = placedDoors
         .map(door => {
           const w = door.width;
@@ -218,7 +220,6 @@ export default function SvgEditor({
         })
         .join('\n');
 
-      // Strip old doors layer, inject new one before </svg>
       let modifiedSvg = svgContent.replace(
         /<g\s+id="doors-layer"[\s\S]*?<\/g>\s*/g,
         '',
@@ -255,12 +256,11 @@ export default function SvgEditor({
       }
 
       const result = await res.json();
-      const now = new Date().toISOString();
 
       onSave({
         previewImageUrl: result.preview_image_url,
         doors: placedDoors,
-        updatedAt: now,
+        updatedAt: new Date().toISOString(),
       });
     } catch (err) {
       console.error('SvgEditor save failed:', err);
@@ -270,208 +270,242 @@ export default function SvgEditor({
     }
   };
 
-  // ── Loading spinner ───────────────────────────────────────────────────────
+  // ── Loading ───────────────────────────────────────────────────────────────
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-3">
-        <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
-        <p className="text-gray-400 text-sm">Loading editor…</p>
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 text-blue-400 animate-spin mx-auto mb-3" />
+          <p className="text-gray-400 text-sm">Loading editor…</p>
+        </div>
       </div>
     );
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Render — two children that slot into the parent's flex row ─────────
 
   return (
-    <div className="flex flex-col h-full gap-3">
-      {/* ── Toolbar ──────────────────────────────────────────────────────── */}
-      <div className="bg-slate-800 rounded-xl border border-white/10 p-2 flex flex-wrap items-center gap-2">
-        {/* Tool toggle */}
-        <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
-          <button
-            onClick={() => setActiveTool('select')}
-            className={`p-2 rounded-md text-sm flex items-center gap-1.5 transition ${
-              activeTool === 'select'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-400 hover:text-white hover:bg-white/10'
-            }`}
-            title="Select"
+    <>
+      {/* ── LEFT: SVG Canvas (60%) ─────────────────────────────────────── */}
+      <div className="w-full lg:w-[60%] p-3 sm:p-4 lg:p-6 flex flex-col overflow-visible lg:overflow-hidden min-h-[300px] sm:min-h-[400px]">
+        <div className="flex-1 bg-white rounded-xl shadow-xl overflow-hidden relative">
+          <svg
+            ref={svgRef}
+            viewBox={`${svgViewBox.x} ${svgViewBox.y} ${svgViewBox.w} ${svgViewBox.h}`}
+            className="w-full h-full"
+            style={{ cursor: activeTool === 'door' ? 'crosshair' : 'default' }}
+            onClick={handleCanvasClick}
+            preserveAspectRatio="xMidYMid meet"
           >
-            <MousePointer className="w-4 h-4" />
-            <span className="hidden sm:inline text-xs">Select</span>
-          </button>
-          <button
-            onClick={() => {
-              setActiveTool('door');
-              setSelectedDoorId(null);
-            }}
-            className={`p-2 rounded-md text-sm flex items-center gap-1.5 transition ${
-              activeTool === 'door'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-400 hover:text-white hover:bg-white/10'
-            }`}
-            title="Add Door"
-          >
-            <DoorOpen className="w-4 h-4" />
-            <span className="hidden sm:inline text-xs">Door</span>
-          </button>
-        </div>
+            <g dangerouslySetInnerHTML={{ __html: svgInnerContent }} />
 
-        <div className="w-px h-6 bg-white/10" />
-
-        {/* Rotation presets */}
-        <div className="flex items-center gap-1">
-          <span className="text-gray-500 text-xs mr-1 hidden sm:inline">
-            Angle:
-          </span>
-          {[0, 90, 180, 270].map(angle => (
-            <button
-              key={angle}
-              onClick={() => setDoorRotation(angle)}
-              className={`px-2 py-1 rounded text-xs font-mono transition ${
-                doorRotation === angle
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-400 hover:text-white bg-white/5 hover:bg-white/10'
-              }`}
-            >
-              {angle}°
-            </button>
-          ))}
-        </div>
-
-        <div className="w-px h-6 bg-white/10" />
-
-        {/* Selected-door actions */}
-        <button
-          onClick={handleRotateSelected}
-          disabled={selectedDoorId === null}
-          className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-md transition disabled:opacity-30 disabled:cursor-not-allowed"
-          title="Rotate selected door 90°"
-        >
-          <RotateCw className="w-4 h-4" />
-        </button>
-        <button
-          onClick={handleDeleteSelected}
-          disabled={selectedDoorId === null}
-          className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-md transition disabled:opacity-30 disabled:cursor-not-allowed"
-          title="Delete selected door"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
-        <button
-          onClick={handleUndo}
-          disabled={placedDoors.length === 0}
-          className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-md transition disabled:opacity-30 disabled:cursor-not-allowed"
-          title="Undo last door"
-        >
-          <Undo2 className="w-4 h-4" />
-        </button>
-
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        <span className="text-gray-500 text-xs">
-          {placedDoors.length} door{placedDoors.length !== 1 ? 's' : ''}
-        </span>
-
-        {/* Cancel / Save */}
-        <button
-          onClick={onCancel}
-          className="px-3 py-1.5 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg text-xs transition"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleSave}
-          disabled={isSaving}
-          className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-medium transition flex items-center gap-1.5 disabled:opacity-50"
-        >
-          {isSaving ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <Save className="w-3.5 h-3.5" />
-          )}
-          Save
-        </button>
-      </div>
-
-      {/* ── SVG Canvas ───────────────────────────────────────────────────── */}
-      <div className="flex-1 bg-white rounded-xl shadow-xl overflow-hidden relative">
-        <svg
-          ref={svgRef}
-          viewBox={`${svgViewBox.x} ${svgViewBox.y} ${svgViewBox.w} ${svgViewBox.h}`}
-          className="w-full h-full"
-          style={{ cursor: activeTool === 'door' ? 'crosshair' : 'default' }}
-          onClick={handleCanvasClick}
-          preserveAspectRatio="xMidYMid meet"
-        >
-          {/* Original floor plan */}
-          <g dangerouslySetInnerHTML={{ __html: svgInnerContent }} />
-
-          {/* Placed doors */}
-          <g id="doors-overlay">
-            {placedDoors.map(door => {
-              const w = door.width;
-              const selected = door.id === selectedDoorId;
-              return (
-                <g
-                  key={door.id}
-                  transform={`translate(${door.x}, ${door.y}) rotate(${door.rotation})`}
-                  onClick={e => handleDoorClick(e, door.id)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {/* Selection highlight */}
-                  {selected && (
-                    <rect
-                      x={-6}
-                      y={-w - 6}
-                      width={w + 12}
-                      height={w + 12}
-                      fill="rgba(59,130,246,0.08)"
-                      stroke="#3b82f6"
-                      strokeWidth="2"
-                      strokeDasharray="6,3"
-                      rx="3"
+            <g id="doors-overlay">
+              {placedDoors.map(door => {
+                const w = door.width;
+                const selected = door.id === selectedDoorId;
+                return (
+                  <g
+                    key={door.id}
+                    transform={`translate(${door.x}, ${door.y}) rotate(${door.rotation})`}
+                    onClick={e => handleDoorClick(e, door.id)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {selected && (
+                      <rect
+                        x={-6} y={-w - 6}
+                        width={w + 12} height={w + 12}
+                        fill="rgba(59,130,246,0.08)"
+                        stroke="#3b82f6" strokeWidth="2"
+                        strokeDasharray="6,3" rx="3"
+                      />
+                    )}
+                    <line
+                      x1="0" y1="0" x2={w} y2="0"
+                      stroke={selected ? '#2563eb' : '#000'}
+                      strokeWidth={selected ? 3 : 2}
                     />
-                  )}
-                  {/* Door leaf */}
-                  <line
-                    x1="0"
-                    y1="0"
-                    x2={w}
-                    y2="0"
-                    stroke={selected ? '#2563eb' : '#000'}
-                    strokeWidth={selected ? 3 : 2}
-                  />
-                  {/* Swing arc */}
-                  <path
-                    d={`M ${w},0 A ${w},${w} 0 0,0 0,${-w}`}
-                    fill="none"
-                    stroke={selected ? '#2563eb' : '#000'}
-                    strokeWidth={selected ? 1.5 : 1}
-                    strokeDasharray="4,3"
-                  />
-                  {/* Hinge */}
-                  <circle
-                    cx="0"
-                    cy="0"
-                    r={selected ? 4 : 3}
-                    fill={selected ? '#2563eb' : '#000'}
-                  />
-                </g>
-              );
-            })}
-          </g>
-        </svg>
+                    <path
+                      d={`M ${w},0 A ${w},${w} 0 0,0 0,${-w}`}
+                      fill="none"
+                      stroke={selected ? '#2563eb' : '#000'}
+                      strokeWidth={selected ? 1.5 : 1}
+                      strokeDasharray="4,3"
+                    />
+                    <circle
+                      cx="0" cy="0"
+                      r={selected ? 4 : 3}
+                      fill={selected ? '#2563eb' : '#000'}
+                    />
+                  </g>
+                );
+              })}
+            </g>
+          </svg>
 
-        {/* Hint overlay */}
-        {placedDoors.length === 0 && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-sm text-white text-xs px-4 py-2 rounded-full pointer-events-none">
-            Click on the floor plan to place a door
-          </div>
-        )}
+          {placedDoors.length === 0 && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-sm text-white text-xs px-4 py-2 rounded-full pointer-events-none">
+              Click on the floor plan to place a door
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* ── RIGHT: Editor Controls (40%) ───────────────────────────────── */}
+      <div className="w-full lg:w-[40%] p-3 sm:p-4 lg:p-6 border-t lg:border-t-0 lg:border-l border-white/10 overflow-y-auto">
+        <div className="space-y-5">
+
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <h3 className="text-white font-semibold flex items-center gap-2 text-sm sm:text-base">
+              <Pencil className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400" />
+              Floor Plan Editor
+            </h3>
+            <button
+              onClick={onCancel}
+              className="flex items-center gap-1.5 text-gray-400 hover:text-white text-xs transition"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Back
+            </button>
+          </div>
+
+          {/* Active Tool */}
+          <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+            <h4 className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-3">Tool</h4>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setActiveTool('select')}
+                className={`flex items-center justify-center gap-2 p-3 rounded-lg text-sm font-medium transition ${
+                  activeTool === 'select'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 border border-white/10'
+                }`}
+              >
+                <MousePointer className="w-4 h-4" />
+                Select
+              </button>
+              <button
+                onClick={() => { setActiveTool('door'); setSelectedDoorId(null); }}
+                className={`flex items-center justify-center gap-2 p-3 rounded-lg text-sm font-medium transition ${
+                  activeTool === 'door'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 border border-white/10'
+                }`}
+              >
+                <DoorOpen className="w-4 h-4" />
+                Add Door
+              </button>
+            </div>
+          </div>
+
+          {/* Door Rotation */}
+          <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+            <h4 className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-3">Door Rotation</h4>
+            <div className="grid grid-cols-4 gap-2">
+              {[0, 90, 180, 270].map(angle => (
+                <button
+                  key={angle}
+                  onClick={() => setDoorRotation(angle)}
+                  className={`py-2 rounded-lg text-sm font-mono transition ${
+                    doorRotation === angle
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 border border-white/10'
+                  }`}
+                >
+                  {angle}°
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Selected Door Actions */}
+          <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+            <h4 className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-3">Actions</h4>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={handleRotateSelected}
+                disabled={selectedDoorId === null}
+                className="flex flex-col items-center gap-1.5 p-3 rounded-lg text-sm transition bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-gray-400 hover:text-white"
+                title="Rotate selected 90°"
+              >
+                <RotateCw className="w-4 h-4" />
+                <span className="text-xs">Rotate</span>
+              </button>
+              <button
+                onClick={handleDeleteSelected}
+                disabled={selectedDoorId === null}
+                className="flex flex-col items-center gap-1.5 p-3 rounded-lg text-sm transition bg-white/5 border border-white/10 hover:bg-red-500/10 hover:border-red-500/30 disabled:opacity-30 disabled:cursor-not-allowed text-gray-400 hover:text-red-400"
+                title="Delete selected"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="text-xs">Delete</span>
+              </button>
+              <button
+                onClick={handleUndo}
+                disabled={placedDoors.length === 0}
+                className="flex flex-col items-center gap-1.5 p-3 rounded-lg text-sm transition bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-gray-400 hover:text-white"
+                title="Undo last"
+              >
+                <Undo2 className="w-4 h-4" />
+                <span className="text-xs">Undo</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Placed Doors List */}
+          <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-gray-400 text-xs font-medium uppercase tracking-wider">Placed Doors</h4>
+              <span className="text-white font-semibold text-lg">{placedDoors.length}</span>
+            </div>
+            {placedDoors.length > 0 && (
+              <div className="mt-2 max-h-[140px] overflow-y-auto space-y-1.5" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+                {placedDoors.map((door, idx) => (
+                  <button
+                    key={door.id}
+                    onClick={() => { setActiveTool('select'); setSelectedDoorId(door.id); }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition ${
+                      door.id === selectedDoorId
+                        ? 'bg-blue-600/20 border border-blue-500/50 text-blue-400'
+                        : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <DoorOpen className="w-3 h-3" />
+                      Door {idx + 1}
+                    </span>
+                    <span className="font-mono">{door.rotation}°</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Save / Cancel */}
+          <div className="space-y-2 pt-2">
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSaving ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              {isSaving ? 'Saving…' : 'Save Changes'}
+            </button>
+            <button
+              onClick={onCancel}
+              className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white py-3 rounded-xl text-sm font-medium transition border border-white/10"
+            >
+              Cancel
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </>
   );
 }
