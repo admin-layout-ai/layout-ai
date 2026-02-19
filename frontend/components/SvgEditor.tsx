@@ -6,7 +6,7 @@
 
 'use client';
 
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Loader2,
   Save,
@@ -78,14 +78,19 @@ export default function SvgEditor({
   const [isSaving, setIsSaving] = useState(false);
 
   const svgRef = useRef<SVGSVGElement>(null);
+  const svgContentGroupRef = useRef<SVGGElement>(null);
 
-  // ── Derived ────────────────────────────────────────────────────────────────
+  // ── Inject original SVG content via DOM (React can't handle SVG namespaces) ─
 
-  const svgInnerContent = useMemo(() => {
-    if (!svgContent) return '';
+  useEffect(() => {
+    if (!svgContent || !svgContentGroupRef.current) return;
+    // Strip XML declaration
     const cleaned = svgContent.replace(/<\?xml[^?]*\?>\s*/g, '');
+    // Extract inner content between <svg> and </svg>
     const match = cleaned.match(/<svg[^>]*>([\s\S]*)<\/svg>/i);
-    return match ? match[1] : '';
+    if (match && match[1]) {
+      svgContentGroupRef.current.innerHTML = match[1];
+    }
   }, [svgContent]);
 
   // ── Init: fetch SVG, parse viewBox, seed doors ────────────────────────────
@@ -298,7 +303,7 @@ export default function SvgEditor({
             onClick={handleCanvasClick}
             preserveAspectRatio="xMidYMid meet"
           >
-            <g dangerouslySetInnerHTML={{ __html: svgInnerContent }} />
+            <g ref={svgContentGroupRef} />
 
             <g id="doors-overlay">
               {placedDoors.map(door => {
