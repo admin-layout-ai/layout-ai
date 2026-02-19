@@ -163,6 +163,12 @@ class FixErrorRequest(BaseModel):
     error_type: str = "error"  # "error" or "warning"
 
 
+class SaveSvgRequest(BaseModel):
+    """Request model for saving edited SVG content (e.g., with doors added)."""
+    svg_content: str
+    doors: Optional[list] = None  # Optional door placement data to persist in layout_data
+
+
 # =============================================================================
 # HELPERS
 # =============================================================================
@@ -765,6 +771,82 @@ async def update_plan_layout_data(
         db.rollback()
         logger.error(f"Failed to update layout_data for plan {plan_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to update layout data: {str(e)}")
+
+
+@router.put("/{project_id}/plans/{plan_id}/save-svg")
+async def save_plan_svg(
+    project_id: int,
+    plan_id: int,
+    request: SaveSvgRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Save edited SVG content for a floor plan.
+    
+    Used by the frontend SVG editor after the user adds doors or other
+    annotations. Uploads the modified SVG to Azure blob storage,
+    updates the plan's preview_image_url, and persists door data in layout_data.
+    """
+    db_user = get_db_user(current_user, db)
+    
+    plan = db.query(models.FloorPlan).join(models.Project).filter(
+        models.FloorPlan.id == plan_id,
+        models.FloorPlan.project_id == project_id,
+        models.Project.user_id == db_user.id
+    ).first()
+    
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    try:
+        svg_bytes = request.svg_content.encode('utf-8')
+        
+        user_name = db_user.full_name or (
+            db_user.email.split('@')[0] if db_user.email else f"user_{db_user.id}"
+        )
+        variant_num = plan.variant_number or 1
+        filename = f"floor_plan_{variant_num}.svg"
+        
+        new_url = upload_floor_plan_image(
+            svg_bytes, user_name, project.name, plan_id, filename
+        )
+        
+        if not new_url:
+            raise HTTPException(status_code=500, detail="Failed to upload SVG to storage")
+        
+        plan.preview_image_url = new_url
+        plan.updated_at = datetime.utcnow()
+        
+        # Persist door data into layout_data if provided
+        if request.doors is not None and plan.layout_data:
+            try:
+                layout = json.loads(plan.layout_data)
+                layout['doors'] = request.doors
+                plan.layout_data = json.dumps(layout)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        
+        db.commit()
+        
+        logger.info(f"Saved edited SVG for plan {plan_id} ({len(svg_bytes)} bytes, {len(request.doors or [])} doors)")
+        
+        return {
+            'success': True,
+            'preview_image_url': new_url,
+            'plan_id': plan_id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to save SVG for plan {plan_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save SVG: {str(e)}")
 
 
 # =============================================================================

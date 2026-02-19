@@ -31,10 +31,12 @@ import {
   FileText,
   Ruler,
   Clock,
-  Sparkles
+  Sparkles,
+  Pencil
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import api, { Project, FloorPlan } from '@/lib/api';
+import SvgEditor, { SvgEditorSaveResult, PlacedDoor } from '@/components/SvgEditor';
 
 // Variant information
 const VARIANT_INFO: Record<number, { name: string; icon: string; color: string; description: string }> = {
@@ -105,6 +107,13 @@ interface LayoutData {
     depth?: number;
   };
   validation?: ValidationData;
+  doors?: Array<{
+    id: number;
+    x: number;
+    y: number;
+    rotation: number;
+    width: number;
+  }>;
 }
 
 export default function PlansPage() {
@@ -138,6 +147,9 @@ export default function PlansPage() {
   const [fixingMessage, setFixingMessage] = useState<string>(''); // AI message during fix
   const [fixingSuccess, setFixingSuccess] = useState<boolean | null>(null); // Success/failure state
   const [customChangeText, setCustomChangeText] = useState(''); // Custom change request text
+
+  // Edit mode toggle — all editing logic lives in SvgEditor component
+  const [isEditMode, setIsEditMode] = useState(false);
 
   // AI messages for the fixing overlay
   const AI_FIXING_MESSAGES = [
@@ -466,6 +478,7 @@ export default function PlansPage() {
   };
 
   const handleBackToGallery = () => {
+    setIsEditMode(false);
     setSelectedPlan(null);
     setLayoutData(null);
   };
@@ -491,6 +504,53 @@ export default function PlansPage() {
     } finally {
       setDownloading(false);
     }
+  };
+
+  // ── Edit mode callbacks (logic lives in SvgEditor component) ───────────
+
+  const handleEnterEditMode = () => {
+    if (!selectedPlan?.preview_image_url) return;
+    setIsEditMode(true);
+  };
+
+  const handleExitEditMode = () => {
+    setIsEditMode(false);
+  };
+
+  const handleEditorSave = (result: SvgEditorSaveResult) => {
+    if (!selectedPlan) return;
+
+    const updatedLayoutData = { ...layoutData, doors: result.doors };
+    const updatedLayoutString = JSON.stringify(updatedLayoutData);
+
+    const updatedPlan = {
+      ...selectedPlan,
+      preview_image_url: result.previewImageUrl,
+      layout_data: updatedLayoutString,
+      updated_at: result.updatedAt,
+    };
+
+    setSelectedPlan(updatedPlan);
+    setLayoutData(updatedLayoutData);
+    setPlans(prev => prev.map(p => (p.id === selectedPlan.id ? updatedPlan : p)));
+    setImageLoaded(false);
+    setImageError(false);
+    setIsEditMode(false);
+
+    // Persist door data to layout_data via existing endpoint (fire & forget)
+    const token = localStorage.getItem('auth_token') || localStorage.getItem('access_token');
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    fetch(
+      `${API_URL}/api/v1/plans/${selectedPlan.project_id}/plans/${selectedPlan.id}/layout-data`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        body: JSON.stringify({ layout_data: updatedLayoutString }),
+      },
+    ).catch(err => console.error('Failed to persist door data:', err));
   };
 
   // Auth loading
@@ -618,6 +678,18 @@ export default function PlansPage() {
               >
                 <Info className="w-5 h-5" />
               </button>
+
+              {/* Edit Mode */}
+              {selectedPlan.preview_image_url && !isEditMode && (
+                <button
+                  onClick={handleEnterEditMode}
+                  className="px-3 sm:px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2 text-sm"
+                  title="Edit floor plan"
+                >
+                  <Pencil className="w-4 h-4" />
+                  <span className="hidden sm:inline">Edit</span>
+                </button>
+              )}
               
               {/* Download */}
               {selectedPlan.preview_image_url && (
@@ -642,29 +714,44 @@ export default function PlansPage() {
         <div className="flex flex-col lg:flex-row flex-1 overflow-auto lg:overflow-hidden">
           {/* Left Section: Floor Plan (60%) + Errors Panel (40%) */}
           <div className="flex-1 flex flex-col lg:flex-row overflow-visible lg:overflow-hidden">
-            {/* Floor Plan Image - Portrait orientation, trimmed whitespace */}
-            <div className="w-full lg:w-[60%] p-3 sm:p-4 lg:p-6 flex items-center justify-center overflow-visible lg:overflow-hidden min-h-[300px] sm:min-h-[400px]">
-              {selectedPlan.preview_image_url ? (
-                <div className="bg-white rounded-xl shadow-xl flex items-center justify-center p-2 overflow-hidden h-full w-full">
-                  <img
-                    src={`${selectedPlan.preview_image_url}?t=${selectedPlan.updated_at || Date.now()}`}
-                    alt="Floor Plan"
-                    className="max-h-full max-w-full object-contain transition-transform"
-                    style={{ transform: `scale(${scale})` }}
-                    onLoad={() => setImageLoaded(true)}
-                    onError={() => setImageError(true)}
-                  />
-                  
-                  {!imageLoaded && !imageError && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
-                      <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+            {/* Floor Plan Image / Edit Canvas */}
+            <div className="w-full lg:w-[60%] p-3 sm:p-4 lg:p-6 flex flex-col overflow-visible lg:overflow-hidden min-h-[300px] sm:min-h-[400px]">
+              
+              {isEditMode && selectedPlan.preview_image_url ? (
+                <SvgEditor
+                  svgUrl={`${selectedPlan.preview_image_url}?t=${selectedPlan.updated_at || Date.now()}`}
+                  projectId={selectedPlan.project_id}
+                  planId={selectedPlan.id}
+                  existingDoors={layoutData?.doors as PlacedDoor[] | undefined}
+                  envelopeWidth={layoutData?.building_envelope?.width}
+                  onSave={handleEditorSave}
+                  onCancel={handleExitEditMode}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  {selectedPlan.preview_image_url ? (
+                    <div className="bg-white rounded-xl shadow-xl flex items-center justify-center p-2 overflow-hidden h-full w-full">
+                      <img
+                        src={`${selectedPlan.preview_image_url}?t=${selectedPlan.updated_at || Date.now()}`}
+                        alt="Floor Plan"
+                        className="max-h-full max-w-full object-contain transition-transform"
+                        style={{ transform: `scale(${scale})` }}
+                        onLoad={() => setImageLoaded(true)}
+                        onError={() => setImageError(true)}
+                      />
+                      
+                      {!imageLoaded && !imageError && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
+                          <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-white/5 rounded-xl p-10 sm:p-20 text-center">
+                      <Layers className="w-12 h-12 sm:w-16 sm:h-16 text-gray-600 mx-auto mb-4" />
+                      <p className="text-gray-400 text-sm">No image available for this floor plan</p>
                     </div>
                   )}
-                </div>
-              ) : (
-                <div className="bg-white/5 rounded-xl p-10 sm:p-20 text-center">
-                  <Layers className="w-12 h-12 sm:w-16 sm:h-16 text-gray-600 mx-auto mb-4" />
-                  <p className="text-gray-400 text-sm">No image available for this floor plan</p>
                 </div>
               )}
             </div>
