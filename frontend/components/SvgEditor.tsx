@@ -337,7 +337,7 @@ export default function SvgEditor({
             setWallStroke(Math.max(2, Math.round(upm * 0.12)));
           }
 
-          nudgeStep.current = Math.max(1, Math.round(upm * 0.05));
+          nudgeStep.current = Math.max(1, Math.round(upm * 0.025));
         }
 
         // Seed existing elements
@@ -454,13 +454,15 @@ export default function SvgEditor({
 
   const handleElementClick = useCallback((e: React.MouseEvent, kind: ElementKind, id: number) => {
     e.stopPropagation();
+    // Erase mode: delete the wall immediately
     if (activeTool === 'wall-erase' && kind === 'wall') {
       setPlacedWalls(prev => prev.filter(w => w.id !== id));
       if (selectedEl?.id === id) setSelectedEl(null);
       return;
     }
+    // Any other tool: select the element and switch to select mode
     setSelectedEl({ kind, id });
-    if (activeTool !== 'select') setActiveTool('select');
+    setActiveTool('select');
   }, [activeTool, selectedEl]);
 
   // ── Actions ─────────────────────────────────────────────────────────────────
@@ -711,8 +713,8 @@ export default function SvgEditor({
         const rw = robe.width;
         const rl = robe.length;
         return `<g transform="translate(${robe.x},${robe.y}) rotate(${robe.rotation})" class="robe-element" data-robe-id="${robe.id}">
-  <rect x="0" y="0" width="${rl}" height="${rw}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${sw}"/>
-  <line x1="0" y1="${rw / 3}" x2="${rl}" y2="${rw / 3}" stroke="#1a1a1a" stroke-width="${sw * 0.5}"/>
+  <rect x="0" y="0" width="${rl}" height="${rw}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${sw * 0.5}"/>
+  <line x1="0" y1="${rw * 0.12}" x2="${rl}" y2="${rw * 0.12}" stroke="#1a1a1a" stroke-width="${sw * 0.3}"/>
 </g>`;
       }).join('\n');
 
@@ -825,15 +827,16 @@ export default function SvgEditor({
                   : `M ${wall.x1},${wall.y1} L ${wall.x2},${wall.y2}`;
                 return (
                   <g key={wall.id}>
-                    {/* Fat invisible hit target */}
+                    {/* Fat invisible hit target – must use stroke with pointerEvents=all, transparent strokes aren't hit-testable in SVG */}
                     <path
                       d={pathD}
-                      stroke="transparent"
-                      strokeWidth={Math.max(wallStroke + 12, 18)}
+                      stroke="rgba(0,0,0,0.001)"
+                      strokeWidth={Math.max(wallStroke + 16, 20)}
                       fill="none"
-                      style={{ cursor: activeTool === 'wall-erase' ? 'not-allowed' : 'grab' }}
+                      pointerEvents="all"
+                      style={{ cursor: activeTool === 'wall-erase' ? 'not-allowed' : activeTool === 'select' ? 'grab' : 'default' }}
                       onClick={e => handleElementClick(e, 'wall', wall.id)}
-                      onMouseDown={e => { if (activeTool !== 'wall-erase') startDragWallBody(e, wall.id); }}
+                      onMouseDown={e => { if (activeTool === 'select') startDragWallBody(e, wall.id); }}
                     />
                     {/* Visible wall */}
                     <path
@@ -893,7 +896,7 @@ export default function SvgEditor({
                     key={win.id}
                     transform={`translate(${win.x},${win.y}) rotate(${win.rotation})${flipScale}`}
                     onClick={e => handleElementClick(e, 'window', win.id)}
-                    onMouseDown={e => startDragWindow(e, win.id)}
+                    onMouseDown={e => { if (activeTool === 'select') startDragWindow(e, win.id); }}
                     style={{ cursor: sel ? 'grab' : 'pointer' }}
                   >
                     {/* White rect clearing exact wall thickness × window length */}
@@ -924,16 +927,16 @@ export default function SvgEditor({
                     key={robe.id}
                     transform={`translate(${robe.x},${robe.y}) rotate(${robe.rotation})`}
                     onClick={e => handleElementClick(e, 'robe', robe.id)}
-                    onMouseDown={e => startDragRobe(e, robe.id)}
+                    onMouseDown={e => { if (activeTool === 'select') startDragRobe(e, robe.id); }}
                     style={{ cursor: sel ? 'grab' : 'pointer' }}
                   >
                     {sel && <rect x={-4} y={-4} width={rl + 8} height={rw + 8} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="5,3" rx={2} />}
                     {/* Outer body */}
-                    <rect x={0} y={0} width={rl} height={rw} fill="#FFFFFF" stroke={sel ? '#2563eb' : '#1a1a1a'} strokeWidth={sel ? 1.5 : wallStroke} />
-                    {/* Sliding door face line – 1/3 depth from front */}
-                    <line x1={0} y1={rw / 3} x2={rl} y2={rw / 3}
+                    <rect x={0} y={0} width={rl} height={rw} fill="#FFFFFF" stroke={sel ? '#2563eb' : '#1a1a1a'} strokeWidth={sel ? 1.5 : wallStroke * 0.5} />
+                    {/* Sliding door track – single line very close to front/opening edge */}
+                    <line x1={0} y1={rw * 0.12} x2={rl} y2={rw * 0.12}
                       stroke={sel ? '#2563eb' : '#1a1a1a'}
-                      strokeWidth={sel ? 1.2 : wallStroke * 0.5} />
+                      strokeWidth={sel ? 1 : wallStroke * 0.3} />
                   </g>
                 );
               })}
@@ -951,7 +954,7 @@ export default function SvgEditor({
                     key={door.id}
                     transform={`translate(${door.x},${door.y}) rotate(${door.rotation})${flipScale}`}
                     onClick={e => handleElementClick(e, 'door', door.id)}
-                    onMouseDown={e => startDragDoor(e, door.id)}
+                    onMouseDown={e => { if (activeTool === 'select') startDragDoor(e, door.id); }}
                     style={{ cursor: sel ? 'grab' : 'pointer' }}
                   >
                     <rect x={-wch} y={-wch/2} width={w + 2*wch} height={wch} fill="#FFFFFF" stroke="none" />
