@@ -484,11 +484,11 @@ export default function SvgEditor({
 
           // Kitchen defaults scaled to upm
           setKitchenDefaults({
-            island:     { length: Math.round(upm * 2.4), depth: Math.round(upm * 0.9) },
+            island:     { length: Math.round(upm * 2.4), depth: Math.round(upm * 0.88) },
             bench:      { length: Math.round(upm * 2.4), depth: Math.round(upm * 0.6) },
             fridge:     { length: Math.round(upm * 0.7), depth: Math.round(upm * 0.7) },
             sink:       { length: Math.round(upm * 0.9), depth: Math.round(upm * 0.5) },
-            cooktop:    { length: Math.round(upm * 0.6), depth: Math.round(upm * 0.6) },
+            cooktop:    { length: Math.round(upm * 0.8), depth: Math.round(upm * 0.4) },
             dishwasher: { length: Math.round(upm * 0.6), depth: Math.round(upm * 0.6) },
           });
         }
@@ -1506,7 +1506,7 @@ export default function SvgEditor({
                   <label className="block text-gray-400 text-xs mt-2">Adjust length</label>
                   <input
                     type="range"
-                    min={Math.round(unitsPerMeter * 0.3)} max={Math.round(unitsPerMeter * 5.0)} step={Math.round(unitsPerMeter * 0.05)}
+                    min={Math.round(unitsPerMeter * 0.3)} max={Math.round(unitsPerMeter * 5.0)} step={Math.round(unitsPerMeter * 0.005)}
                     value={selectedKitchen.length}
                     onChange={e => setPlacedKitchens(prev => prev.map(k => k.id === selectedKitchen.id ? { ...k, length: +e.target.value } : k))}
                     className="w-full accent-orange-500"
@@ -1514,14 +1514,14 @@ export default function SvgEditor({
                   <label className="block text-gray-400 text-xs mt-1">Adjust depth</label>
                   <input
                     type="range"
-                    min={Math.round(unitsPerMeter * 0.3)} max={Math.round(unitsPerMeter * 1.2)} step={Math.round(unitsPerMeter * 0.05)}
+                    min={Math.round(unitsPerMeter * 0.3)} max={Math.round(unitsPerMeter * 1.2)} step={Math.round(unitsPerMeter * 0.005)}
                     value={selectedKitchen.depth}
                     onChange={e => setPlacedKitchens(prev => prev.map(k => k.id === selectedKitchen.id ? { ...k, depth: +e.target.value } : k))}
                     className="w-full accent-orange-400"
                   />
                   <div className="flex justify-between text-[10px] text-gray-500 -mt-1">
                     <span>300 mm</span>
-                    <span>1200 mm depth</span>
+                    <span>depth max 1200 mm</span>
                   </div>
                 </div>
               )}
