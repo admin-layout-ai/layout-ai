@@ -317,10 +317,10 @@ export default function SvgEditor({
           if (upm<10) upm=Math.max(upm*100,50);
 
           setUnitsPerMeter(upm);
-          setDoorWidth(Math.round(upm*0.82));
+          setDoorWidth(0.82*upm);
           setWindowWidth(Math.round(upm*1.0));
-          setRobeFixedW(Math.round(upm*0.6));
-          setRobeLength(Math.round(upm*1.6));
+          setRobeFixedW(0.6*upm);
+          setRobeLength(1.8*upm);
           setWallClearHeight(Math.max(upm*0.08,Math.round(upm*0.35)));
 
           // Detect internal wall stroke
@@ -335,12 +335,12 @@ export default function SvgEditor({
           nudgeStep.current=Math.max(1,Math.round(upm*0.025));
 
           setKitchenDefaults({
-            island:{length:Math.round(upm*2.4),depth:Math.round(upm*0.88)},
-            bench:{length:Math.round(upm*2.4),depth:Math.round(upm*0.6)},
+            island:{length:2.5*upm,depth:0.9*upm},
+            bench:{length:2.4*upm,depth:0.6*upm},
             fridge:{length:Math.round(upm*0.7),depth:Math.round(upm*0.7)},
-            sink:{length:Math.round(upm*0.9),depth:Math.round(upm*0.5)},
-            cooktop:{length:Math.round(upm*0.8),depth:Math.round(upm*0.4)},
-            dishwasher:{length:Math.round(upm*0.6),depth:Math.round(upm*0.6)},
+            sink:{length:0.8*upm,depth:0.4*upm},
+            cooktop:{length:0.8*upm,depth:0.4*upm},
+            dishwasher:{length:0.6*upm,depth:0.6*upm},
           });
         }
 
@@ -682,7 +682,7 @@ export default function SvgEditor({
         if(isErase&&wall.points&&wall.points.length>=2) d=ptsToPath(wall.points);
         else if(wall.curved) d=`M ${wall.x1},${wall.y1} Q ${wall.cpx},${wall.cpy} ${wall.x2},${wall.y2}`;
         else d=`M ${wall.x1},${wall.y1} L ${wall.x2},${wall.y2}`;
-        return `<path d="${d}" stroke="${isErase?'#FFFFFF':'#1a1a1a'}" stroke-width="${isErase?eraseSize:sw}" stroke-linecap="round" stroke-linejoin="round" fill="none" class="wall-element" data-wall-id="${wall.id}"/>`;
+        return `<path d="${d}" stroke="${isErase?'#FFFFFF':'#1a1a1a'}" stroke-width="${isErase?eraseSize:sw}" stroke-linecap="square" stroke-linejoin="miter" fill="none" class="wall-element" data-wall-id="${wall.id}"/>`;
       };
       const wallsSvg=[...placedWalls.filter(w=>!w.erase).map(w=>toWallPath(w,false)),...placedWalls.filter(w=>w.erase).map(w=>toWallPath(w,true))].join('\n');
 
@@ -803,7 +803,7 @@ export default function SvgEditor({
       )}
 
       {/* LEFT: Canvas */}
-      <div className="w-full lg:w-[60%] p-3 sm:p-4 lg:p-6 flex flex-col overflow-visible lg:overflow-hidden min-h-[300px] sm:min-h-[400px]">
+      <div className="w-full lg:w-[60%] p-3 sm:p-4 lg:p-6 flex flex-col overflow-visible lg:overflow-hidden min-h-[300px] sm:min-h-[400px] relative">
         {/* Zoom/snap toolbar */}
         <div className="flex items-center gap-1.5 mb-2 flex-wrap">
           <button onClick={()=>zoomStep(1.25)} title="Zoom in"   className="p-1.5 rounded-md bg-white/10 hover:bg-white/20 text-gray-300 transition"><ZoomIn  className="w-3.5 h-3.5"/></button>
@@ -863,7 +863,7 @@ export default function SvgEditor({
                       style={{cursor:activeTool==='select'?'grab':'default'}}
                       onClick={e=>handleElementClick(e,'wall',wall.id)}
                       onMouseDown={e=>{if(activeTool==='select')startDragWallBody(e,wall.id);}}/>
-                    <path d={pathD} stroke={sel?'#2563eb':'#1a1a1a'} strokeWidth={wallStroke} strokeLinecap="round" fill="none" pointerEvents="none"/>
+                    <path d={pathD} stroke={sel?'#2563eb':'#1a1a1a'} strokeWidth={wallStroke} strokeLinecap="square" fill="none" pointerEvents="none"/>
                     {sel&&(
                       <>
                         <path d={pathD} stroke="#93c5fd" strokeWidth={wallStroke+4} strokeDasharray="8,4" fill="none" opacity={0.4} pointerEvents="none"/>
@@ -899,7 +899,7 @@ export default function SvgEditor({
             {activeTool==='wall'&&!wallEraseMode&&wallStart&&(
               <g pointerEvents="none">
                 <line x1={wallStart.x} y1={wallStart.y} x2={cursorPos.x} y2={cursorPos.y}
-                  stroke="#2563eb" strokeWidth={wallStroke} strokeDasharray="8,4" strokeLinecap="round" opacity={0.7}/>
+                  stroke="#2563eb" strokeWidth={wallStroke} strokeDasharray="8,4" strokeLinecap="square" opacity={0.7}/>
                 <circle cx={wallStart.x} cy={wallStart.y} r={5} fill="#2563eb" stroke="#fff" strokeWidth={1.5}/>
                 <circle cx={cursorPos.x} cy={cursorPos.y} r={4} fill="none" stroke="#2563eb" strokeWidth={1.5} opacity={0.6}/>
               </g>
@@ -1011,6 +1011,42 @@ export default function SvgEditor({
             </div>
           )}
         </div>
+
+        {/* Horizontal scrollbar – visible only when zoomed in */}
+        {viewState.zoom > 1 && (
+          <div className="flex items-center gap-1 mt-1.5 px-1">
+            <span className="text-gray-600 text-[10px] w-3">←</span>
+            <input
+              type="range"
+              min={0}
+              max={svgViewBox.w * (1 - 1 / viewState.zoom)}
+              step={svgViewBox.w / 1000}
+              value={Math.max(0, Math.min(viewState.panX, svgViewBox.w * (1 - 1 / viewState.zoom)))}
+              onChange={e => setViewState(vs => ({ ...vs, panX: +e.target.value }))}
+              className="flex-1 h-1.5 accent-indigo-400"
+              style={{ cursor: 'ew-resize' }}
+            />
+            <span className="text-gray-600 text-[10px] w-3">→</span>
+          </div>
+        )}
+
+        {/* Vertical scrollbar */}
+        {viewState.zoom > 1 && (
+          <div className="flex items-center gap-1 absolute right-2 top-10 bottom-2" style={{ flexDirection: 'column' }}>
+            <span className="text-gray-600 text-[10px]">↑</span>
+            <input
+              type="range"
+              min={0}
+              max={svgViewBox.h * (1 - 1 / viewState.zoom)}
+              step={svgViewBox.h / 1000}
+              value={Math.max(0, Math.min(viewState.panY, svgViewBox.h * (1 - 1 / viewState.zoom)))}
+              onChange={e => setViewState(vs => ({ ...vs, panY: +e.target.value }))}
+              className="flex-1 accent-indigo-400"
+              style={{ writingMode: 'vertical-lr', direction: 'rtl', cursor: 'ns-resize', width: '6px' }}
+            />
+            <span className="text-gray-600 text-[10px]">↓</span>
+          </div>
+        )}
       </div>
 
       {/* RIGHT: Controls */}
@@ -1147,23 +1183,62 @@ export default function SvgEditor({
                 );
               })()}
 
-              {selectedWall&&(
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-400">Length</span>
-                    <span className="font-mono text-white">{Math.round(Math.hypot(selectedWall.x2-selectedWall.x1,selectedWall.y2-selectedWall.y1)/unitsPerMeter*1000)} mm</span>
+              {selectedWall&&(()=>{
+                const wallLenMm = Math.round(Math.hypot(selectedWall.x2-selectedWall.x1,selectedWall.y2-selectedWall.y1)/unitsPerMeter*1000);
+                const wallAngleDeg = Math.round(Math.atan2(selectedWall.y2-selectedWall.y1,selectedWall.x2-selectedWall.x1)*180/Math.PI);
+                const commitLen=(raw:string)=>{
+                  const mm=parseInt(raw,10); if(isNaN(mm)||mm<1) return; pushUndo();
+                  // Keep x1,y1 fixed, move x2,y2 along the same angle
+                  const angle=Math.atan2(selectedWall.y2-selectedWall.y1,selectedWall.x2-selectedWall.x1);
+                  const newLen=mm/1000*unitsPerMeter;
+                  setPlacedWalls(p=>p.map(w=>w.id===selectedWall.id?{...w,
+                    x2:w.x1+Math.cos(angle)*newLen,
+                    y2:w.y1+Math.sin(angle)*newLen,
+                    cpx:(w.x1+w.x1+Math.cos(angle)*newLen)/2,
+                    cpy:(w.y1+w.y1+Math.sin(angle)*newLen)/2,
+                  }:w));
+                };
+                const commitAngle=(raw:string)=>{
+                  const deg=parseInt(raw,10); if(isNaN(deg)) return; pushUndo();
+                  const angle=deg*Math.PI/180;
+                  const len=Math.hypot(selectedWall.x2-selectedWall.x1,selectedWall.y2-selectedWall.y1);
+                  setPlacedWalls(p=>p.map(w=>w.id===selectedWall.id?{...w,
+                    x2:w.x1+Math.cos(angle)*len,
+                    y2:w.y1+Math.sin(angle)*len,
+                    cpx:(w.x1+w.x1+Math.cos(angle)*len)/2,
+                    cpy:(w.y1+w.y1+Math.sin(angle)*len)/2,
+                  }:w));
+                };
+                const inputCls="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-violet-400 focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
+                return (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-gray-400 text-xs w-16 shrink-0">Length</span>
+                      <div className="flex items-center gap-1 ml-auto">
+                        <input type="number" step={1} defaultValue={wallLenMm} key={`len-${selectedWall.id}-${wallLenMm}`}
+                          onBlur={e=>commitLen(e.target.value)}
+                          onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
+                          className={inputCls}/>
+                        <span className="text-gray-500 text-xs">mm</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-gray-400 text-xs w-16 shrink-0">Angle</span>
+                      <div className="flex items-center gap-1 ml-auto">
+                        <input type="number" step={1} defaultValue={wallAngleDeg} key={`ang-${selectedWall.id}-${wallAngleDeg}`}
+                          onBlur={e=>commitAngle(e.target.value)}
+                          onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
+                          className={inputCls}/>
+                        <span className="text-gray-500 text-xs">°</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-400">Curved</span>
+                      <span className={`font-mono ${selectedWall.curved?'text-amber-400':'text-gray-500'}`}>{selectedWall.curved?'Yes':'No'}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-400">Angle</span>
-                    <span className="font-mono text-white">{Math.round(Math.atan2(selectedWall.y2-selectedWall.y1,selectedWall.x2-selectedWall.x1)*180/Math.PI)}°</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-400">Curved</span>
-                    <span className={`font-mono ${selectedWall.curved?'text-amber-400':'text-gray-500'}`}>{selectedWall.curved?'Yes':'No'}</span>
-                  </div>
-                  <p className="text-gray-600 text-[10px] pt-1">Drag ● endpoints to adjust length. Drag mid-handle to curve.</p>
-                </div>
-              )}
+                );
+              })()}
 
               {selectedWindow&&(()=>{
                 const commit=(field:'width'|'rotation',raw:string)=>{
