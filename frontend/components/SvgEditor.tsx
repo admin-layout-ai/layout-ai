@@ -42,6 +42,8 @@ export interface PlacedWall {
   curved: boolean;
   /** Quadratic Bézier control point (only used when curved=true) */
   cpx: number; cpy: number;
+  /** true = renders as white eraser line over existing walls */
+  erase?: boolean;
 }
 
 export interface PlacedWindow {
@@ -103,7 +105,7 @@ type HistoryEntry =
   | { type: 'window'; element: PlacedWindow }
   | { type: 'robe';   element: PlacedRobe };
 
-type ActiveTool = 'select' | 'door' | 'wall' | 'wall-erase' | 'window' | 'robe';
+type ActiveTool = 'select' | 'door' | 'wall' | 'window' | 'robe';
 type ElementKind = 'door' | 'wall' | 'window' | 'robe';
 type SelectedEl = { kind: ElementKind; id: number } | null;
 
@@ -165,10 +167,12 @@ export default function SvgEditor({
 
   // Active tool & selection
   const [activeTool, setActiveTool] = useState<ActiveTool>('door');
+  const [wallEraseMode, setWallEraseMode] = useState(false);
   const [selectedEl, setSelectedEl] = useState<SelectedEl>(null);
 
   // Wall drawing (two-click mode)
   const [wallStart, setWallStart] = useState<{ x: number; y: number } | null>(null);
+  const [eraseStart, setEraseStart] = useState<{ x: number; y: number } | null>(null);
   const [cursorPos, setCursorPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Undo history
@@ -413,18 +417,23 @@ export default function SvgEditor({
       return;
     }
 
-    if (activeTool === 'wall-erase') {
-      // Find nearest wall within a tolerance of wallStroke * 4
-      const tol = Math.max(wallStroke * 4, 12);
-      let nearest: PlacedWall | null = null;
-      let nearestDist = tol;
-      for (const w of placedWalls) {
-        const d = distPointToSegment(cx, cy, w.x1, w.y1, w.x2, w.y2);
-        if (d < nearestDist) { nearestDist = d; nearest = w; }
-      }
-      if (nearest) {
-        setPlacedWalls(prev => prev.filter(w => w.id !== nearest!.id));
-        if (selectedEl?.kind === 'wall' && selectedEl.id === nearest.id) setSelectedEl(null);
+    if (activeTool === 'wall' && wallEraseMode) {
+      if (!eraseStart) {
+        setEraseStart({ x: cx, y: cy });
+      } else {
+        const newEraseWall: PlacedWall = {
+          id: nextWallId,
+          x1: eraseStart.x, y1: eraseStart.y,
+          x2: cx, y2: cy,
+          curved: false,
+          cpx: (eraseStart.x + cx) / 2,
+          cpy: (eraseStart.y + cy) / 2,
+          erase: true,
+        };
+        setPlacedWalls(prev => [...prev, newEraseWall]);
+        setNextWallId(p => p + 1);
+        setAddHistory(prev => [...prev, { type: 'wall', element: newEraseWall }]);
+        setEraseStart(null);
       }
       return;
     }
@@ -455,7 +464,7 @@ export default function SvgEditor({
   const handleElementClick = useCallback((e: React.MouseEvent, kind: ElementKind, id: number) => {
     e.stopPropagation();
     // Erase mode: delete the wall immediately
-    if (activeTool === 'wall-erase' && kind === 'wall') {
+    if (activeTool === 'wall' && wallEraseMode && kind === 'wall') {
       setPlacedWalls(prev => prev.filter(w => w.id !== id));
       if (selectedEl?.id === id) setSelectedEl(null);
       return;
@@ -526,7 +535,7 @@ export default function SvgEditor({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Escape: cancel wall drawing or deselect
-      if (e.key === 'Escape') { setWallStart(null); setSelectedEl(null); return; }
+      if (e.key === 'Escape') { setWallStart(null); setEraseStart(null); setWallEraseMode(false); setSelectedEl(null); return; }
 
       if (e.key === 'r' || e.key === 'R') { handleRotateSelected(); return; }
       if (e.key === 'f' || e.key === 'F') { handleFlipSelected(); return; }
@@ -687,13 +696,21 @@ export default function SvgEditor({
 </g>`;
       }).join('\n');
 
-      // Walls SVG
-      const wallsSvg = placedWalls.map(wall => {
+      // Walls SVG (erase walls rendered white at 1.5× width, placed last so they paint over)
+      const normalWalls = placedWalls.filter(w => !w.erase);
+      const eraseWalls  = placedWalls.filter(w =>  w.erase);
+      const toWallPath = (wall: PlacedWall, isErase: boolean) => {
         const d = wall.curved
           ? `M ${wall.x1},${wall.y1} Q ${wall.cpx},${wall.cpy} ${wall.x2},${wall.y2}`
           : `M ${wall.x1},${wall.y1} L ${wall.x2},${wall.y2}`;
-        return `<path d="${d}" stroke="#1a1a1a" stroke-width="${sw}" stroke-linecap="round" fill="none" class="wall-element" data-wall-id="${wall.id}"/>`;
-      }).join('\n');
+        const stroke = isErase ? '#FFFFFF' : '#1a1a1a';
+        const width  = isErase ? sw * 1.5 : sw;
+        return `<path d="${d}" stroke="${stroke}" stroke-width="${width}" stroke-linecap="round" fill="none" class="wall-element" data-wall-id="${wall.id}" data-erase="${isErase}"/>`;
+      };
+      const wallsSvg = [
+        ...normalWalls.map(w => toWallPath(w, false)),
+        ...eraseWalls.map(w  => toWallPath(w, true)),
+      ].join('\n');
 
       // Windows SVG
       const windowsSvg = placedWindows.map(win => {
@@ -714,7 +731,6 @@ export default function SvgEditor({
         const rl = robe.length;
         return `<g transform="translate(${robe.x},${robe.y}) rotate(${robe.rotation})" class="robe-element" data-robe-id="${robe.id}">
   <rect x="0" y="0" width="${rl}" height="${rw}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${sw * 0.5}"/>
-  <line x1="0" y1="${rw * 0.12}" x2="${rl}" y2="${rw * 0.12}" stroke="#1a1a1a" stroke-width="${sw * 0.3}"/>
 </g>`;
       }).join('\n');
 
@@ -771,8 +787,7 @@ export default function SvgEditor({
   const cursorStyle =
     activeDrag.current ? 'grabbing' :
     activeTool === 'door' || activeTool === 'window' || activeTool === 'robe' ? 'crosshair' :
-    activeTool === 'wall' ? (wallStart ? 'crosshair' : 'cell') :
-    activeTool === 'wall-erase' ? 'not-allowed' :
+    activeTool === 'wall' ? (wallEraseMode ? 'cell' : wallStart ? 'crosshair' : 'cell') :
     'default';
 
   const totalElements = placedDoors.length + placedWalls.length + placedWindows.length + placedRobes.length;
@@ -783,7 +798,7 @@ export default function SvgEditor({
     const active = activeTool === tool;
     return (
       <button
-        onClick={() => { setActiveTool(tool); if (tool !== 'wall') setWallStart(null); if (tool !== 'select') setSelectedEl(null); }}
+        onClick={() => { setActiveTool(tool); if (tool !== 'wall') { setWallStart(null); setEraseStart(null); setWallEraseMode(false); } if (tool !== 'select') setSelectedEl(null); }}
         className={`flex items-center justify-center gap-1.5 p-2.5 rounded-lg text-xs font-medium transition ${
           active ? `${color} text-white` : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 border border-white/10'
         }`}
@@ -834,20 +849,20 @@ export default function SvgEditor({
                       strokeWidth={Math.max(wallStroke + 16, 20)}
                       fill="none"
                       pointerEvents="all"
-                      style={{ cursor: activeTool === 'wall-erase' ? 'not-allowed' : activeTool === 'select' ? 'grab' : 'default' }}
+                      style={{ cursor: activeTool === 'wall' && wallEraseMode ? 'crosshair' : activeTool === 'select' ? 'grab' : 'default' }}
                       onClick={e => handleElementClick(e, 'wall', wall.id)}
                       onMouseDown={e => { if (activeTool === 'select') startDragWallBody(e, wall.id); }}
                     />
-                    {/* Visible wall */}
+                    {/* Visible wall – white if erase, dark if normal */}
                     <path
                       d={pathD}
-                      stroke={sel ? '#2563eb' : '#1a1a1a'}
-                      strokeWidth={wallStroke}
+                      stroke={wall.erase ? '#FFFFFF' : sel ? '#2563eb' : '#1a1a1a'}
+                      strokeWidth={wall.erase ? wallStroke * 1.5 : wallStroke}
                       strokeLinecap="round"
                       fill="none"
                       pointerEvents="none"
                     />
-                    {sel && (
+                    {sel && !wall.erase && (
                       <>
                         {/* Selection dashes */}
                         <path d={pathD} stroke="#93c5fd" strokeWidth={wallStroke + 4} strokeDasharray="8,4" fill="none" opacity={0.4} pointerEvents="none" />
@@ -880,6 +895,25 @@ export default function SvgEditor({
                 />
                 <circle cx={wallStart.x} cy={wallStart.y} r={5} fill="#2563eb" stroke="#fff" strokeWidth={1.5} />
                 <circle cx={cursorPos.x} cy={cursorPos.y} r={4} fill="none" stroke="#2563eb" strokeWidth={1.5} opacity={0.6} />
+              </g>
+            )}
+
+            {/* ── Erase preview line while drawing ─────────────────────── */}
+            {activeTool === 'wall' && wallEraseMode && eraseStart && (
+              <g pointerEvents="none">
+                <line
+                  x1={eraseStart.x} y1={eraseStart.y}
+                  x2={cursorPos.x}   y2={cursorPos.y}
+                  stroke="#FFFFFF" strokeWidth={wallStroke * 1.5} strokeLinecap="round" opacity={0.9}
+                />
+                {/* Red dashed outline so you can see where you're erasing */}
+                <line
+                  x1={eraseStart.x} y1={eraseStart.y}
+                  x2={cursorPos.x}   y2={cursorPos.y}
+                  stroke="#ef4444" strokeWidth={1} strokeDasharray="6,4" strokeLinecap="round" opacity={0.7}
+                />
+                <circle cx={eraseStart.x} cy={eraseStart.y} r={5} fill="#ef4444" stroke="#fff" strokeWidth={1.5} />
+                <circle cx={cursorPos.x} cy={cursorPos.y} r={4} fill="none" stroke="#ef4444" strokeWidth={1.5} opacity={0.7} />
               </g>
             )}
 
@@ -931,12 +965,8 @@ export default function SvgEditor({
                     style={{ cursor: sel ? 'grab' : 'pointer' }}
                   >
                     {sel && <rect x={-4} y={-4} width={rl + 8} height={rw + 8} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="5,3" rx={2} />}
-                    {/* Outer body */}
+                    {/* Plain white rectangle – no interior lines */}
                     <rect x={0} y={0} width={rl} height={rw} fill="#FFFFFF" stroke={sel ? '#2563eb' : '#1a1a1a'} strokeWidth={sel ? 1.5 : wallStroke * 0.5} />
-                    {/* Sliding door track – single line very close to front/opening edge */}
-                    <line x1={0} y1={rw * 0.12} x2={rl} y2={rw * 0.12}
-                      stroke={sel ? '#2563eb' : '#1a1a1a'}
-                      strokeWidth={sel ? 1 : wallStroke * 0.3} />
                   </g>
                 );
               })}
@@ -975,18 +1005,19 @@ export default function SvgEditor({
           {totalElements === 0 && (
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-sm text-white text-xs px-4 py-2 rounded-full pointer-events-none">
               {activeTool === 'door' && 'Click to place a door'}
-              {activeTool === 'wall' && !wallStart && 'Click to start a wall segment'}
-              {activeTool === 'wall' && wallStart && 'Click to finish the wall'}
+              {activeTool === 'wall' && !wallEraseMode && !wallStart && 'Click to start a wall segment'}
+              {activeTool === 'wall' && !wallEraseMode && wallStart && 'Click to finish the wall'}
+              {activeTool === 'wall' && wallEraseMode && !eraseStart && 'Click to start erasing'}
+              {activeTool === 'wall' && wallEraseMode && eraseStart && 'Click to finish erase stroke'}
               {activeTool === 'window' && 'Click to place a window'}
               {activeTool === 'robe' && 'Click to place a built-in robe'}
-              {activeTool === 'wall-erase' && 'Click a wall to erase it'}
             </div>
           )}
-          {activeTool === 'wall' && wallStart && totalElements > 0 && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-blue-600/80 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full pointer-events-none">
+          {(activeTool === 'wall' && wallStart && totalElements > 0) || (activeTool === 'wall' && wallEraseMode && eraseStart) ? (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full pointer-events-none">
               Click to finish · Esc to cancel
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -1010,19 +1041,18 @@ export default function SvgEditor({
           <div className="bg-white/5 rounded-xl p-4 border border-white/10">
             <h4 className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-3">Tools</h4>
             <div className="grid grid-cols-3 gap-2">
-              {toolBtn('select',     'Select',     MousePointer, 'bg-slate-600')}
-              {toolBtn('door',       'Door',        DoorOpen,     'bg-blue-600')}
-              {toolBtn('wall',       'Add Wall',    Minus,        'bg-violet-600')}
-              {toolBtn('wall-erase', 'Erase Wall',  Eraser,       'bg-red-600')}
-              {toolBtn('window',     'Window',      Square,       'bg-cyan-600')}
-              {toolBtn('robe',       'Robe',        Columns,      'bg-amber-600')}
+              {toolBtn('select',     'Select',   MousePointer, 'bg-slate-600')}
+              {toolBtn('door',       'Door',     DoorOpen,     'bg-blue-600')}
+              {toolBtn('wall',       'Wall',     Minus,        'bg-violet-600')}
+              {toolBtn('window',     'Window',   Square,       'bg-cyan-600')}
+              {toolBtn('robe',       'Robe',     Columns,      'bg-amber-600')}
             </div>
           </div>
 
           {/* Context actions */}
           <div className="bg-white/5 rounded-xl p-4 border border-white/10">
             <h4 className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-3">Actions</h4>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-5 gap-2">
               <button
                 onClick={handleRotateSelected}
                 disabled={!selectedEl || selectedEl.kind === 'wall'}
@@ -1043,7 +1073,7 @@ export default function SvgEditor({
               </button>
               <button
                 onClick={handleCurveSelected}
-                disabled={selectedEl?.kind !== 'wall'}
+                disabled={selectedEl?.kind !== 'wall' || !!(selectedEl && placedWalls.find(w => w.id === selectedEl.id)?.erase)}
                 className={`flex flex-col items-center gap-1.5 p-3 rounded-lg text-sm transition border disabled:opacity-30 disabled:cursor-not-allowed ${
                   selectedWall?.curved
                     ? 'bg-amber-500/20 border-amber-500/40 text-amber-400'
@@ -1053,6 +1083,22 @@ export default function SvgEditor({
               >
                 <Minus className="w-4 h-4" style={{ transform: 'rotate(-15deg)' }} />
                 <span className="text-xs">Curve</span>
+              </button>
+              {/* Erase toggle – active only when Wall tool is selected */}
+              <button
+                onClick={() => {
+                  if (activeTool !== 'wall') { setActiveTool('wall'); setWallEraseMode(true); setSelectedEl(null); setWallStart(null); }
+                  else { setWallEraseMode(p => !p); setEraseStart(null); setWallStart(null); }
+                }}
+                className={`flex flex-col items-center gap-1.5 p-3 rounded-lg text-sm transition border ${
+                  activeTool === 'wall' && wallEraseMode
+                    ? 'bg-red-500/20 border-red-500/40 text-red-400'
+                    : 'bg-white/5 border-white/10 text-gray-400 hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400'
+                }`}
+                title="Toggle wall erase mode"
+              >
+                <Eraser className="w-4 h-4" />
+                <span className="text-xs">Erase</span>
               </button>
               <button
                 onClick={handleDeleteSelected}
