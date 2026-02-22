@@ -98,11 +98,14 @@ function KitchenSymbol({ item, sw, sel }: { item: PlacedKitchen; sw: number; sel
   const scale = (subtype==='island'||subtype==='bench') ? 1 : 0.5;
   const thin = sw * 0.35 * scale, thick = sw * 0.55 * scale;
   switch (subtype) {
-    case 'island': case 'bench': return (
-      <>{/* bench/island */}
+    case 'island': return (
+      <>{/* island */}
         <rect x={0} y={0} width={L} height={D} fill="#FFFFFF" stroke={stroke} strokeWidth={thick} />
         <rect x={D*0.12} y={D*0.12} width={L-D*0.24} height={D-D*0.24} fill="none" stroke={stroke} strokeWidth={thin*0.6} opacity={0.4}/>
       </>);
+    case 'bench': return (
+      <rect x={0} y={0} width={L} height={D} fill="#FFFFFF" stroke={stroke} strokeWidth={thick} />
+    );
     case 'fridge': { const r=Math.min(L,D)*0.08; return (
       <><rect x={0} y={0} width={L} height={D} fill="#FFFFFF" stroke={stroke} strokeWidth={thick} rx={r}/>
         <line x1={L*0.2} y1={D*0.08} x2={L*0.8} y2={D*0.08} stroke={stroke} strokeWidth={thin*1.2} strokeLinecap="round"/>
@@ -218,7 +221,7 @@ export default function SvgEditor({
   // Grid snap
   const snap = useCallback((v:number):number => {
     if (!snapEnabled) return Math.round(v);
-    const g = Math.max(1, Math.round(unitsPerMeter * 0.1));
+    const g = Math.max(1, Math.round(unitsPerMeter * 0.05));
     return Math.round(v / g) * g;
   }, [snapEnabled, unitsPerMeter]);
 
@@ -332,7 +335,7 @@ export default function SvgEditor({
           if(thinDims.length>0){thinDims.sort((a,b)=>a-b);const med=thinDims[Math.floor(thinDims.length/2)];const lo=thinDims.filter(d=>d<=med);ws=Math.max(2,lo[Math.floor(lo.length/2)]);}
           setWallStroke(ws);
           setEraseSize(Math.round(ws*4));
-          nudgeStep.current=Math.max(1,Math.round(upm*0.025));
+          nudgeStep.current=Math.max(1,upm*0.01);
 
           setKitchenDefaults({
             island:{length:2.5*upm,depth:0.9*upm},
@@ -717,7 +720,8 @@ export default function SvgEditor({
         const kscale=(subtype==='island'||subtype==='bench')?1:0.5;
         const thin=sw*0.35*kscale,thick=sw*0.55*kscale;
         let inner='';
-        if(subtype==='island'||subtype==='bench'){inner=`<rect x="${D*0.12}" y="${D*0.12}" width="${L-D*0.24}" height="${D-D*0.24}" fill="none" stroke="#1a1a1a" stroke-width="${thin*0.6}" opacity="0.4"/>`;}
+        if(subtype==='island'){inner=`<rect x="${D*0.12}" y="${D*0.12}" width="${L-D*0.24}" height="${D-D*0.24}" fill="none" stroke="#1a1a1a" stroke-width="${thin*0.6}" opacity="0.4"/>"`;}
+        else if(subtype==='bench'){inner='';}
         else if(subtype==='fridge'){const r=Math.min(L,D)*0.08;inner=`<rect x="0" y="0" width="${L}" height="${D}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${thick}" rx="${r}"/><line x1="${L*0.2}" y1="${D*0.08}" x2="${L*0.8}" y2="${D*0.08}" stroke="#1a1a1a" stroke-width="${thin*1.2}" stroke-linecap="round"/><circle cx="${L*0.08}" cy="${D*0.5}" r="${thin}" fill="#1a1a1a"/>`;}
         else if(subtype==='sink'){const dbl=L>D*1.5,bw=dbl?L*0.42:L*0.72,bh=D*0.68,by2=D*0.16;
           inner=dbl?`<rect x="${L*0.04}" y="${by2}" width="${bw}" height="${bh}" fill="none" stroke="#1a1a1a" stroke-width="${thin}" rx="${thin}"/><rect x="${L*0.54}" y="${by2}" width="${bw}" height="${bh}" fill="none" stroke="#1a1a1a" stroke-width="${thin}" rx="${thin}"/><circle cx="${L*0.25}" cy="${D*0.5}" r="${thin*1.5}" fill="#1a1a1a"/><circle cx="${L*0.75}" cy="${D*0.5}" r="${thin*1.5}" fill="#1a1a1a"/>`:
