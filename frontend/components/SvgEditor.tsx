@@ -82,7 +82,8 @@ function ptsToPath(pts: { x: number; y: number }[]): string {
 function KitchenSymbol({ item, sw, sel }: { item: PlacedKitchen; sw: number; sel: boolean }) {
   const { subtype, length: L, depth: D } = item;
   const stroke = sel ? '#2563eb' : '#1a1a1a';
-  const thin = sw * 0.35, thick = sw * 0.55;
+  const scale = (subtype==='island'||subtype==='bench') ? 1 : 0.5;
+  const thin = sw * 0.35 * scale, thick = sw * 0.55 * scale;
   switch (subtype) {
     case 'island': case 'bench': return (
       <>{/* bench/island */}
@@ -676,19 +677,29 @@ export default function SvgEditor({
   </g>
 </g>`;}).join('\n');
 
-      // Robes with sliding-door diagonal symbol
+      // Robes - proper architectural sliding door (2 overlapping panels + directional arrows)
       const robesSvg=placedRobes.map(robe=>{
         const rw=robe.width,rl=robe.length;
+        const pw=rl*0.55;          // each panel width (panels overlap in centre)
+        const sw2=sw*0.5;
+        const aw=Math.min(rw*0.22,pw*0.18); // arrowhead size
+        const p1x2=pw;
+        const p2x1=rl-pw;
         return `<g transform="translate(${robe.x},${robe.y}) rotate(${robe.rotation})" class="robe-element" data-robe-id="${robe.id}">
-  <rect x="0" y="0" width="${rl}" height="${rw}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${sw*0.5}"/>
-  <line x1="0" y1="0" x2="${rl}" y2="${rw}" stroke="#1a1a1a" stroke-width="${sw*0.3}" opacity="0.4"/>
-  <line x1="${rl}" y1="0" x2="0" y2="${rw}" stroke="#1a1a1a" stroke-width="${sw*0.3}" opacity="0.4"/>
-  <line x1="${rl/2}" y1="0" x2="${rl/2}" y2="${rw}" stroke="#1a1a1a" stroke-width="${sw*0.3}" opacity="0.4"/>
+  <rect x="0" y="0" width="${rl}" height="${rw}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${sw2}"/>
+  <rect x="0" y="0" width="${pw}" height="${rw}" fill="none" stroke="#1a1a1a" stroke-width="${sw2*0.7}"/>
+  <line x1="${aw}" y1="${rw*0.25}" x2="${p1x2-aw*0.5}" y2="${rw*0.25}" stroke="#1a1a1a" stroke-width="${sw2*0.6}" stroke-linecap="round"/>
+  <polyline points="${p1x2-aw*0.5-aw},${rw*0.25-aw*0.6} ${p1x2-aw*0.5},${rw*0.25} ${p1x2-aw*0.5-aw},${rw*0.25+aw*0.6}" fill="none" stroke="#1a1a1a" stroke-width="${sw2*0.6}" stroke-linejoin="round" stroke-linecap="round"/>
+  <rect x="${p2x1}" y="0" width="${pw}" height="${rw}" fill="none" stroke="#1a1a1a" stroke-width="${sw2*0.7}"/>
+  <line x1="${rl-aw}" y1="${rw*0.75}" x2="${p2x1+aw*0.5}" y2="${rw*0.75}" stroke="#1a1a1a" stroke-width="${sw2*0.6}" stroke-linecap="round"/>
+  <polyline points="${p2x1+aw*0.5+aw},${rw*0.75-aw*0.6} ${p2x1+aw*0.5},${rw*0.75} ${p2x1+aw*0.5+aw},${rw*0.75+aw*0.6}" fill="none" stroke="#1a1a1a" stroke-width="${sw2*0.6}" stroke-linejoin="round" stroke-linecap="round"/>
 </g>`;}).join('\n');
 
       // Kitchen
       const kitchenSvg=placedKitchens.map(k=>{
-        const{subtype,length:L,depth:D}=k,thin=sw*0.35,thick=sw*0.55;
+        const{subtype,length:L,depth:D}=k;
+        const kscale=(subtype==='island'||subtype==='bench')?1:0.5;
+        const thin=sw*0.35*kscale,thick=sw*0.55*kscale;
         let inner='';
         if(subtype==='island'||subtype==='bench'){inner=`<rect x="${D*0.12}" y="${D*0.12}" width="${L-D*0.24}" height="${D-D*0.24}" fill="none" stroke="#1a1a1a" stroke-width="${thin*0.6}" opacity="0.4"/>`;}
         else if(subtype==='fridge'){const r=Math.min(L,D)*0.08;inner=`<rect x="0" y="0" width="${L}" height="${D}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${thick}" rx="${r}"/><line x1="${L*0.2}" y1="${D*0.08}" x2="${L*0.8}" y2="${D*0.08}" stroke="#1a1a1a" stroke-width="${thin*1.2}" stroke-linecap="round"/><circle cx="${L*0.08}" cy="${D*0.5}" r="${thin}" fill="#1a1a1a"/>`;}
@@ -903,17 +914,27 @@ export default function SvgEditor({
             <g id="robes-overlay">
               {placedRobes.map(robe=>{
                 const rl=robe.length,rw=robe.width,sel=selectedEl?.kind==='robe'&&selectedEl.id===robe.id;
+                const pw=rl*0.55;
+                const sw2=wallStroke*0.5;
+                const aw=Math.min(rw*0.22,pw*0.18);
+                const p1x2=pw, p2x1=rl-pw;
+                const sc=sel?'#2563eb':'#1a1a1a';
                 return (
                   <g key={robe.id} transform={`translate(${robe.x},${robe.y}) rotate(${robe.rotation})`}
                     onClick={e=>handleElementClick(e,'robe',robe.id)}
                     onMouseDown={e=>{if(activeTool==='select')startDragRobe(e,robe.id);}}
                     style={{cursor:sel?'grab':'pointer'}}>
                     {sel&&<rect x={-4} y={-4} width={rl+8} height={rw+8} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="5,3" rx={2}/>}
-                    <rect x={0} y={0} width={rl} height={rw} fill="#FFFFFF" stroke={sel?'#2563eb':'#1a1a1a'} strokeWidth={sel?1.5:wallStroke*0.5}/>
-                    {/* Sliding-door diagonal symbol */}
-                    <line x1={0} y1={0} x2={rl} y2={rw} stroke={sel?'#2563eb':'#1a1a1a'} strokeWidth={wallStroke*0.3} opacity={0.4}/>
-                    <line x1={rl} y1={0} x2={0} y2={rw} stroke={sel?'#2563eb':'#1a1a1a'} strokeWidth={wallStroke*0.3} opacity={0.4}/>
-                    <line x1={rl/2} y1={0} x2={rl/2} y2={rw} stroke={sel?'#2563eb':'#1a1a1a'} strokeWidth={wallStroke*0.3} opacity={0.4}/>
+                    {/* Outer carcass */}
+                    <rect x={0} y={0} width={rl} height={rw} fill="#FFFFFF" stroke={sc} strokeWidth={sel?1.5:sw2}/>
+                    {/* Panel 1 – slides right */}
+                    <rect x={0} y={0} width={pw} height={rw} fill="none" stroke={sc} strokeWidth={sw2*0.7}/>
+                    <line x1={aw} y1={rw*0.25} x2={p1x2-aw*0.5} y2={rw*0.25} stroke={sc} strokeWidth={sw2*0.6} strokeLinecap="round"/>
+                    <polyline points={`${p1x2-aw*0.5-aw},${rw*0.25-aw*0.6} ${p1x2-aw*0.5},${rw*0.25} ${p1x2-aw*0.5-aw},${rw*0.25+aw*0.6}`} fill="none" stroke={sc} strokeWidth={sw2*0.6} strokeLinejoin="round" strokeLinecap="round"/>
+                    {/* Panel 2 – slides left */}
+                    <rect x={p2x1} y={0} width={pw} height={rw} fill="none" stroke={sc} strokeWidth={sw2*0.7}/>
+                    <line x1={rl-aw} y1={rw*0.75} x2={p2x1+aw*0.5} y2={rw*0.75} stroke={sc} strokeWidth={sw2*0.6} strokeLinecap="round"/>
+                    <polyline points={`${p2x1+aw*0.5+aw},${rw*0.75-aw*0.6} ${p2x1+aw*0.5},${rw*0.75} ${p2x1+aw*0.5+aw},${rw*0.75+aw*0.6}`} fill="none" stroke={sc} strokeWidth={sw2*0.6} strokeLinejoin="round" strokeLinecap="round"/>
                   </g>
                 );
               })}
@@ -1085,80 +1106,223 @@ export default function SvgEditor({
             <div className="bg-white/5 rounded-xl p-4 border border-white/10">
               <h4 className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-3">Properties</h4>
 
-              {selectedDoor&&(
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between text-xs"><span className="text-gray-400">Rotation</span><span className="font-mono text-white">{selectedDoor.rotation}°</span></div>
-                  <div className="flex items-center justify-between text-xs"><span className="text-gray-400">Flipped</span><span className="font-mono text-white">{selectedDoor.flipped?'Yes':'No'}</span></div>
-                  <label className="block text-gray-400 text-xs">Width</label>
-                  <input type="range" min={Math.round(unitsPerMeter*0.6)} max={Math.round(unitsPerMeter*1.2)} step={Math.round(unitsPerMeter*0.02)}
-                    value={selectedDoor.width}
-                    onChange={e=>{pushUndo();setPlacedDoors(p=>p.map(d=>d.id===selectedDoor.id?{...d,width:+e.target.value}:d));}}
-                    className="w-full accent-blue-500"/>
-                  <div className="flex justify-between text-[10px] text-gray-500">
-                    <span>600mm</span><span className="text-white font-mono">{Math.round(selectedDoor.width/unitsPerMeter*1000)}mm</span><span>1200mm</span>
+              {/* ── Reusable inline editable row ──
+                  Shows: label | [  value  ] mm
+                  Slider below for quick drag adjustment.
+                  On blur / Enter the mm value is clamped and committed. */}
+              {selectedDoor&&(()=>{
+                const mmVal = Math.round(selectedDoor.width/unitsPerMeter*1000);
+                const setWidth=(mm:number)=>{
+                  const clamped=Math.max(600,Math.min(1200,mm));
+                  pushUndo();
+                  setPlacedDoors(p=>p.map(d=>d.id===selectedDoor.id?{...d,width:Math.round(clamped/1000*unitsPerMeter)}:d));
+                };
+                const setRot=(deg:number)=>{pushUndo();setPlacedDoors(p=>p.map(d=>d.id===selectedDoor.id?{...d,rotation:((Math.round(deg)%360)+360)%360}:d));};
+                return (
+                  <div className="space-y-2">
+                    {/* Rotation */}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-gray-400 text-xs w-16 shrink-0">Rotation</span>
+                      <div className="flex items-center gap-1 ml-auto">
+                        <input type="number" step={90} min={0} max={270}
+                          value={selectedDoor.rotation}
+                          onChange={e=>setRot(+e.target.value)}
+                          onBlur={e=>setRot(+e.target.value)}
+                          className="w-16 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-blue-400 focus:bg-white/15"/>
+                        <span className="text-gray-500 text-xs">°</span>
+                      </div>
+                    </div>
+                    {/* Width */}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-gray-400 text-xs w-16 shrink-0">Width</span>
+                      <div className="flex items-center gap-1 ml-auto">
+                        <input type="number" step={10} min={600} max={1200}
+                          value={mmVal}
+                          onChange={e=>setWidth(+e.target.value)}
+                          onBlur={e=>setWidth(+e.target.value)}
+                          onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
+                          className="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-blue-400 focus:bg-white/15"/>
+                        <span className="text-gray-500 text-xs">mm</span>
+                      </div>
+                    </div>
+                    {/* Flipped badge */}
+                    <div className="flex items-center justify-between text-xs pt-0.5">
+                      <span className="text-gray-400">Flipped</span>
+                      <span className={`font-mono ${selectedDoor.flipped?'text-blue-400':'text-gray-500'}`}>{selectedDoor.flipped?'Yes':'No'}</span>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {selectedWall&&(
-                <div className="space-y-2 text-xs text-gray-300">
-                  <div className="flex items-center justify-between"><span className="text-gray-400">Length</span><span className="font-mono text-white">{Math.round(Math.hypot(selectedWall.x2-selectedWall.x1,selectedWall.y2-selectedWall.y1)/unitsPerMeter*1000)}mm</span></div>
-                  <div className="flex items-center justify-between"><span className="text-gray-400">Curved</span><span className="font-mono text-white">{selectedWall.curved?'Yes':'No'}</span></div>
-                  <p className="text-gray-500 text-[10px] pt-1">Drag ● endpoints to adjust. Drag mid-handle to curve.</p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-400">Length</span>
+                    <span className="font-mono text-white">{Math.round(Math.hypot(selectedWall.x2-selectedWall.x1,selectedWall.y2-selectedWall.y1)/unitsPerMeter*1000)} mm</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-400">Angle</span>
+                    <span className="font-mono text-white">{Math.round(Math.atan2(selectedWall.y2-selectedWall.y1,selectedWall.x2-selectedWall.x1)*180/Math.PI)}°</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-400">Curved</span>
+                    <span className={`font-mono ${selectedWall.curved?'text-amber-400':'text-gray-500'}`}>{selectedWall.curved?'Yes':'No'}</span>
+                  </div>
+                  <p className="text-gray-600 text-[10px] pt-1">Drag ● endpoints to adjust length. Drag mid-handle to curve.</p>
                 </div>
               )}
 
-              {selectedWindow&&(
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between text-xs"><span className="text-gray-400">Rotation</span><span className="font-mono text-white">{selectedWindow.rotation}°</span></div>
-                  <label className="block text-gray-400 text-xs">Width</label>
-                  <input type="range" min={Math.round(unitsPerMeter*0.6)} max={Math.round(unitsPerMeter*3.0)} step={Math.round(unitsPerMeter*0.05)}
-                    value={selectedWindow.width}
-                    onChange={e=>{pushUndo();setPlacedWindows(p=>p.map(w=>w.id===selectedWindow.id?{...w,width:+e.target.value}:w));}}
-                    className="w-full accent-cyan-500"/>
-                  <div className="flex justify-between text-[10px] text-gray-500">
-                    <span>600mm</span><span className="text-white font-mono">{Math.round(selectedWindow.width/unitsPerMeter*1000)}mm</span><span>3000mm</span>
+              {selectedWindow&&(()=>{
+                const mmVal=Math.round(selectedWindow.width/unitsPerMeter*1000);
+                const setWidth=(mm:number)=>{
+                  const clamped=Math.max(600,Math.min(3000,mm));
+                  pushUndo();
+                  setPlacedWindows(p=>p.map(w=>w.id===selectedWindow.id?{...w,width:Math.round(clamped/1000*unitsPerMeter)}:w));
+                };
+                const setRot=(deg:number)=>{pushUndo();setPlacedWindows(p=>p.map(w=>w.id===selectedWindow.id?{...w,rotation:((Math.round(deg)%360)+360)%360}:w));};
+                return (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-gray-400 text-xs w-16 shrink-0">Rotation</span>
+                      <div className="flex items-center gap-1 ml-auto">
+                        <input type="number" step={90} min={0} max={270}
+                          value={selectedWindow.rotation}
+                          onChange={e=>setRot(+e.target.value)}
+                          onBlur={e=>setRot(+e.target.value)}
+                          className="w-16 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-cyan-400 focus:bg-white/15"/>
+                        <span className="text-gray-500 text-xs">°</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-gray-400 text-xs w-16 shrink-0">Width</span>
+                      <div className="flex items-center gap-1 ml-auto">
+                        <input type="number" step={50} min={600} max={3000}
+                          value={mmVal}
+                          onChange={e=>setWidth(+e.target.value)}
+                          onBlur={e=>setWidth(+e.target.value)}
+                          onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
+                          className="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-cyan-400 focus:bg-white/15"/>
+                        <span className="text-gray-500 text-xs">mm</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
-              {selectedRobe&&(
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between text-xs"><span className="text-gray-400">Width (fixed)</span><span className="font-mono text-white">600mm</span></div>
-                  <div className="flex items-center justify-between text-xs"><span className="text-gray-400">Rotation</span><span className="font-mono text-white">{selectedRobe.rotation}°</span></div>
-                  <label className="block text-gray-400 text-xs">Length</label>
-                  <input type="range" min={Math.round(unitsPerMeter*0.9)} max={Math.round(unitsPerMeter*6.0)} step={Math.round(unitsPerMeter*0.1)}
-                    value={selectedRobe.length}
-                    onChange={e=>{pushUndo();setPlacedRobes(p=>p.map(r=>r.id===selectedRobe.id?{...r,length:+e.target.value}:r));}}
-                    className="w-full accent-amber-500"/>
-                  <div className="flex justify-between text-[10px] text-gray-500">
-                    <span>900mm</span><span className="text-white font-mono">{Math.round(selectedRobe.length/unitsPerMeter*1000)}mm</span><span>6000mm</span>
+              {selectedRobe&&(()=>{
+                const mmLen=Math.round(selectedRobe.length/unitsPerMeter*1000);
+                const mmWid=Math.round(selectedRobe.width/unitsPerMeter*1000);
+                const setLen=(mm:number)=>{
+                  const clamped=Math.max(900,Math.min(6000,mm));
+                  pushUndo();
+                  setPlacedRobes(p=>p.map(r=>r.id===selectedRobe.id?{...r,length:Math.round(clamped/1000*unitsPerMeter)}:r));
+                };
+                const setWid=(mm:number)=>{
+                  const clamped=Math.max(300,Math.min(1200,mm));
+                  pushUndo();
+                  setPlacedRobes(p=>p.map(r=>r.id===selectedRobe.id?{...r,width:Math.round(clamped/1000*unitsPerMeter)}:r));
+                };
+                const setRot=(deg:number)=>{pushUndo();setPlacedRobes(p=>p.map(r=>r.id===selectedRobe.id?{...r,rotation:((Math.round(deg)%360)+360)%360}:r));};
+                return (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-gray-400 text-xs w-16 shrink-0">Rotation</span>
+                      <div className="flex items-center gap-1 ml-auto">
+                        <input type="number" step={90} min={0} max={270}
+                          value={selectedRobe.rotation}
+                          onChange={e=>setRot(+e.target.value)}
+                          onBlur={e=>setRot(+e.target.value)}
+                          className="w-16 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-amber-400 focus:bg-white/15"/>
+                        <span className="text-gray-500 text-xs">°</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-gray-400 text-xs w-16 shrink-0">Length</span>
+                      <div className="flex items-center gap-1 ml-auto">
+                        <input type="number" step={100} min={900} max={6000}
+                          value={mmLen}
+                          onChange={e=>setLen(+e.target.value)}
+                          onBlur={e=>setLen(+e.target.value)}
+                          onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
+                          className="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-amber-400 focus:bg-white/15"/>
+                        <span className="text-gray-500 text-xs">mm</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 pt-1">
+                      <span className="text-gray-400 text-xs w-16 shrink-0">Width</span>
+                      <div className="flex items-center gap-1 ml-auto">
+                        <input type="number" step={50} min={300} max={1200}
+                          value={mmWid}
+                          onChange={e=>setWid(+e.target.value)}
+                          onBlur={e=>setWid(+e.target.value)}
+                          onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
+                          className="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-amber-400 focus:bg-white/15"/>
+                        <span className="text-gray-500 text-xs">mm</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
-              {selectedKitchen&&(
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between text-xs"><span className="text-gray-400">Type</span><span className="font-mono text-white capitalize">{selectedKitchen.subtype}</span></div>
-                  <div className="flex items-center justify-between text-xs"><span className="text-gray-400">Rotation</span><span className="font-mono text-white">{selectedKitchen.rotation}°</span></div>
-                  <label className="block text-gray-400 text-xs">Length</label>
-                  <input type="range" min={Math.round(unitsPerMeter*0.3)} max={Math.round(unitsPerMeter*5.0)} step={Math.round(unitsPerMeter*0.05)}
-                    value={selectedKitchen.length}
-                    onChange={e=>{pushUndo();setPlacedKitchens(p=>p.map(k=>k.id===selectedKitchen.id?{...k,length:+e.target.value}:k));}}
-                    className="w-full accent-orange-500"/>
-                  <div className="flex justify-between text-[10px] text-gray-500">
-                    <span>300mm</span><span className="text-white font-mono">{Math.round(selectedKitchen.length/unitsPerMeter*1000)}mm</span><span>5000mm</span>
+              {selectedKitchen&&(()=>{
+                const mmLen=Math.round(selectedKitchen.length/unitsPerMeter*1000);
+                const mmDep=Math.round(selectedKitchen.depth/unitsPerMeter*1000);
+                const setLen=(mm:number)=>{
+                  const clamped=Math.max(300,Math.min(5000,mm));
+                  pushUndo();
+                  setPlacedKitchens(p=>p.map(k=>k.id===selectedKitchen.id?{...k,length:Math.round(clamped/1000*unitsPerMeter)}:k));
+                };
+                const setDep=(mm:number)=>{
+                  const clamped=Math.max(300,Math.min(1200,mm));
+                  pushUndo();
+                  setPlacedKitchens(p=>p.map(k=>k.id===selectedKitchen.id?{...k,depth:Math.round(clamped/1000*unitsPerMeter)}:k));
+                };
+                const setRot=(deg:number)=>{pushUndo();setPlacedKitchens(p=>p.map(k=>k.id===selectedKitchen.id?{...k,rotation:((Math.round(deg)%360)+360)%360}:k));};
+                const accentCls='focus:border-orange-400';
+                return (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-400">Type</span>
+                      <span className="font-mono text-white capitalize">{selectedKitchen.subtype}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-gray-400 text-xs w-16 shrink-0">Rotation</span>
+                      <div className="flex items-center gap-1 ml-auto">
+                        <input type="number" step={90} min={0} max={270}
+                          value={selectedKitchen.rotation}
+                          onChange={e=>setRot(+e.target.value)}
+                          onBlur={e=>setRot(+e.target.value)}
+                          className={`w-16 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none ${accentCls} focus:bg-white/15`}/>
+                        <span className="text-gray-500 text-xs">°</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-gray-400 text-xs w-16 shrink-0">Length</span>
+                      <div className="flex items-center gap-1 ml-auto">
+                        <input type="number" step={50} min={300} max={5000}
+                          value={mmLen}
+                          onChange={e=>setLen(+e.target.value)}
+                          onBlur={e=>setLen(+e.target.value)}
+                          onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
+                          className={`w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none ${accentCls} focus:bg-white/15`}/>
+                        <span className="text-gray-500 text-xs">mm</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 pt-1">
+                      <span className="text-gray-400 text-xs w-16 shrink-0">Depth</span>
+                      <div className="flex items-center gap-1 ml-auto">
+                        <input type="number" step={50} min={300} max={1200}
+                          value={mmDep}
+                          onChange={e=>setDep(+e.target.value)}
+                          onBlur={e=>setDep(+e.target.value)}
+                          onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
+                          className={`w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none ${accentCls} focus:bg-white/15`}/>
+                        <span className="text-gray-500 text-xs">mm</span>
+                      </div>
+                    </div>
                   </div>
-                  <label className="block text-gray-400 text-xs">Depth</label>
-                  <input type="range" min={Math.round(unitsPerMeter*0.3)} max={Math.round(unitsPerMeter*1.2)} step={Math.round(unitsPerMeter*0.05)}
-                    value={selectedKitchen.depth}
-                    onChange={e=>{pushUndo();setPlacedKitchens(p=>p.map(k=>k.id===selectedKitchen.id?{...k,depth:+e.target.value}:k));}}
-                    className="w-full accent-orange-400"/>
-                  <div className="flex justify-between text-[10px] text-gray-500">
-                    <span>300mm</span><span className="text-white font-mono">{Math.round(selectedKitchen.depth/unitsPerMeter*1000)}mm</span><span>1200mm</span>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
 
@@ -1174,7 +1338,7 @@ export default function SvgEditor({
               ].map(({label,count,color,bg})=>(
                 <div key={label} className={`${bg} rounded-lg p-2 text-center`}>
                   <div className={`text-xl font-bold ${color}`}>{count}</div>
-                  <div className="text-gray-500 text-[10px] mt-0.5">{label}</div>
+                  <div className="text-gray-500 text-[10px]">{label}</div>
                 </div>
               ))}
             </div>
