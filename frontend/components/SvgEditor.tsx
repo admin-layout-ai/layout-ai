@@ -427,7 +427,7 @@ export default function SvgEditor({
     }
   }, [activeTool, nextDoorId, nextWallId, nextWindowId, nextRobeId,
       doorWidth, windowWidth, robeLength, robeFixedW,
-      wallStart, scaledWallStroke, placedWalls, selectedEl, screenToSvg]);
+      wallStart, wallStroke, sizeScale, placedWalls, selectedEl, screenToSvg]);
 
   // ── Element click (stops propagation) ──────────────────────────────────────
 
