@@ -1109,13 +1109,12 @@ export default function SvgEditor({
               {/* ── Reusable inline editable row ──
                   Shows: label | [  value  ] mm
                   Slider below for quick drag adjustment.
-                  On blur / Enter the mm value is clamped and committed. */}
+                  On blur / Enter the value is committed. */}
               {selectedDoor&&(()=>{
                 const mmVal = Math.round(selectedDoor.width/unitsPerMeter*1000);
                 const setWidth=(mm:number)=>{
-                  const clamped=Math.max(600,Math.min(1200,mm));
                   pushUndo();
-                  setPlacedDoors(p=>p.map(d=>d.id===selectedDoor.id?{...d,width:Math.round(clamped/1000*unitsPerMeter)}:d));
+                  setPlacedDoors(p=>p.map(d=>d.id===selectedDoor.id?{...d,width:Math.round(mm/1000*unitsPerMeter)}:d));
                 };
                 const setRot=(deg:number)=>{pushUndo();setPlacedDoors(p=>p.map(d=>d.id===selectedDoor.id?{...d,rotation:((Math.round(deg)%360)+360)%360}:d));};
                 return (
@@ -1124,11 +1123,11 @@ export default function SvgEditor({
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-gray-400 text-xs w-16 shrink-0">Rotation</span>
                       <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={90} min={0} max={270}
+                        <input type="number" step={1}
                           value={selectedDoor.rotation}
                           onChange={e=>setRot(+e.target.value)}
                           onBlur={e=>setRot(+e.target.value)}
-                          className="w-16 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-blue-400 focus:bg-white/15"/>
+                          className="w-16 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-blue-400 focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
                         <span className="text-gray-500 text-xs">°</span>
                       </div>
                     </div>
@@ -1136,12 +1135,12 @@ export default function SvgEditor({
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-gray-400 text-xs w-16 shrink-0">Width</span>
                       <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={10} min={600} max={1200}
+                        <input type="number" step={1}
                           value={mmVal}
                           onChange={e=>setWidth(+e.target.value)}
                           onBlur={e=>setWidth(+e.target.value)}
                           onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
-                          className="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-blue-400 focus:bg-white/15"/>
+                          className="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-blue-400 focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
                         <span className="text-gray-500 text-xs">mm</span>
                       </div>
                     </div>
@@ -1175,9 +1174,8 @@ export default function SvgEditor({
               {selectedWindow&&(()=>{
                 const mmVal=Math.round(selectedWindow.width/unitsPerMeter*1000);
                 const setWidth=(mm:number)=>{
-                  const clamped=Math.max(600,Math.min(3000,mm));
                   pushUndo();
-                  setPlacedWindows(p=>p.map(w=>w.id===selectedWindow.id?{...w,width:Math.round(clamped/1000*unitsPerMeter)}:w));
+                  setPlacedWindows(p=>p.map(w=>w.id===selectedWindow.id?{...w,width:Math.round(mm/1000*unitsPerMeter)}:w));
                 };
                 const setRot=(deg:number)=>{pushUndo();setPlacedWindows(p=>p.map(w=>w.id===selectedWindow.id?{...w,rotation:((Math.round(deg)%360)+360)%360}:w));};
                 return (
@@ -1185,23 +1183,23 @@ export default function SvgEditor({
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-gray-400 text-xs w-16 shrink-0">Rotation</span>
                       <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={90} min={0} max={270}
+                        <input type="number" step={1}
                           value={selectedWindow.rotation}
                           onChange={e=>setRot(+e.target.value)}
                           onBlur={e=>setRot(+e.target.value)}
-                          className="w-16 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-cyan-400 focus:bg-white/15"/>
+                          className="w-16 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-cyan-400 focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
                         <span className="text-gray-500 text-xs">°</span>
                       </div>
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-gray-400 text-xs w-16 shrink-0">Width</span>
                       <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={50} min={600} max={3000}
+                        <input type="number" step={1}
                           value={mmVal}
                           onChange={e=>setWidth(+e.target.value)}
                           onBlur={e=>setWidth(+e.target.value)}
                           onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
-                          className="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-cyan-400 focus:bg-white/15"/>
+                          className="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-cyan-400 focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
                         <span className="text-gray-500 text-xs">mm</span>
                       </div>
                     </div>
@@ -1213,14 +1211,12 @@ export default function SvgEditor({
                 const mmLen=Math.round(selectedRobe.length/unitsPerMeter*1000);
                 const mmWid=Math.round(selectedRobe.width/unitsPerMeter*1000);
                 const setLen=(mm:number)=>{
-                  const clamped=Math.max(900,Math.min(6000,mm));
                   pushUndo();
-                  setPlacedRobes(p=>p.map(r=>r.id===selectedRobe.id?{...r,length:Math.round(clamped/1000*unitsPerMeter)}:r));
+                  setPlacedRobes(p=>p.map(r=>r.id===selectedRobe.id?{...r,length:Math.round(mm/1000*unitsPerMeter)}:r));
                 };
                 const setWid=(mm:number)=>{
-                  const clamped=Math.max(300,Math.min(1200,mm));
                   pushUndo();
-                  setPlacedRobes(p=>p.map(r=>r.id===selectedRobe.id?{...r,width:Math.round(clamped/1000*unitsPerMeter)}:r));
+                  setPlacedRobes(p=>p.map(r=>r.id===selectedRobe.id?{...r,width:Math.round(mm/1000*unitsPerMeter)}:r));
                 };
                 const setRot=(deg:number)=>{pushUndo();setPlacedRobes(p=>p.map(r=>r.id===selectedRobe.id?{...r,rotation:((Math.round(deg)%360)+360)%360}:r));};
                 return (
@@ -1228,7 +1224,7 @@ export default function SvgEditor({
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-gray-400 text-xs w-16 shrink-0">Rotation</span>
                       <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={90} min={0} max={270}
+                        <input type="number" step={1}
                           value={selectedRobe.rotation}
                           onChange={e=>setRot(+e.target.value)}
                           onBlur={e=>setRot(+e.target.value)}
@@ -1239,7 +1235,7 @@ export default function SvgEditor({
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-gray-400 text-xs w-16 shrink-0">Length</span>
                       <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={100} min={900} max={6000}
+                        <input type="number" step={1}
                           value={mmLen}
                           onChange={e=>setLen(+e.target.value)}
                           onBlur={e=>setLen(+e.target.value)}
@@ -1251,7 +1247,7 @@ export default function SvgEditor({
                     <div className="flex items-center justify-between gap-2 pt-1">
                       <span className="text-gray-400 text-xs w-16 shrink-0">Width</span>
                       <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={50} min={300} max={1200}
+                        <input type="number" step={1}
                           value={mmWid}
                           onChange={e=>setWid(+e.target.value)}
                           onBlur={e=>setWid(+e.target.value)}
@@ -1268,14 +1264,12 @@ export default function SvgEditor({
                 const mmLen=Math.round(selectedKitchen.length/unitsPerMeter*1000);
                 const mmDep=Math.round(selectedKitchen.depth/unitsPerMeter*1000);
                 const setLen=(mm:number)=>{
-                  const clamped=Math.max(300,Math.min(5000,mm));
                   pushUndo();
-                  setPlacedKitchens(p=>p.map(k=>k.id===selectedKitchen.id?{...k,length:Math.round(clamped/1000*unitsPerMeter)}:k));
+                  setPlacedKitchens(p=>p.map(k=>k.id===selectedKitchen.id?{...k,length:Math.round(mm/1000*unitsPerMeter)}:k));
                 };
                 const setDep=(mm:number)=>{
-                  const clamped=Math.max(300,Math.min(1200,mm));
                   pushUndo();
-                  setPlacedKitchens(p=>p.map(k=>k.id===selectedKitchen.id?{...k,depth:Math.round(clamped/1000*unitsPerMeter)}:k));
+                  setPlacedKitchens(p=>p.map(k=>k.id===selectedKitchen.id?{...k,depth:Math.round(mm/1000*unitsPerMeter)}:k));
                 };
                 const setRot=(deg:number)=>{pushUndo();setPlacedKitchens(p=>p.map(k=>k.id===selectedKitchen.id?{...k,rotation:((Math.round(deg)%360)+360)%360}:k));};
                 const accentCls='focus:border-orange-400';
@@ -1288,35 +1282,35 @@ export default function SvgEditor({
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-gray-400 text-xs w-16 shrink-0">Rotation</span>
                       <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={90} min={0} max={270}
+                        <input type="number" step={1}
                           value={selectedKitchen.rotation}
                           onChange={e=>setRot(+e.target.value)}
                           onBlur={e=>setRot(+e.target.value)}
-                          className={`w-16 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none ${accentCls} focus:bg-white/15`}/>
+                          className={`w-16 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none ${accentCls} focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}/>
                         <span className="text-gray-500 text-xs">°</span>
                       </div>
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-gray-400 text-xs w-16 shrink-0">Length</span>
                       <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={50} min={300} max={5000}
+                        <input type="number" step={1}
                           value={mmLen}
                           onChange={e=>setLen(+e.target.value)}
                           onBlur={e=>setLen(+e.target.value)}
                           onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
-                          className={`w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none ${accentCls} focus:bg-white/15`}/>
+                          className={`w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none ${accentCls} focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}/>
                         <span className="text-gray-500 text-xs">mm</span>
                       </div>
                     </div>
                     <div className="flex items-center justify-between gap-2 pt-1">
                       <span className="text-gray-400 text-xs w-16 shrink-0">Depth</span>
                       <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={50} min={300} max={1200}
+                        <input type="number" step={1}
                           value={mmDep}
                           onChange={e=>setDep(+e.target.value)}
                           onBlur={e=>setDep(+e.target.value)}
                           onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
-                          className={`w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none ${accentCls} focus:bg-white/15`}/>
+                          className={`w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none ${accentCls} focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}/>
                         <span className="text-gray-500 text-xs">mm</span>
                       </div>
                     </div>
