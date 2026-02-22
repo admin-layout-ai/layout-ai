@@ -550,7 +550,7 @@ export default function SvgEditor({
       if(selectedEl.kind==='robe')    setPlacedRobes(p    =>p.map(r=>r.id===selectedEl.id?{...r,x:r.x+dx,y:r.y+dy}:r));
       if(selectedEl.kind==='kitchen') setPlacedKitchens(p =>p.map(k=>k.id===selectedEl.id?{...k,x:k.x+dx,y:k.y+dy}:k));
       if(selectedEl.kind==='bath')    setPlacedBaths(p    =>p.map(b=>b.id===selectedEl.id?{...b,x:b.x+dx,y:b.y+dy}:b));
-    };
+      };
     const onKeyUp = (e:KeyboardEvent) => { if(e.code==='Space') setSpaceDown(false); };
     window.addEventListener('keydown',onKeyDown);
     window.addEventListener('keyup',onKeyUp);
@@ -592,11 +592,12 @@ export default function SvgEditor({
       setPlacedBaths(p=>[...p,{id,x:cx,y:cy,rotation:0,subtype:bathSubtype,length:def.length,depth:def.depth}]);
       setSelectedEl({kind:'bath',id}); return;
     }
-  }, [activeTool,doorWidth,windowWidth,robeLength,robeFixedW,kitchenSubtype,kitchenDefaults,bathSubtype,bathDefaults,
+  }, [activeTool,doorWidth,windowWidth,robeLength,robeFixedW,kitchenSubtype,kitchenDefaults,bathSubtype,bathDefaults,snap,snapToAngle,pushUndo,screenToSvg,unitsPerMeter]);
 
   const handleElementClick = useCallback((e:React.MouseEvent,kind:ElementKind,id:number) => {
     e.stopPropagation();
-        setSelectedEl({kind,id}); setActiveTool('select');
+    setSelectedEl({kind,id}); setActiveTool('select');
+  }, [activeTool]);
 
   const handleSvgMouseDown = useCallback((e:React.MouseEvent<SVGSVGElement>) => {
     if(e.button===1||(e.button===0&&spaceDown)){
