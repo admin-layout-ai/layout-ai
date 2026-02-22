@@ -163,6 +163,9 @@ export default function SvgEditor({
   const [robeLength,  setRobeLength]  = useState(80);   // default ~1600mm
   const [wallStroke,  setWallStroke]  = useState(5);    // SVG stroke-width
 
+  // Scale multiplier – user can nudge if auto-detect is off
+  const [sizeScale, setSizeScale] = useState(1.0);
+
   // Active tool & selection
   const [activeTool, setActiveTool] = useState<ActiveTool>('door');
   const [selectedEl, setSelectedEl] = useState<SelectedEl>(null);
@@ -215,51 +218,95 @@ export default function SvgEditor({
             setSvgViewBox({ x: 0, y: 0, w, h });
           }
 
-          // Scale detection
+          // ── Scale detection (multi-strategy) ────────────────────────────────
+          // Strategy 1: parse "Nm x Nm" text labels and match to enclosing walls.
+          // Works regardless of wall fill colour by querying ALL rects.
           let svgUnitsPerMeter = 0;
-          const allRects = Array.from(svgEl.querySelectorAll('rect[fill="#1a1a1a"]'));
-          const verticalWalls = allRects
-            .filter(r => {
-              const rw = parseFloat(r.getAttribute('width') || '0');
-              const rh = parseFloat(r.getAttribute('height') || '0');
-              return rh > rw * 2 && rh > 20;
-            })
-            .map(r => ({ x: parseFloat(r.getAttribute('x') || '0'), w: parseFloat(r.getAttribute('width') || '0') }));
 
+          // Collect ALL rects (walls can be any dark fill or stroke)
+          const allRects = Array.from(svgEl.querySelectorAll('rect'));
+
+          // Prefer text-based scale: find "W m x H m" labels
           const dimTexts = Array.from(svgEl.querySelectorAll('text'));
-          const dimRegex = /^(\d+\.?\d*)\s*m\s*x\s*(\d+\.?\d*)\s*m$/i;
-          let roomWidthM = 0, roomTextX = 0;
+          const dimRegex = /(\d+\.?\d*)\s*m\s*[x×]\s*(\d+\.?\d*)\s*m/i;
+          interface RoomLabel { widthM: number; heightM: number; cx: number; cy: number; }
+          const labels: RoomLabel[] = [];
           for (const t of dimTexts) {
-            const match = (t.textContent || '').trim().match(dimRegex);
-            if (match) {
-              const rw = parseFloat(match[1]);
-              if (rw > roomWidthM) { roomWidthM = rw; roomTextX = parseFloat(t.getAttribute('x') || '0'); }
+            const m = (t.textContent || '').replace(/\s+/g, ' ').trim().match(dimRegex);
+            if (m) {
+              const cx = parseFloat(t.getAttribute('x') || '0');
+              const cy = parseFloat(t.getAttribute('y') || '0');
+              labels.push({ widthM: parseFloat(m[1]), heightM: parseFloat(m[2]), cx, cy });
             }
           }
 
-          if (roomWidthM > 0 && verticalWalls.length >= 2) {
-            const sorted = [...verticalWalls].sort((a, b) => a.x - b.x);
-            let bestLeft: typeof sorted[0] | null = null;
-            let bestRight: typeof sorted[0] | null = null;
-            for (const vw of sorted) { if (vw.x + vw.w <= roomTextX) bestLeft = vw; }
-            for (const vw of sorted) { if (vw.x >= roomTextX && !bestRight) bestRight = vw; }
-            if (bestLeft && bestRight) {
-              const roomSvgWidth = bestRight.x - (bestLeft.x + bestLeft.w);
-              if (roomSvgWidth > 0) svgUnitsPerMeter = roomSvgWidth / roomWidthM;
+          // For each label, find the nearest enclosing rect (room boundary or wall pair)
+          // Strategy: find two vertical rects that bracket the text horizontally
+          const verticalRects = allRects
+            .map(r => ({
+              x: parseFloat(r.getAttribute('x') || '0'),
+              y: parseFloat(r.getAttribute('y') || '0'),
+              w: parseFloat(r.getAttribute('width') || '0'),
+              h: parseFloat(r.getAttribute('height') || '0'),
+            }))
+            .filter(r => r.h > r.w * 1.5 && r.h > 10 && r.w > 0);
+
+          const candidates: number[] = [];
+          for (const label of labels) {
+            const sorted = [...verticalRects].sort((a, b) => a.x - b.x);
+            let left: typeof sorted[0] | null = null;
+            let right: typeof sorted[0] | null = null;
+            for (const r of sorted) { if (r.x + r.w <= label.cx) left = r; }
+            for (const r of sorted) { if (r.x >= label.cx && !right) right = r; }
+            if (left && right) {
+              const innerWidth = right.x - (left.x + left.w);
+              if (innerWidth > 0) candidates.push(innerWidth / label.widthM);
             }
           }
 
+          if (candidates.length > 0) {
+            // Median to reject outliers
+            candidates.sort((a, b) => a - b);
+            svgUnitsPerMeter = candidates[Math.floor(candidates.length / 2)];
+          }
+
+          // Strategy 2: try horizontal rects for height-based scale and average
+          if (candidates.length === 0) {
+            const horizontalRects = allRects
+              .map(r => ({
+                x: parseFloat(r.getAttribute('x') || '0'),
+                y: parseFloat(r.getAttribute('y') || '0'),
+                w: parseFloat(r.getAttribute('width') || '0'),
+                h: parseFloat(r.getAttribute('height') || '0'),
+              }))
+              .filter(r => r.w > r.h * 1.5 && r.w > 10 && r.h > 0);
+
+            for (const label of labels) {
+              const sorted = [...horizontalRects].sort((a, b) => a.y - b.y);
+              let top: typeof sorted[0] | null = null;
+              let bot: typeof sorted[0] | null = null;
+              for (const r of sorted) { if (r.y + r.h <= label.cy) top = r; }
+              for (const r of sorted) { if (r.y >= label.cy && !bot) bot = r; }
+              if (top && bot) {
+                const innerH = bot.y - (top.y + top.h);
+                if (innerH > 0) candidates.push(innerH / label.heightM);
+              }
+            }
+            if (candidates.length > 0) {
+              candidates.sort((a, b) => a - b);
+              svgUnitsPerMeter = candidates[Math.floor(candidates.length / 2)];
+            }
+          }
+
+          // Strategy 3: viewBox width ÷ envelopeWidth
           if (svgUnitsPerMeter <= 0) {
-            let minX = Infinity, maxX = -Infinity;
-            allRects.forEach(r => {
-              const rx = parseFloat(r.getAttribute('x') || '0');
-              const rw = parseFloat(r.getAttribute('width') || '0');
-              if (rx < minX) minX = rx;
-              if (rx + rw > maxX) maxX = rx + rw;
-            });
-            const buildingWidth = maxX > minX ? maxX - minX : (vb ? vb[2] : 800);
-            svgUnitsPerMeter = buildingWidth / envelopeWidth;
+            const viewW = vb ? vb[2] : parseFloat(svgEl.getAttribute('width') || '800');
+            svgUnitsPerMeter = viewW / envelopeWidth;
           }
+
+          // Sanity clamp: if result looks impossibly small (<10) or large (>50000)
+          // it means the approach failed — clamp to a safe minimum of 50
+          if (svgUnitsPerMeter < 10) svgUnitsPerMeter = Math.max(svgUnitsPerMeter * 100, 50);
 
           const upm = svgUnitsPerMeter;
           setUnitsPerMeter(upm);
@@ -267,8 +314,8 @@ export default function SvgEditor({
           setWindowWidth(Math.round(upm * 1.0));
           setRobeFixedW(Math.round(upm * 0.6));
           setRobeLength(Math.round(upm * 1.6));
-          setWallClearHeight(Math.max(16, Math.round(upm * 0.35)));
-          setWallStroke(Math.max(3, Math.round(upm * 0.06)));
+          setWallClearHeight(Math.max(upm * 0.08, Math.round(upm * 0.35)));
+          setWallStroke(Math.max(upm * 0.02, Math.round(upm * 0.06)));
           nudgeStep.current = Math.max(1, Math.round(upm * 0.05));
         }
 
@@ -316,7 +363,7 @@ export default function SvgEditor({
     }
 
     if (activeTool === 'door') {
-      const newDoor: PlacedDoor = { id: nextDoorId, x: cx, y: cy, rotation: 0, width: doorWidth, flipped: false };
+      const newDoor: PlacedDoor = { id: nextDoorId, x: cx, y: cy, rotation: 0, width: scaledDoorWidth, flipped: false };
       setPlacedDoors(prev => [...prev, newDoor]);
       setNextDoorId(p => p + 1);
       setSelectedEl({ kind: 'door', id: newDoor.id });
@@ -346,8 +393,8 @@ export default function SvgEditor({
     }
 
     if (activeTool === 'wall-erase') {
-      // Find nearest wall within a tolerance of wallStroke * 3
-      const tol = Math.max(wallStroke * 4, 12);
+      // Find nearest wall within a tolerance of scaledWallStroke * 4
+      const tol = Math.max(scaledWallStroke * 4, 12);
       let nearest: PlacedWall | null = null;
       let nearestDist = tol;
       for (const w of placedWalls) {
@@ -362,7 +409,7 @@ export default function SvgEditor({
     }
 
     if (activeTool === 'window') {
-      const newWindow: PlacedWindow = { id: nextWindowId, x: cx, y: cy, rotation: 0, width: windowWidth, flipped: false };
+      const newWindow: PlacedWindow = { id: nextWindowId, x: cx, y: cy, rotation: 0, width: scaledWindowWidth, flipped: false };
       setPlacedWindows(prev => [...prev, newWindow]);
       setNextWindowId(p => p + 1);
       setSelectedEl({ kind: 'window', id: newWindow.id });
@@ -371,7 +418,7 @@ export default function SvgEditor({
     }
 
     if (activeTool === 'robe') {
-      const newRobe: PlacedRobe = { id: nextRobeId, x: cx, y: cy, rotation: 0, length: robeLength, width: robeFixedW };
+      const newRobe: PlacedRobe = { id: nextRobeId, x: cx, y: cy, rotation: 0, length: scaledRobeLength, width: scaledRobeFixedW };
       setPlacedRobes(prev => [...prev, newRobe]);
       setNextRobeId(p => p + 1);
       setSelectedEl({ kind: 'robe', id: newRobe.id });
@@ -380,7 +427,7 @@ export default function SvgEditor({
     }
   }, [activeTool, nextDoorId, nextWallId, nextWindowId, nextRobeId,
       doorWidth, windowWidth, robeLength, robeFixedW,
-      wallStart, wallStroke, placedWalls, selectedEl, screenToSvg]);
+      wallStart, scaledWallStroke, placedWalls, selectedEl, screenToSvg]);
 
   // ── Element click (stops propagation) ──────────────────────────────────────
 
@@ -596,13 +643,23 @@ export default function SvgEditor({
   const selectedWindow = selectedEl?.kind === 'window' ? placedWindows.find(w => w.id === selectedEl.id) : null;
   const selectedDoor = selectedEl?.kind === 'door' ? placedDoors.find(d => d.id === selectedEl.id) : null;
 
+  // ── Scaled sizes (sizeScale lets user correct bad auto-detect) ─────────────
+
+  const scaledDoorWidth   = Math.round(doorWidth   * sizeScale);
+  const scaledWindowWidth = Math.round(windowWidth * sizeScale);
+  const scaledRobeFixedW  = Math.round(robeFixedW  * sizeScale);
+  const scaledRobeLength  = Math.round(robeLength  * sizeScale);
+  const scaledWallClear   = Math.max(4, Math.round(wallClearHeight * sizeScale));
+  const scaledWallStroke  = Math.max(1, Math.round(wallStroke * sizeScale));
+
   // ── Save ────────────────────────────────────────────────────────────────────
 
   const handleSave = async () => {
     if (!svgContent) return;
     setIsSaving(true);
     try {
-      const wch = wallClearHeight;
+      const wch = scaledWallClear;
+      const sw  = scaledWallStroke;
 
       // Doors SVG
       const doorsSvg = placedDoors.map(door => {
@@ -610,9 +667,9 @@ export default function SvgEditor({
         const flipScale = door.flipped ? ' scale(1,-1)' : '';
         return `<g transform="translate(${door.x},${door.y}) rotate(${door.rotation})${flipScale}" class="door-element" data-door-id="${door.id}">
   <rect x="${-wch}" y="${-wch/2}" width="${w+2*wch}" height="${wch}" fill="#FFFFFF" stroke="none"/>
-  <line x1="0" y1="0" x2="${w}" y2="0" stroke="#000000" stroke-width="1" fill="none"/>
-  <path d="M ${w},0 A ${w},${w} 0 0,1 0,${-w}" fill="none" stroke="#000000" stroke-width="0.5"/>
-  <circle cx="0" cy="0" r="1.5" fill="#000000"/>
+  <line x1="0" y1="0" x2="${w}" y2="0" stroke="#000000" stroke-width="${sw}" fill="none"/>
+  <path d="M ${w},0 A ${w},${w} 0 0,1 0,${-w}" fill="none" stroke="#000000" stroke-width="${sw*0.5}"/>
+  <circle cx="0" cy="0" r="${sw}" fill="#000000"/>
 </g>`;
       }).join('\n');
 
@@ -621,7 +678,7 @@ export default function SvgEditor({
         const d = wall.curved
           ? `M ${wall.x1},${wall.y1} Q ${wall.cpx},${wall.cpy} ${wall.x2},${wall.y2}`
           : `M ${wall.x1},${wall.y1} L ${wall.x2},${wall.y2}`;
-        return `<path d="${d}" stroke="#1a1a1a" stroke-width="${wallStroke}" stroke-linecap="round" fill="none" class="wall-element" data-wall-id="${wall.id}"/>`;
+        return `<path d="${d}" stroke="#1a1a1a" stroke-width="${sw}" stroke-linecap="round" fill="none" class="wall-element" data-wall-id="${wall.id}"/>`;
       }).join('\n');
 
       // Windows SVG
@@ -630,8 +687,8 @@ export default function SvgEditor({
         const flipScale = win.flipped ? ' scale(1,-1)' : '';
         return `<g transform="translate(${win.x},${win.y}) rotate(${win.rotation})${flipScale}" class="window-element" data-window-id="${win.id}">
   <rect x="${-wch}" y="${-wch/2}" width="${w+2*wch}" height="${wch}" fill="#FFFFFF" stroke="none"/>
-  <rect x="0" y="${-wch/2}" width="${w}" height="${wch}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${wallStroke}"/>
-  <line x1="0" y1="0" x2="${w}" y2="0" stroke="#1a1a1a" stroke-width="0.8"/>
+  <rect x="0" y="${-wch/2}" width="${w}" height="${wch}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${sw}"/>
+  <line x1="0" y1="0" x2="${w}" y2="0" stroke="#1a1a1a" stroke-width="${sw*0.5}"/>
 </g>`;
       }).join('\n');
 
@@ -640,9 +697,9 @@ export default function SvgEditor({
         const rw = robe.width;
         const rl = robe.length;
         return `<g transform="translate(${robe.x},${robe.y}) rotate(${robe.rotation})" class="robe-element" data-robe-id="${robe.id}">
-  <rect x="0" y="0" width="${rl}" height="${rw}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${wallStroke}"/>
-  <line x1="0" y1="0" x2="${rl}" y2="${rw}" stroke="#1a1a1a" stroke-width="0.8"/>
-  <line x1="${rl}" y1="0" x2="0" y2="${rw}" stroke="#1a1a1a" stroke-width="0.8"/>
+  <rect x="0" y="0" width="${rl}" height="${rw}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${sw}"/>
+  <line x1="0" y1="0" x2="${rl}" y2="${rw}" stroke="#1a1a1a" stroke-width="${sw*0.5}"/>
+  <line x1="${rl}" y1="0" x2="0" y2="${rw}" stroke="#1a1a1a" stroke-width="${sw*0.5}"/>
 </g>`;
       }).join('\n');
 
@@ -759,7 +816,7 @@ export default function SvgEditor({
                     <path
                       d={pathD}
                       stroke="transparent"
-                      strokeWidth={Math.max(wallStroke + 12, 18)}
+                      strokeWidth={Math.max(scaledWallStroke + 12, 18)}
                       fill="none"
                       style={{ cursor: activeTool === 'wall-erase' ? 'not-allowed' : 'grab' }}
                       onClick={e => handleElementClick(e, 'wall', wall.id)}
@@ -769,7 +826,7 @@ export default function SvgEditor({
                     <path
                       d={pathD}
                       stroke={sel ? '#2563eb' : '#1a1a1a'}
-                      strokeWidth={wallStroke}
+                      strokeWidth={scaledWallStroke}
                       strokeLinecap="round"
                       fill="none"
                       pointerEvents="none"
@@ -777,7 +834,7 @@ export default function SvgEditor({
                     {sel && (
                       <>
                         {/* Selection dashes */}
-                        <path d={pathD} stroke="#93c5fd" strokeWidth={wallStroke + 4} strokeDasharray="8,4" fill="none" opacity={0.4} pointerEvents="none" />
+                        <path d={pathD} stroke="#93c5fd" strokeWidth={scaledWallStroke + 4} strokeDasharray="8,4" fill="none" opacity={0.4} pointerEvents="none" />
                         {/* Endpoint handles */}
                         <circle cx={wall.x1} cy={wall.y1} r={6} fill="#2563eb" stroke="#fff" strokeWidth={1.5} style={{ cursor: 'move' }} onMouseDown={e => startDragWallEp(e, wall.id, 'ep1')} />
                         <circle cx={wall.x2} cy={wall.y2} r={6} fill="#2563eb" stroke="#fff" strokeWidth={1.5} style={{ cursor: 'move' }} onMouseDown={e => startDragWallEp(e, wall.id, 'ep2')} />
@@ -803,7 +860,7 @@ export default function SvgEditor({
                 <line
                   x1={wallStart.x} y1={wallStart.y}
                   x2={cursorPos.x}  y2={cursorPos.y}
-                  stroke="#2563eb" strokeWidth={wallStroke} strokeDasharray="8,4" strokeLinecap="round" opacity={0.7}
+                  stroke="#2563eb" strokeWidth={scaledWallStroke} strokeDasharray="8,4" strokeLinecap="round" opacity={0.7}
                 />
                 <circle cx={wallStart.x} cy={wallStart.y} r={5} fill="#2563eb" stroke="#fff" strokeWidth={1.5} />
                 <circle cx={cursorPos.x} cy={cursorPos.y} r={4} fill="none" stroke="#2563eb" strokeWidth={1.5} opacity={0.6} />
@@ -814,7 +871,7 @@ export default function SvgEditor({
             <g id="windows-overlay">
               {placedWindows.map(win => {
                 const w = win.width;
-                const wch = wallClearHeight;
+                const wch = scaledWallClear;
                 const sel = selectedEl?.kind === 'window' && selectedEl.id === win.id;
                 const flipScale = win.flipped ? ' scale(1,-1)' : '';
                 return (
@@ -835,10 +892,10 @@ export default function SvgEditor({
                       width={w} height={wch}
                       fill="#e8f4f8"
                       stroke={sel ? '#2563eb' : '#1a1a1a'}
-                      strokeWidth={sel ? 1.5 : wallStroke}
+                      strokeWidth={sel ? 1.5 : scaledWallStroke}
                     />
                     {/* Centre pane line */}
-                    <line x1={0} y1={0} x2={w} y2={0} stroke={sel ? '#2563eb' : '#555'} strokeWidth={0.8} />
+                    <line x1={0} y1={0} x2={w} y2={0} stroke={sel ? '#2563eb' : '#555'} strokeWidth={scaledWallStroke * 0.5} />
                   </g>
                 );
               })}
@@ -860,12 +917,12 @@ export default function SvgEditor({
                   >
                     {sel && <rect x={-4} y={-4} width={rl + 8} height={rw + 8} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="5,3" rx={2} />}
                     {/* Body */}
-                    <rect x={0} y={0} width={rl} height={rw} fill="#f5f0e8" stroke={sel ? '#2563eb' : '#1a1a1a'} strokeWidth={sel ? 1.5 : wallStroke} />
+                    <rect x={0} y={0} width={rl} height={rw} fill="#f5f0e8" stroke={sel ? '#2563eb' : '#1a1a1a'} strokeWidth={sel ? 1.5 : scaledWallStroke} />
                     {/* Cross-hatch diagonals */}
-                    <line x1={0} y1={0} x2={rl} y2={rw} stroke={sel ? '#2563eb' : '#888'} strokeWidth={0.8} />
-                    <line x1={rl} y1={0} x2={0} y2={rw} stroke={sel ? '#2563eb' : '#888'} strokeWidth={0.8} />
+                    <line x1={0} y1={0} x2={rl} y2={rw} stroke={sel ? '#2563eb' : '#888'} strokeWidth={scaledWallStroke * 0.5} />
+                    <line x1={rl} y1={0} x2={0} y2={rw} stroke={sel ? '#2563eb' : '#888'} strokeWidth={scaledWallStroke * 0.5} />
                     {/* Hanging rod line */}
-                    <line x1={0} y1={rw/2} x2={rl} y2={rw/2} stroke={sel ? '#2563eb' : '#aaa'} strokeWidth={0.5} strokeDasharray="4,3" />
+                    <line x1={0} y1={rw/2} x2={rl} y2={rw/2} stroke={sel ? '#2563eb' : '#aaa'} strokeWidth={scaledWallStroke * 0.3} strokeDasharray="4,3" />
                   </g>
                 );
               })}
@@ -875,7 +932,7 @@ export default function SvgEditor({
             <g id="doors-overlay">
               {placedDoors.map(door => {
                 const w = door.width;
-                const wch = wallClearHeight;
+                const wch = scaledWallClear;
                 const sel = selectedEl?.kind === 'door' && selectedEl.id === door.id;
                 const flipScale = door.flipped ? ' scale(1,-1)' : '';
                 return (
@@ -945,6 +1002,33 @@ export default function SvgEditor({
               {toolBtn('wall-erase', 'Erase Wall',  Eraser,       'bg-red-600')}
               {toolBtn('window',     'Window',      Square,       'bg-cyan-600')}
               {toolBtn('robe',       'Robe',        Columns,      'bg-amber-600')}
+            </div>
+          </div>
+
+          {/* Size scale – override auto-detected scale if elements look too small/large */}
+          <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-gray-400 text-xs font-medium uppercase tracking-wider">Element Size</h4>
+              <div className="flex items-center gap-2">
+                <span className="text-white text-xs font-mono">{Math.round(sizeScale * 100)}%</span>
+                {sizeScale !== 1.0 && (
+                  <button
+                    onClick={() => setSizeScale(1.0)}
+                    className="text-[10px] text-gray-500 hover:text-gray-300 underline transition"
+                  >reset</button>
+                )}
+              </div>
+            </div>
+            <input
+              type="range" min={0.1} max={10} step={0.05}
+              value={sizeScale}
+              onChange={e => setSizeScale(parseFloat(e.target.value))}
+              className="w-full accent-purple-500"
+            />
+            <div className="flex justify-between text-[10px] text-gray-500 mt-1">
+              <span>Smaller</span>
+              <span className="text-gray-600">If elements look too small or large, drag to adjust</span>
+              <span>Larger</span>
             </div>
           </div>
 
