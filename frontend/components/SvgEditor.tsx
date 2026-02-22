@@ -21,6 +21,7 @@ import {
   Eraser,
   Square,
   Columns,
+  UtensilsCrossed,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -64,12 +65,26 @@ export interface PlacedRobe {
   width: number;
 }
 
+export type KitchenSubtype = 'island' | 'bench' | 'fridge' | 'sink' | 'cooktop' | 'dishwasher';
+
+export interface PlacedKitchen {
+  id: number;
+  x: number; y: number;
+  rotation: number;
+  subtype: KitchenSubtype;
+  /** primary dimension (length along x-axis) in SVG units */
+  length: number;
+  /** secondary dimension (depth along y-axis) in SVG units */
+  depth: number;
+}
+
 export interface SvgEditorSaveResult {
   previewImageUrl: string;
   doors: PlacedDoor[];
   walls: PlacedWall[];
   windows: PlacedWindow[];
   robes: PlacedRobe[];
+  kitchens: PlacedKitchen[];
   updatedAt: string;
 }
 
@@ -81,6 +96,7 @@ export interface SvgEditorProps {
   existingWalls?: PlacedWall[];
   existingWindows?: PlacedWindow[];
   existingRobes?: PlacedRobe[];
+  existingKitchens?: PlacedKitchen[];
   envelopeWidth?: number;
   onSave: (result: SvgEditorSaveResult) => void;
   onCancel: () => void;
@@ -95,18 +111,20 @@ type DragTarget =
   | { kind: 'wall-ep2';   id: number }
   | { kind: 'wall-mid';   id: number }
   | { kind: 'window';     id: number; ox: number; oy: number }
-  | { kind: 'robe';       id: number; ox: number; oy: number };
+  | { kind: 'robe';       id: number; ox: number; oy: number }
+  | { kind: 'kitchen';    id: number; ox: number; oy: number };
 
 // ── Undo history ───────────────────────────────────────────────────────────────
 
 type HistoryEntry =
-  | { type: 'door';   element: PlacedDoor }
-  | { type: 'wall';   element: PlacedWall }
-  | { type: 'window'; element: PlacedWindow }
-  | { type: 'robe';   element: PlacedRobe };
+  | { type: 'door';    element: PlacedDoor }
+  | { type: 'wall';    element: PlacedWall }
+  | { type: 'window';  element: PlacedWindow }
+  | { type: 'robe';    element: PlacedRobe }
+  | { type: 'kitchen'; element: PlacedKitchen };
 
-type ActiveTool = 'select' | 'door' | 'wall' | 'window' | 'robe';
-type ElementKind = 'door' | 'wall' | 'window' | 'robe';
+type ActiveTool = 'select' | 'door' | 'wall' | 'window' | 'robe' | 'kitchen';
+type ElementKind = 'door' | 'wall' | 'window' | 'robe' | 'kitchen';
 type SelectedEl = { kind: ElementKind; id: number } | null;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -119,6 +137,111 @@ function distPointToSegment(px: number, py: number, x1: number, y1: number, x2: 
   return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
 }
 
+// ── Kitchen symbol renderer ────────────────────────────────────────────────────
+// Returns SVG JSX for a given kitchen item. Coordinates are local (origin = top-left of item).
+
+function KitchenSymbol({ item, sw, sel }: { item: PlacedKitchen; sw: number; sel: boolean }) {
+  const { subtype, length: L, depth: D } = item;
+  const stroke = sel ? '#2563eb' : '#1a1a1a';
+  const thin = sw * 0.35;
+  const thick = sw * 0.55;
+
+  switch (subtype) {
+    case 'island':
+    case 'bench':
+      return (
+        <>
+          <rect x={0} y={0} width={L} height={D} fill="#FFFFFF" stroke={stroke} strokeWidth={thick} />
+          {/* Worktop edge shadow line */}
+          <rect x={D * 0.12} y={D * 0.12} width={L - D * 0.24} height={D - D * 0.24}
+            fill="none" stroke={stroke} strokeWidth={thin * 0.6} opacity={0.4} />
+        </>
+      );
+
+    case 'fridge': {
+      const r = Math.min(L, D) * 0.08;
+      return (
+        <>
+          <rect x={0} y={0} width={L} height={D} fill="#FFFFFF" stroke={stroke} strokeWidth={thick} rx={r} />
+          {/* Handle */}
+          <line x1={L * 0.2} y1={D * 0.08} x2={L * 0.8} y2={D * 0.08} stroke={stroke} strokeWidth={thin * 1.2} strokeLinecap="round" />
+          {/* Hinge dot */}
+          <circle cx={L * 0.08} cy={D * 0.5} r={thin} fill={stroke} />
+          {/* Door seal line */}
+          <line x1={L * 0.06} y1={D * 0.15} x2={L * 0.94} y2={D * 0.15} stroke={stroke} strokeWidth={thin * 0.5} strokeDasharray={`${thin * 2},${thin}`} />
+        </>
+      );
+    }
+
+    case 'sink': {
+      // Single or double basin based on aspect ratio
+      const dbl = L > D * 1.5;
+      const bw = dbl ? L * 0.42 : L * 0.72;
+      const bh = D * 0.68;
+      const by = D * 0.16;
+      return (
+        <>
+          <rect x={0} y={0} width={L} height={D} fill="#FFFFFF" stroke={stroke} strokeWidth={thick} />
+          {dbl ? (
+            <>
+              <rect x={L * 0.04} y={by} width={bw} height={bh} fill="none" stroke={stroke} strokeWidth={thin} rx={thin} />
+              <rect x={L * 0.54} y={by} width={bw} height={bh} fill="none" stroke={stroke} strokeWidth={thin} rx={thin} />
+              <circle cx={L * 0.25} cy={D * 0.5} r={thin * 1.5} fill={stroke} />
+              <circle cx={L * 0.75} cy={D * 0.5} r={thin * 1.5} fill={stroke} />
+            </>
+          ) : (
+            <>
+              <rect x={(L - bw) / 2} y={by} width={bw} height={bh} fill="none" stroke={stroke} strokeWidth={thin} rx={thin} />
+              <circle cx={L / 2} cy={D * 0.5} r={thin * 1.5} fill={stroke} />
+            </>
+          )}
+          {/* Tap */}
+          <line x1={L * 0.45} y1={D * 0.05} x2={L * 0.55} y2={D * 0.05} stroke={stroke} strokeWidth={thin * 1.2} strokeLinecap="round" />
+          <line x1={L * 0.5}  y1={D * 0.05} x2={L * 0.5}  y2={by}       stroke={stroke} strokeWidth={thin * 0.8} />
+        </>
+      );
+    }
+
+    case 'cooktop': {
+      // 4 burner circles
+      const bx = [L * 0.25, L * 0.75, L * 0.25, L * 0.75];
+      const by2 = [D * 0.28, D * 0.28, D * 0.72, D * 0.72];
+      const r1 = Math.min(L, D) * 0.18;
+      const r2 = r1 * 0.55;
+      return (
+        <>
+          <rect x={0} y={0} width={L} height={D} fill="#FFFFFF" stroke={stroke} strokeWidth={thick} />
+          {bx.map((bxi, i) => (
+            <g key={i}>
+              <circle cx={bxi} cy={by2[i]} r={r1} fill="none" stroke={stroke} strokeWidth={thin} />
+              <circle cx={bxi} cy={by2[i]} r={r2} fill="none" stroke={stroke} strokeWidth={thin * 0.6} />
+              <circle cx={bxi} cy={by2[i]} r={thin * 0.9} fill={stroke} />
+            </g>
+          ))}
+        </>
+      );
+    }
+
+    case 'dishwasher': {
+      return (
+        <>
+          <rect x={0} y={0} width={L} height={D} fill="#FFFFFF" stroke={stroke} strokeWidth={thick} />
+          {/* Control panel strip at top */}
+          <rect x={0} y={0} width={L} height={D * 0.12} fill={sel ? 'rgba(37,99,235,0.08)' : 'rgba(0,0,0,0.04)'} stroke={stroke} strokeWidth={thin * 0.5} />
+          {/* Horizontal rack lines */}
+          {[0.3, 0.5, 0.7, 0.88].map((t, i) => (
+            <line key={i} x1={L * 0.08} y1={D * t} x2={L * 0.92} y2={D * t} stroke={stroke} strokeWidth={thin * 0.5} strokeDasharray={`${thin * 3},${thin * 1.5}`} />
+          ))}
+          {/* Handle */}
+          <line x1={L * 0.25} y1={D * 0.06} x2={L * 0.75} y2={D * 0.06} stroke={stroke} strokeWidth={thin * 1.2} strokeLinecap="round" />
+        </>
+      );
+    }
+
+    default: return null;
+  }
+}
+
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function SvgEditor({
@@ -129,6 +252,7 @@ export default function SvgEditor({
   existingWalls,
   existingWindows,
   existingRobes,
+  existingKitchens,
   envelopeWidth = 12,
   onSave,
   onCancel,
@@ -147,16 +271,21 @@ export default function SvgEditor({
   const nudgeStep = useRef(1);
 
   // Per-type state
-  const [placedDoors,   setPlacedDoors]   = useState<PlacedDoor[]>([]);
-  const [placedWalls,   setPlacedWalls]   = useState<PlacedWall[]>([]);
-  const [placedWindows, setPlacedWindows] = useState<PlacedWindow[]>([]);
-  const [placedRobes,   setPlacedRobes]   = useState<PlacedRobe[]>([]);
+  const [placedDoors,    setPlacedDoors]    = useState<PlacedDoor[]>([]);
+  const [placedWalls,    setPlacedWalls]    = useState<PlacedWall[]>([]);
+  const [placedWindows,  setPlacedWindows]  = useState<PlacedWindow[]>([]);
+  const [placedRobes,    setPlacedRobes]    = useState<PlacedRobe[]>([]);
+  const [placedKitchens, setPlacedKitchens] = useState<PlacedKitchen[]>([]);
 
   // IDs
-  const [nextDoorId,   setNextDoorId]   = useState(1);
-  const [nextWallId,   setNextWallId]   = useState(1);
-  const [nextWindowId, setNextWindowId] = useState(1);
-  const [nextRobeId,   setNextRobeId]   = useState(1);
+  const [nextDoorId,    setNextDoorId]    = useState(1);
+  const [nextWallId,    setNextWallId]    = useState(1);
+  const [nextWindowId,  setNextWindowId]  = useState(1);
+  const [nextRobeId,    setNextRobeId]    = useState(1);
+  const [nextKitchenId, setNextKitchenId] = useState(1);
+
+  // Active kitchen sub-type for placement
+  const [kitchenSubtype, setKitchenSubtype] = useState<KitchenSubtype>('island');
 
   // Default sizes
   const [doorWidth,   setDoorWidth]   = useState(40);   // ~820mm
@@ -164,6 +293,16 @@ export default function SvgEditor({
   const [robeFixedW,  setRobeFixedW]  = useState(30);   // fixed 600mm
   const [robeLength,  setRobeLength]  = useState(80);   // default ~1600mm
   const [wallStroke,  setWallStroke]  = useState(5);    // SVG stroke-width
+
+  // Kitchen default sizes (set from upm in init)
+  const [kitchenDefaults, setKitchenDefaults] = useState<Record<KitchenSubtype, { length: number; depth: number }>>({
+    island:      { length: 96, depth: 36 },
+    bench:       { length: 96, depth: 24 },
+    fridge:      { length: 28, depth: 28 },
+    sink:        { length: 36, depth: 20 },
+    cooktop:     { length: 24, depth: 24 },
+    dishwasher:  { length: 24, depth: 24 },
+  });
 
   // Active tool & selection
   const [activeTool, setActiveTool] = useState<ActiveTool>('door');
@@ -342,13 +481,24 @@ export default function SvgEditor({
           }
 
           nudgeStep.current = Math.max(1, Math.round(upm * 0.025));
+
+          // Kitchen defaults scaled to upm
+          setKitchenDefaults({
+            island:     { length: Math.round(upm * 2.4), depth: Math.round(upm * 0.9) },
+            bench:      { length: Math.round(upm * 2.4), depth: Math.round(upm * 0.6) },
+            fridge:     { length: Math.round(upm * 0.7), depth: Math.round(upm * 0.7) },
+            sink:       { length: Math.round(upm * 0.9), depth: Math.round(upm * 0.5) },
+            cooktop:    { length: Math.round(upm * 0.6), depth: Math.round(upm * 0.6) },
+            dishwasher: { length: Math.round(upm * 0.6), depth: Math.round(upm * 0.6) },
+          });
         }
 
         // Seed existing elements
-        if (existingDoors?.length)   { setPlacedDoors(existingDoors);   setNextDoorId(Math.max(...existingDoors.map(d => d.id)) + 1); }
-        if (existingWalls?.length)   { setPlacedWalls(existingWalls);   setNextWallId(Math.max(...existingWalls.map(w => w.id)) + 1); }
-        if (existingWindows?.length) { setPlacedWindows(existingWindows); setNextWindowId(Math.max(...existingWindows.map(w => w.id)) + 1); }
-        if (existingRobes?.length)   { setPlacedRobes(existingRobes);   setNextRobeId(Math.max(...existingRobes.map(r => r.id)) + 1); }
+        if (existingDoors?.length)    { setPlacedDoors(existingDoors);       setNextDoorId(Math.max(...existingDoors.map(d => d.id)) + 1); }
+        if (existingWalls?.length)    { setPlacedWalls(existingWalls);       setNextWallId(Math.max(...existingWalls.map(w => w.id)) + 1); }
+        if (existingWindows?.length)  { setPlacedWindows(existingWindows);   setNextWindowId(Math.max(...existingWindows.map(w => w.id)) + 1); }
+        if (existingRobes?.length)    { setPlacedRobes(existingRobes);       setNextRobeId(Math.max(...existingRobes.map(r => r.id)) + 1); }
+        if (existingKitchens?.length) { setPlacedKitchens(existingKitchens); setNextKitchenId(Math.max(...existingKitchens.map(k => k.id)) + 1); }
 
       } catch (err) {
         console.error('SvgEditor: failed to load SVG', err);
@@ -455,9 +605,19 @@ export default function SvgEditor({
       setAddHistory(prev => [...prev, { type: 'robe', element: newRobe }]);
       return;
     }
-  }, [activeTool, nextDoorId, nextWallId, nextWindowId, nextRobeId,
-      doorWidth, windowWidth, robeLength, robeFixedW,
-      wallStart, wallStroke, placedWalls, selectedEl, screenToSvg]);
+
+    if (activeTool === 'kitchen') {
+      const def = kitchenDefaults[kitchenSubtype];
+      const newItem: PlacedKitchen = { id: nextKitchenId, x: cx, y: cy, rotation: 0, subtype: kitchenSubtype, length: def.length, depth: def.depth };
+      setPlacedKitchens(prev => [...prev, newItem]);
+      setNextKitchenId(p => p + 1);
+      setSelectedEl({ kind: 'kitchen', id: newItem.id });
+      setAddHistory(prev => [...prev, { type: 'kitchen', element: newItem }]);
+      return;
+    }
+  }, [activeTool, nextDoorId, nextWallId, nextWindowId, nextRobeId, nextKitchenId,
+      doorWidth, windowWidth, robeLength, robeFixedW, kitchenSubtype, kitchenDefaults,
+      wallStart, wallEraseMode, eraseStart, wallStroke, placedWalls, selectedEl, screenToSvg]);
 
   // ── Element click (stops propagation) ──────────────────────────────────────
 
@@ -484,6 +644,8 @@ export default function SvgEditor({
       setPlacedWindows(prev => prev.map(w => w.id === selectedEl.id ? { ...w, rotation: (w.rotation + 90) % 360 } : w));
     } else if (selectedEl.kind === 'robe') {
       setPlacedRobes(prev => prev.map(r => r.id === selectedEl.id ? { ...r, rotation: (r.rotation + 90) % 360 } : r));
+    } else if (selectedEl.kind === 'kitchen') {
+      setPlacedKitchens(prev => prev.map(k => k.id === selectedEl.id ? { ...k, rotation: (k.rotation + 90) % 360 } : k));
     }
   }, [selectedEl]);
 
@@ -512,20 +674,22 @@ export default function SvgEditor({
 
   const handleDeleteSelected = useCallback(() => {
     if (!selectedEl) return;
-    if (selectedEl.kind === 'door')   setPlacedDoors(prev => prev.filter(d => d.id !== selectedEl.id));
-    if (selectedEl.kind === 'wall')   setPlacedWalls(prev => prev.filter(w => w.id !== selectedEl.id));
-    if (selectedEl.kind === 'window') setPlacedWindows(prev => prev.filter(w => w.id !== selectedEl.id));
-    if (selectedEl.kind === 'robe')   setPlacedRobes(prev => prev.filter(r => r.id !== selectedEl.id));
+    if (selectedEl.kind === 'door')    setPlacedDoors(prev => prev.filter(d => d.id !== selectedEl.id));
+    if (selectedEl.kind === 'wall')    setPlacedWalls(prev => prev.filter(w => w.id !== selectedEl.id));
+    if (selectedEl.kind === 'window')  setPlacedWindows(prev => prev.filter(w => w.id !== selectedEl.id));
+    if (selectedEl.kind === 'robe')    setPlacedRobes(prev => prev.filter(r => r.id !== selectedEl.id));
+    if (selectedEl.kind === 'kitchen') setPlacedKitchens(prev => prev.filter(k => k.id !== selectedEl.id));
     setSelectedEl(null);
   }, [selectedEl]);
 
   const handleUndo = useCallback(() => {
     if (addHistory.length === 0) return;
     const last = addHistory[addHistory.length - 1];
-    if (last.type === 'door')   setPlacedDoors(prev => prev.filter(d => d.id !== last.element.id));
-    if (last.type === 'wall')   setPlacedWalls(prev => prev.filter(w => w.id !== last.element.id));
-    if (last.type === 'window') setPlacedWindows(prev => prev.filter(w => w.id !== last.element.id));
-    if (last.type === 'robe')   setPlacedRobes(prev => prev.filter(r => r.id !== last.element.id));
+    if (last.type === 'door')    setPlacedDoors(prev => prev.filter(d => d.id !== last.element.id));
+    if (last.type === 'wall')    setPlacedWalls(prev => prev.filter(w => w.id !== last.element.id));
+    if (last.type === 'window')  setPlacedWindows(prev => prev.filter(w => w.id !== last.element.id));
+    if (last.type === 'robe')    setPlacedRobes(prev => prev.filter(r => r.id !== last.element.id));
+    if (last.type === 'kitchen') setPlacedKitchens(prev => prev.filter(k => k.id !== last.element.id));
     if (selectedEl?.id === last.element.id) setSelectedEl(null);
     setAddHistory(prev => prev.slice(0, -1));
   }, [addHistory, selectedEl]);
@@ -561,6 +725,8 @@ export default function SvgEditor({
         setPlacedWindows(prev => prev.map(w => w.id === selectedEl.id ? { ...w, x: w.x + dx, y: w.y + dy } : w));
       } else if (selectedEl.kind === 'robe') {
         setPlacedRobes(prev => prev.map(r => r.id === selectedEl.id ? { ...r, x: r.x + dx, y: r.y + dy } : r));
+      } else if (selectedEl.kind === 'kitchen') {
+        setPlacedKitchens(prev => prev.map(k => k.id === selectedEl.id ? { ...k, x: k.x + dx, y: k.y + dy } : k));
       }
     };
     window.addEventListener('keydown', onKey);
@@ -587,6 +753,8 @@ export default function SvgEditor({
       setPlacedWindows(prev => prev.map(w => w.id === drag.id ? { ...w, x: Math.round(cx - drag.ox), y: Math.round(cy - drag.oy) } : w));
     } else if (drag.kind === 'robe') {
       setPlacedRobes(prev => prev.map(r => r.id === drag.id ? { ...r, x: Math.round(cx - drag.ox), y: Math.round(cy - drag.oy) } : r));
+    } else if (drag.kind === 'kitchen') {
+      setPlacedKitchens(prev => prev.map(k => k.id === drag.id ? { ...k, x: Math.round(cx - drag.ox), y: Math.round(cy - drag.oy) } : k));
     } else if (drag.kind === 'wall-body') {
       const ddx = Math.round(cx - drag.grabX);
       const ddy = Math.round(cy - drag.grabY);
@@ -645,6 +813,17 @@ export default function SvgEditor({
     wasDragged.current = false;
   }, [placedRobes, screenToSvg]);
 
+  const startDragKitchen = useCallback((e: React.MouseEvent, id: number) => {
+    e.stopPropagation(); e.preventDefault();
+    const svgPt = screenToSvg(e.clientX, e.clientY);
+    if (!svgPt) return;
+    const item = placedKitchens.find(k => k.id === id);
+    if (!item) return;
+    setSelectedEl({ kind: 'kitchen', id });
+    activeDrag.current = { kind: 'kitchen', id, ox: svgPt.x - item.x, oy: svgPt.y - item.y };
+    wasDragged.current = false;
+  }, [placedKitchens, screenToSvg]);
+
   const startDragWallBody = useCallback((e: React.MouseEvent, id: number) => {
     e.stopPropagation(); e.preventDefault();
     const svgPt = screenToSvg(e.clientX, e.clientY);
@@ -670,10 +849,11 @@ export default function SvgEditor({
 
   // ── Robe length adjustment ──────────────────────────────────────────────────
 
-  const selectedRobe = selectedEl?.kind === 'robe' ? placedRobes.find(r => r.id === selectedEl.id) : null;
-  const selectedWall = selectedEl?.kind === 'wall' ? placedWalls.find(w => w.id === selectedEl.id) : null;
-  const selectedWindow = selectedEl?.kind === 'window' ? placedWindows.find(w => w.id === selectedEl.id) : null;
-  const selectedDoor = selectedEl?.kind === 'door' ? placedDoors.find(d => d.id === selectedEl.id) : null;
+  const selectedRobe    = selectedEl?.kind === 'robe'    ? placedRobes.find(r => r.id === selectedEl.id)    : null;
+  const selectedWall    = selectedEl?.kind === 'wall'    ? placedWalls.find(w => w.id === selectedEl.id)    : null;
+  const selectedWindow  = selectedEl?.kind === 'window'  ? placedWindows.find(w => w.id === selectedEl.id)  : null;
+  const selectedDoor    = selectedEl?.kind === 'door'    ? placedDoors.find(d => d.id === selectedEl.id)    : null;
+  const selectedKitchen = selectedEl?.kind === 'kitchen' ? placedKitchens.find(k => k.id === selectedEl.id) : null;
 
   // ── Save ────────────────────────────────────────────────────────────────────
 
@@ -734,15 +914,57 @@ export default function SvgEditor({
 </g>`;
       }).join('\n');
 
+      // Kitchen SVG
+      const kitchenSvg = placedKitchens.map(k => {
+        const { subtype, length: L, depth: D } = k;
+        const thin = sw * 0.35, thick = sw * 0.55;
+        let inner = '';
+        if (subtype === 'island' || subtype === 'bench') {
+          inner = `<rect x="${D*0.12}" y="${D*0.12}" width="${L-D*0.24}" height="${D-D*0.24}" fill="none" stroke="#1a1a1a" stroke-width="${thin*0.6}" opacity="0.4"/>`;
+        } else if (subtype === 'fridge') {
+          const r = Math.min(L,D)*0.08;
+          inner = `<line x1="${L*0.2}" y1="${D*0.08}" x2="${L*0.8}" y2="${D*0.08}" stroke="#1a1a1a" stroke-width="${thin*1.2}" stroke-linecap="round"/>
+  <circle cx="${L*0.08}" cy="${D*0.5}" r="${thin}" fill="#1a1a1a"/>
+  <line x1="${L*0.06}" y1="${D*0.15}" x2="${L*0.94}" y2="${D*0.15}" stroke="#1a1a1a" stroke-width="${thin*0.5}" stroke-dasharray="${thin*2},${thin}"/>`;
+        } else if (subtype === 'sink') {
+          const dbl = L > D*1.5, bw = dbl ? L*0.42 : L*0.72, bh = D*0.68, by2 = D*0.16;
+          if (dbl) {
+            inner = `<rect x="${L*0.04}" y="${by2}" width="${bw}" height="${bh}" fill="none" stroke="#1a1a1a" stroke-width="${thin}" rx="${thin}"/>
+  <rect x="${L*0.54}" y="${by2}" width="${bw}" height="${bh}" fill="none" stroke="#1a1a1a" stroke-width="${thin}" rx="${thin}"/>
+  <circle cx="${L*0.25}" cy="${D*0.5}" r="${thin*1.5}" fill="#1a1a1a"/>
+  <circle cx="${L*0.75}" cy="${D*0.5}" r="${thin*1.5}" fill="#1a1a1a"/>`;
+          } else {
+            inner = `<rect x="${(L-bw)/2}" y="${by2}" width="${bw}" height="${bh}" fill="none" stroke="#1a1a1a" stroke-width="${thin}" rx="${thin}"/>
+  <circle cx="${L/2}" cy="${D*0.5}" r="${thin*1.5}" fill="#1a1a1a"/>`;
+          }
+          inner += `\n  <line x1="${L*0.45}" y1="${D*0.05}" x2="${L*0.55}" y2="${D*0.05}" stroke="#1a1a1a" stroke-width="${thin*1.2}" stroke-linecap="round"/>
+  <line x1="${L*0.5}" y1="${D*0.05}" x2="${L*0.5}" y2="${D*0.16}" stroke="#1a1a1a" stroke-width="${thin*0.8}"/>`;
+        } else if (subtype === 'cooktop') {
+          const bxs = [L*0.25,L*0.75,L*0.25,L*0.75], bys = [D*0.28,D*0.28,D*0.72,D*0.72], r1=Math.min(L,D)*0.18, r2=r1*0.55;
+          inner = bxs.map((bx,i)=>`<circle cx="${bx}" cy="${bys[i]}" r="${r1}" fill="none" stroke="#1a1a1a" stroke-width="${thin}"/>
+  <circle cx="${bx}" cy="${bys[i]}" r="${r2}" fill="none" stroke="#1a1a1a" stroke-width="${thin*0.6}"/>
+  <circle cx="${bx}" cy="${bys[i]}" r="${thin*0.9}" fill="#1a1a1a"/>`).join('\n  ');
+        } else if (subtype === 'dishwasher') {
+          inner = `<rect x="0" y="0" width="${L}" height="${D*0.12}" fill="rgba(0,0,0,0.04)" stroke="#1a1a1a" stroke-width="${thin*0.5}"/>
+  ${[0.3,0.5,0.7,0.88].map(t=>`<line x1="${L*0.08}" y1="${D*t}" x2="${L*0.92}" y2="${D*t}" stroke="#1a1a1a" stroke-width="${thin*0.5}" stroke-dasharray="${thin*3},${thin*1.5}"/>`).join('\n  ')}
+  <line x1="${L*0.25}" y1="${D*0.06}" x2="${L*0.75}" y2="${D*0.06}" stroke="#1a1a1a" stroke-width="${thin*1.2}" stroke-linecap="round"/>`;
+        }
+        return `<g transform="translate(${k.x},${k.y}) rotate(${k.rotation})" class="kitchen-element" data-kitchen-id="${k.id}" data-subtype="${subtype}">
+  <rect x="0" y="0" width="${L}" height="${D}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${thick}"/>
+  ${inner}
+</g>`;
+      }).join('\n');
+
       let modifiedSvg = svgContent
         .replace(/<g\s+id="doors-layer"[\s\S]*?<\/g>\s*/g, '')
         .replace(/<g\s+id="walls-layer"[\s\S]*?<\/g>\s*/g, '')
         .replace(/<g\s+id="windows-layer"[\s\S]*?<\/g>\s*/g, '')
-        .replace(/<g\s+id="robes-layer"[\s\S]*?<\/g>\s*/g, '');
+        .replace(/<g\s+id="robes-layer"[\s\S]*?<\/g>\s*/g, '')
+        .replace(/<g\s+id="kitchen-layer"[\s\S]*?<\/g>\s*/g, '');
 
       modifiedSvg = modifiedSvg.replace(
         '</svg>',
-        `<g id="walls-layer">\n${wallsSvg}\n</g>\n<g id="windows-layer">\n${windowsSvg}\n</g>\n<g id="robes-layer">\n${robesSvg}\n</g>\n<g id="doors-layer">\n${doorsSvg}\n</g>\n</svg>`,
+        `<g id="walls-layer">\n${wallsSvg}\n</g>\n<g id="windows-layer">\n${windowsSvg}\n</g>\n<g id="robes-layer">\n${robesSvg}\n</g>\n<g id="kitchen-layer">\n${kitchenSvg}\n</g>\n<g id="doors-layer">\n${doorsSvg}\n</g>\n</svg>`,
       );
 
       const token = localStorage.getItem('auth_token') || localStorage.getItem('access_token');
@@ -760,7 +982,7 @@ export default function SvgEditor({
       }
 
       const result = await res.json();
-      onSave({ previewImageUrl: result.preview_image_url, doors: placedDoors, walls: placedWalls, windows: placedWindows, robes: placedRobes, updatedAt: new Date().toISOString() });
+      onSave({ previewImageUrl: result.preview_image_url, doors: placedDoors, walls: placedWalls, windows: placedWindows, robes: placedRobes, kitchens: placedKitchens, updatedAt: new Date().toISOString() });
     } catch (err) {
       console.error('SvgEditor save failed:', err);
       alert('Failed to save changes. Please try again.');
@@ -786,11 +1008,11 @@ export default function SvgEditor({
 
   const cursorStyle =
     activeDrag.current ? 'grabbing' :
-    activeTool === 'door' || activeTool === 'window' || activeTool === 'robe' ? 'crosshair' :
+    activeTool === 'door' || activeTool === 'window' || activeTool === 'robe' || activeTool === 'kitchen' ? 'crosshair' :
     activeTool === 'wall' ? (wallEraseMode ? 'cell' : wallStart ? 'crosshair' : 'cell') :
     'default';
 
-  const totalElements = placedDoors.length + placedWalls.length + placedWindows.length + placedRobes.length;
+  const totalElements = placedDoors.length + placedWalls.length + placedWindows.length + placedRobes.length + placedKitchens.length;
 
   // ── Tool button helper ──────────────────────────────────────────────────────
 
@@ -972,6 +1194,25 @@ export default function SvgEditor({
               })}
             </g>
 
+            {/* ── Kitchen overlay ──────────────────────────────────────── */}
+            <g id="kitchen-overlay">
+              {placedKitchens.map(item => {
+                const sel = selectedEl?.kind === 'kitchen' && selectedEl.id === item.id;
+                return (
+                  <g
+                    key={item.id}
+                    transform={`translate(${item.x},${item.y}) rotate(${item.rotation})`}
+                    onClick={e => handleElementClick(e, 'kitchen', item.id)}
+                    onMouseDown={e => { if (activeTool === 'select') startDragKitchen(e, item.id); }}
+                    style={{ cursor: sel ? 'grab' : 'pointer' }}
+                  >
+                    {sel && <rect x={-5} y={-5} width={item.length + 10} height={item.depth + 10} fill="rgba(59,130,246,0.06)" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="6,3" rx={3} />}
+                    <KitchenSymbol item={item} sw={wallStroke} sel={sel} />
+                  </g>
+                );
+              })}
+            </g>
+
             {/* ── Doors overlay ────────────────────────────────────────── */}
             <g id="doors-overlay">
               {placedDoors.map(door => {
@@ -1011,6 +1252,7 @@ export default function SvgEditor({
               {activeTool === 'wall' && wallEraseMode && eraseStart && 'Click to finish erase stroke'}
               {activeTool === 'window' && 'Click to place a window'}
               {activeTool === 'robe' && 'Click to place a built-in robe'}
+              {activeTool === 'kitchen' && `Click to place ${kitchenSubtype}`}
             </div>
           )}
           {(activeTool === 'wall' && wallStart && totalElements > 0) || (activeTool === 'wall' && wallEraseMode && eraseStart) ? (
@@ -1041,12 +1283,35 @@ export default function SvgEditor({
           <div className="bg-white/5 rounded-xl p-4 border border-white/10">
             <h4 className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-3">Tools</h4>
             <div className="grid grid-cols-3 gap-2">
-              {toolBtn('select',     'Select',   MousePointer, 'bg-slate-600')}
-              {toolBtn('door',       'Door',     DoorOpen,     'bg-blue-600')}
-              {toolBtn('wall',       'Wall',     Minus,        'bg-violet-600')}
-              {toolBtn('window',     'Window',   Square,       'bg-cyan-600')}
-              {toolBtn('robe',       'Robe',     Columns,      'bg-amber-600')}
+              {toolBtn('select',  'Select',  MousePointer,    'bg-slate-600')}
+              {toolBtn('door',    'Door',    DoorOpen,        'bg-blue-600')}
+              {toolBtn('wall',    'Wall',    Minus,           'bg-violet-600')}
+              {toolBtn('window',  'Window',  Square,          'bg-cyan-600')}
+              {toolBtn('robe',    'Robe',    Columns,         'bg-amber-600')}
+              {toolBtn('kitchen', 'Kitchen', UtensilsCrossed, 'bg-orange-600')}
             </div>
+
+            {/* Kitchen sub-palette */}
+            {activeTool === 'kitchen' && (
+              <div className="mt-3 pt-3 border-t border-white/10">
+                <p className="text-gray-500 text-[10px] mb-2 uppercase tracking-wider">Item to place</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(['island','bench','fridge','sink','cooktop','dishwasher'] as KitchenSubtype[]).map(st => (
+                    <button
+                      key={st}
+                      onClick={() => setKitchenSubtype(st)}
+                      className={`px-2 py-1.5 rounded-md text-[11px] font-medium capitalize transition border ${
+                        kitchenSubtype === st
+                          ? 'bg-orange-600 border-orange-500 text-white'
+                          : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10'
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Context actions */}
@@ -1219,18 +1484,61 @@ export default function SvgEditor({
                   </div>
                 </div>
               )}
+
+              {/* Kitchen */}
+              {selectedKitchen && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-400">Type</span>
+                    <span className="font-mono text-white capitalize">{selectedKitchen.subtype}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-400">Rotation</span>
+                    <span className="font-mono text-white">{selectedKitchen.rotation}°</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-400">Length</span>
+                    <span className="font-mono text-white">{Math.round(selectedKitchen.length / unitsPerMeter * 1000)} mm</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-400">Depth</span>
+                    <span className="font-mono text-white">{Math.round(selectedKitchen.depth / unitsPerMeter * 1000)} mm</span>
+                  </div>
+                  <label className="block text-gray-400 text-xs mt-2">Adjust length</label>
+                  <input
+                    type="range"
+                    min={Math.round(unitsPerMeter * 0.3)} max={Math.round(unitsPerMeter * 5.0)} step={Math.round(unitsPerMeter * 0.05)}
+                    value={selectedKitchen.length}
+                    onChange={e => setPlacedKitchens(prev => prev.map(k => k.id === selectedKitchen.id ? { ...k, length: +e.target.value } : k))}
+                    className="w-full accent-orange-500"
+                  />
+                  <label className="block text-gray-400 text-xs mt-1">Adjust depth</label>
+                  <input
+                    type="range"
+                    min={Math.round(unitsPerMeter * 0.3)} max={Math.round(unitsPerMeter * 1.2)} step={Math.round(unitsPerMeter * 0.05)}
+                    value={selectedKitchen.depth}
+                    onChange={e => setPlacedKitchens(prev => prev.map(k => k.id === selectedKitchen.id ? { ...k, depth: +e.target.value } : k))}
+                    className="w-full accent-orange-400"
+                  />
+                  <div className="flex justify-between text-[10px] text-gray-500 -mt-1">
+                    <span>300 mm</span>
+                    <span>1200 mm depth</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {/* Elements summary */}
           <div className="bg-white/5 rounded-xl p-4 border border-white/10">
             <h4 className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-3">Placed Elements</h4>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-5 gap-2">
               {[
-                { label: 'Doors',   count: placedDoors.length,   color: 'text-blue-400',   bg: 'bg-blue-500/10' },
-                { label: 'Walls',   count: placedWalls.length,   color: 'text-violet-400', bg: 'bg-violet-500/10' },
-                { label: 'Windows', count: placedWindows.length, color: 'text-cyan-400',   bg: 'bg-cyan-500/10' },
-                { label: 'Robes',   count: placedRobes.length,   color: 'text-amber-400',  bg: 'bg-amber-500/10' },
+                { label: 'Doors',   count: placedDoors.length,    color: 'text-blue-400',   bg: 'bg-blue-500/10' },
+                { label: 'Walls',   count: placedWalls.length,    color: 'text-violet-400', bg: 'bg-violet-500/10' },
+                { label: 'Windows', count: placedWindows.length,  color: 'text-cyan-400',   bg: 'bg-cyan-500/10' },
+                { label: 'Robes',   count: placedRobes.length,    color: 'text-amber-400',  bg: 'bg-amber-500/10' },
+                { label: 'Kitchen', count: placedKitchens.length, color: 'text-orange-400', bg: 'bg-orange-500/10' },
               ].map(({ label, count, color, bg }) => (
                 <div key={label} className={`${bg} rounded-lg p-2 text-center`}>
                   <div className={`text-xl font-bold ${color}`}>{count}</div>
