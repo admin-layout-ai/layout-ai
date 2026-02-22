@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Loader2, Save, Trash2, RotateCw, MousePointer, DoorOpen, Undo2, Pencil,
-  ArrowLeft, Move, FlipHorizontal2, Minus, Eraser, Square, Columns,
+  ArrowLeft, Move, FlipHorizontal2, Square, Columns,
   UtensilsCrossed, ZoomIn, ZoomOut, Maximize2, Grid,
 } from 'lucide-react';
 
@@ -45,7 +45,7 @@ export interface PlacedKitchen {
 export interface SvgEditorSaveResult {
   previewImageUrl: string;
   doors: PlacedDoor[]; walls: PlacedWall[]; windows: PlacedWindow[];
-  robes: PlacedRobe[]; kitchens: PlacedKitchen[]; baths: PlacedBath[]; baths: PlacedBath[]; updatedAt: string;
+  robes: PlacedRobe[]; kitchens: PlacedKitchen[]; baths: PlacedBath[]; updatedAt: string;
 }
 export interface SvgEditorProps {
   svgUrl: string; projectId: number; planId: number;
@@ -59,10 +59,6 @@ export interface SvgEditorProps {
 
 type DragTarget =
   | { kind: 'door';      id: number; ox: number; oy: number }
-  | { kind: 'wall-body'; id: number; grabX: number; grabY: number; startX1: number; startY1: number; startX2: number; startY2: number; startCpx: number; startCpy: number }
-  | { kind: 'wall-ep1'; id: number }
-  | { kind: 'wall-ep2'; id: number }
-  | { kind: 'wall-mid'; id: number }
   | { kind: 'window';   id: number; ox: number; oy: number }
   | { kind: 'robe';     id: number; ox: number; oy: number }
   | { kind: 'kitchen';  id: number; ox: number; oy: number }
@@ -72,8 +68,8 @@ interface Snapshot {
   doors: PlacedDoor[]; walls: PlacedWall[]; windows: PlacedWindow[];
   robes: PlacedRobe[]; kitchens: PlacedKitchen[]; baths: PlacedBath[];
 }
-type ActiveTool = 'select' | 'door' | 'wall' | 'window' | 'robe' | 'kitchen' | 'bath';
-type ElementKind = 'door' | 'wall' | 'window' | 'robe' | 'kitchen' | 'bath';
+type ActiveTool = 'select' | 'door' | 'window' | 'robe' | 'kitchen' | 'bath';
+type ElementKind = 'door' | 'window' | 'robe' | 'kitchen' | 'bath';
 type SelectedEl = { kind: ElementKind; id: number } | null;
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
@@ -243,7 +239,6 @@ export default function SvgEditor({
   const [unitsPerMeter, setUnitsPerMeter]     = useState(80);
   const [wallClearHeight, setWallClearHeight] = useState(8);
   const [wallStroke, setWallStroke]           = useState(5);
-  const [eraseSize, setEraseSize]             = useState(15);
   const nudgeStep = useRef(1);
 
   const [placedDoors,    setPlacedDoors]    = useState<PlacedDoor[]>([]);
@@ -271,9 +266,7 @@ export default function SvgEditor({
   });
 
   const [activeTool,    setActiveTool]    = useState<ActiveTool>('door');
-  const [wallEraseMode, setWallEraseMode] = useState(false);
   const [selectedEl,    setSelectedEl]    = useState<SelectedEl>(null);
-  const [wallStart,     setWallStart]     = useState<{x:number;y:number}|null>(null);
   const [cursorPos,     setCursorPos]     = useState({x:0,y:0});
   const [snapEnabled,   setSnapEnabled]   = useState(true);
 
@@ -289,8 +282,6 @@ export default function SvgEditor({
   const panStartRef   = useRef<{screenX:number;screenY:number;panX:number;panY:number}|null>(null);
 
   // MS Paint erase
-  const isErasingRef   = useRef(false);
-  const [liveErasePts, setLiveErasePts] = useState<{x:number;y:number}[]>([]);
 
   // Full undo stack
   const undoStack   = useRef<Snapshot[]>([]);
@@ -496,21 +487,10 @@ export default function SvgEditor({
     if(selectedEl.kind==='window') setPlacedWindows(p=>p.map(w=>w.id===selectedEl.id?{...w,flipped:!w.flipped}:w));
   }, [selectedEl, pushUndo]);
 
-  const handleCurveSelected = useCallback(() => {
-    if(selectedEl?.kind!=='wall') return; pushUndo();
-    setPlacedWalls(prev=>prev.map(w=>{
-      if(w.id!==selectedEl.id) return w;
-      if(w.curved) return {...w,curved:false,cpx:(w.x1+w.x2)/2,cpy:(w.y1+w.y2)/2};
-      const mx=(w.x1+w.x2)/2,my=(w.y1+w.y2)/2,len=Math.hypot(w.x2-w.x1,w.y2-w.y1)||1;
-      const perp={x:-(w.y2-w.y1)/len,y:(w.x2-w.x1)/len};
-      return {...w,curved:true,cpx:mx+perp.x*len*0.2,cpy:my+perp.y*len*0.2};
-    }));
-  }, [selectedEl, pushUndo]);
 
   const handleDeleteSelected = useCallback(() => {
     if(!selectedEl) return; pushUndo();
     if(selectedEl.kind==='door')    setPlacedDoors(p    =>p.filter(d=>d.id!==selectedEl.id));
-    if(selectedEl.kind==='wall')    setPlacedWalls(p    =>p.filter(w=>w.id!==selectedEl.id));
     if(selectedEl.kind==='window')  setPlacedWindows(p  =>p.filter(w=>w.id!==selectedEl.id));
     if(selectedEl.kind==='robe')    setPlacedRobes(p    =>p.filter(r=>r.id!==selectedEl.id));
     if(selectedEl.kind==='kitchen') setPlacedKitchens(p =>p.filter(k=>k.id!==selectedEl.id));
@@ -552,7 +532,7 @@ export default function SvgEditor({
       }
       if(e.code==='Space'&&!e.repeat){e.preventDefault();setSpaceDown(true);return;}
       if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();handleUndo();return;}
-      if(e.key==='Escape'){setWallStart(null);setWallEraseMode(false);setSelectedEl(null);return;}
+      if(e.key==='Escape'){setSelectedEl(null);return;}
       if(e.key==='r'||e.key==='R'){handleRotateSelected();return;}
       if(e.key==='f'||e.key==='F'){handleFlipSelected();return;}
       if((e.key==='Delete'||e.key==='Backspace')&&selectedEl){e.preventDefault();handleDeleteSelected();return;}
@@ -566,8 +546,7 @@ export default function SvgEditor({
       if(!dx&&!dy) return;
       e.preventDefault(); pushUndo();
       if(selectedEl.kind==='door')    setPlacedDoors(p    =>p.map(d=>d.id===selectedEl.id?{...d,x:d.x+dx,y:d.y+dy}:d));
-      if(selectedEl.kind==='wall')    setPlacedWalls(p    =>p.map(w=>w.id===selectedEl.id?{...w,x1:w.x1+dx,y1:w.y1+dy,x2:w.x2+dx,y2:w.y2+dy,cpx:w.cpx+dx,cpy:w.cpy+dy}:w));
-      if(selectedEl.kind==='window')  setPlacedWindows(p  =>p.map(w=>w.id===selectedEl.id?{...w,x:w.x+dx,y:w.y+dy}:w));
+        if(selectedEl.kind==='window')  setPlacedWindows(p  =>p.map(w=>w.id===selectedEl.id?{...w,x:w.x+dx,y:w.y+dy}:w));
       if(selectedEl.kind==='robe')    setPlacedRobes(p    =>p.map(r=>r.id===selectedEl.id?{...r,x:r.x+dx,y:r.y+dy}:r));
       if(selectedEl.kind==='kitchen') setPlacedKitchens(p =>p.map(k=>k.id===selectedEl.id?{...k,x:k.x+dx,y:k.y+dy}:k));
       if(selectedEl.kind==='bath')    setPlacedBaths(p    =>p.map(b=>b.id===selectedEl.id?{...b,x:b.x+dx,y:b.y+dy}:b));
@@ -583,7 +562,6 @@ export default function SvgEditor({
   const handleCanvasClick = useCallback((e:React.MouseEvent<SVGSVGElement>) => {
     if(wasDragged.current){wasDragged.current=false;return;}
     if(isPanningRef.current) return;
-    if(wallEraseMode) return;
     const svgPt=screenToSvg(e.clientX,e.clientY); if(!svgPt) return;
     const cx=snap(svgPt.x),cy=snap(svgPt.y);
 
@@ -593,17 +571,6 @@ export default function SvgEditor({
       pushUndo(); const id=nextId.current++;
       setPlacedDoors(p=>[...p,{id,x:cx,y:cy,rotation:0,width:doorWidth,flipped:false}]);
       setSelectedEl({kind:'door',id}); return;
-    }
-    if(activeTool==='wall'){
-      if(!wallStart){setWallStart({x:cx,y:cy});}
-      else{
-        const end=snapToAngle(wallStart.x,wallStart.y,cx,cy,e.shiftKey);
-        const x2=snap(end.x),y2=snap(end.y);
-        pushUndo(); const id=nextId.current++;
-        setPlacedWalls(p=>[...p,{id,x1:wallStart.x,y1:wallStart.y,x2,y2,curved:false,cpx:(wallStart.x+x2)/2,cpy:(wallStart.y+y2)/2}]);
-        setSelectedEl({kind:'wall',id}); setWallStart(null);
-      }
-      return;
     }
     if(activeTool==='window'){
       pushUndo(); const id=nextId.current++;
@@ -626,16 +593,10 @@ export default function SvgEditor({
       setSelectedEl({kind:'bath',id}); return;
     }
   }, [activeTool,doorWidth,windowWidth,robeLength,robeFixedW,kitchenSubtype,kitchenDefaults,bathSubtype,bathDefaults,
-      wallStart,wallEraseMode,snap,snapToAngle,pushUndo,screenToSvg]);
 
   const handleElementClick = useCallback((e:React.MouseEvent,kind:ElementKind,id:number) => {
     e.stopPropagation();
-    if(activeTool==='wall'&&wallEraseMode&&kind==='wall'){
-      pushUndo(); setPlacedWalls(p=>p.filter(w=>w.id!==id));
-      if(selectedEl?.id===id) setSelectedEl(null); return;
-    }
-    setSelectedEl({kind,id}); setActiveTool('select');
-  }, [activeTool, wallEraseMode, selectedEl, pushUndo]);
+        setSelectedEl({kind,id}); setActiveTool('select');
 
   const handleSvgMouseDown = useCallback((e:React.MouseEvent<SVGSVGElement>) => {
     if(e.button===1||(e.button===0&&spaceDown)){
@@ -644,12 +605,7 @@ export default function SvgEditor({
       panStartRef.current={screenX:e.clientX,screenY:e.clientY,panX:vs.panX,panY:vs.panY};
       return;
     }
-    if(activeTool==='wall'&&wallEraseMode&&e.button===0){
-      const svgPt=screenToSvg(e.clientX,e.clientY); if(!svgPt) return;
-      pushUndo(); isErasingRef.current=true;
-      setLiveErasePts([{x:svgPt.x,y:svgPt.y}]);
-    }
-  }, [spaceDown, activeTool, wallEraseMode, screenToSvg, pushUndo]);
+  }, [spaceDown, activeTool, screenToSvg, pushUndo]);
 
   const handleSvgMouseMove = useCallback((e:React.MouseEvent<SVGSVGElement>) => {
     const svgPt=screenToSvg(e.clientX,e.clientY);
@@ -668,14 +624,6 @@ export default function SvgEditor({
     }
 
     // MS Paint erase accumulate path
-    if(isErasingRef.current&&svgPt){
-      setLiveErasePts(prev=>{
-        const last=prev[prev.length-1];
-        if(last&&Math.hypot(svgPt.x-last.x,svgPt.y-last.y)<2) return prev;
-        return [...prev,{x:svgPt.x,y:svgPt.y}];
-      });
-      return;
-    }
 
     // Element drag
     if(!activeDrag.current||!svgPt) return;
@@ -686,29 +634,10 @@ export default function SvgEditor({
     if(drag.kind==='robe')    setPlacedRobes(p    =>p.map(r=>r.id===drag.id?{...r,x:snap(cx-drag.ox),y:snap(cy-drag.oy)}:r));
     if(drag.kind==='kitchen') setPlacedKitchens(p =>p.map(k=>k.id===drag.id?{...k,x:snap(cx-drag.ox),y:snap(cy-drag.oy)}:k));
     if(drag.kind==='bath')    setPlacedBaths(p    =>p.map(b=>b.id===drag.id?{...b,x:snap(cx-drag.ox),y:snap(cy-drag.oy)}:b));
-    if(drag.kind==='wall-body'){
-      const ddx=snap(cx-drag.grabX),ddy=snap(cy-drag.grabY);
-      setPlacedWalls(p=>p.map(w=>w.id===drag.id?{...w,x1:drag.startX1+ddx,y1:drag.startY1+ddy,x2:drag.startX2+ddx,y2:drag.startY2+ddy,cpx:drag.startCpx+ddx,cpy:drag.startCpy+ddy}:w));
-    }
-    if(drag.kind==='wall-ep1') setPlacedWalls(p=>p.map(w=>w.id===drag.id?{...w,x1:snap(cx),y1:snap(cy)}:w));
-    if(drag.kind==='wall-ep2') setPlacedWalls(p=>p.map(w=>w.id===drag.id?{...w,x2:snap(cx),y2:snap(cy)}:w));
-    if(drag.kind==='wall-mid') setPlacedWalls(p=>p.map(w=>w.id===drag.id?{...w,curved:true,cpx:snap(cx),cpy:snap(cy)}:w));
   }, [screenToSvg, snap]);
 
   const handleSvgMouseUp = useCallback(() => {
     if(isPanningRef.current){isPanningRef.current=false;panStartRef.current=null;return;}
-    if(isErasingRef.current){
-      isErasingRef.current=false;
-      setLiveErasePts(pts=>{
-        if(pts.length>=2){
-          const id=nextId.current++;
-          const eraseWall:PlacedWall={id,x1:pts[0].x,y1:pts[0].y,x2:pts[pts.length-1].x,y2:pts[pts.length-1].y,curved:false,cpx:0,cpy:0,erase:true,points:[...pts]};
-          setPlacedWalls(prev=>[...prev,eraseWall]);
-        }
-        return [];
-      });
-      return;
-    }
     activeDrag.current=null;
   }, []);
 
@@ -753,28 +682,11 @@ export default function SvgEditor({
     activeDrag.current={kind:'bath',id,ox:svgPt.x-item.x,oy:svgPt.y-item.y};wasDragged.current=false;
   },[placedBaths,screenToSvg,pushUndo]);
 
-  const startDragWallBody = useCallback((e:React.MouseEvent,id:number) => {
-    e.stopPropagation();e.preventDefault();
-    const svgPt=screenToSvg(e.clientX,e.clientY);if(!svgPt)return;
-    const wall=placedWalls.find(w=>w.id===id);if(!wall)return;
-    pushUndo();setSelectedEl({kind:'wall',id});
-    activeDrag.current={kind:'wall-body',id,grabX:svgPt.x,grabY:svgPt.y,startX1:wall.x1,startY1:wall.y1,startX2:wall.x2,startY2:wall.y2,startCpx:wall.cpx,startCpy:wall.cpy};
-    wasDragged.current=false;
-  },[placedWalls,screenToSvg,pushUndo]);
 
-  const startDragWallEp = useCallback((e:React.MouseEvent,id:number,ep:'ep1'|'ep2') => {
-    e.stopPropagation();e.preventDefault(); pushUndo();
-    activeDrag.current={kind:ep==='ep1'?'wall-ep1':'wall-ep2',id};wasDragged.current=false;
-  },[pushUndo]);
 
-  const startDragWallMid = useCallback((e:React.MouseEvent,id:number) => {
-    e.stopPropagation();e.preventDefault(); pushUndo();
-    activeDrag.current={kind:'wall-mid',id};wasDragged.current=false;
-  },[pushUndo]);
 
   // Derived selected items
   const selectedDoor    = selectedEl?.kind==='door'    ? placedDoors.find(d=>d.id===selectedEl.id)    : null;
-  const selectedWall    = selectedEl?.kind==='wall'    ? placedWalls.find(w=>w.id===selectedEl.id)    : null;
   const selectedWindow  = selectedEl?.kind==='window'  ? placedWindows.find(w=>w.id===selectedEl.id)  : null;
   const selectedRobe    = selectedEl?.kind==='robe'    ? placedRobes.find(r=>r.id===selectedEl.id)    : null;
   const selectedKitchen = selectedEl?.kind==='kitchen' ? placedKitchens.find(k=>k.id===selectedEl.id) : null;
@@ -805,7 +717,7 @@ export default function SvgEditor({
         if(isErase&&wall.points&&wall.points.length>=2) d=ptsToPath(wall.points);
         else if(wall.curved) d=`M ${wall.x1},${wall.y1} Q ${wall.cpx},${wall.cpy} ${wall.x2},${wall.y2}`;
         else d=`M ${wall.x1},${wall.y1} L ${wall.x2},${wall.y2}`;
-        return `<path d="${d}" stroke="${isErase?'#FFFFFF':'#1a1a1a'}" stroke-width="${isErase?eraseSize:sw}" stroke-linecap="square" stroke-linejoin="miter" fill="none" class="wall-element" data-wall-id="${wall.id}"/>`;
+        return `<path d="${d}" stroke="${isErase?'#FFFFFF':'#1a1a1a'}" stroke-width="${sw}" stroke-linecap="square" stroke-linejoin="miter" fill="none" class="wall-element" data-wall-id="${wall.id}"/>`;
       };
       const wallsSvg=[...placedWalls.filter(w=>!w.erase).map(w=>toWallPath(w,false)),...placedWalls.filter(w=>w.erase).map(w=>toWallPath(w,true))].join('\n');
 
@@ -885,14 +797,12 @@ export default function SvgEditor({
 
       let modifiedSvg=svgContent
         .replace(/<g\s+id="doors-layer"[\s\S]*?<\/g>\s*/g,'')
-        .replace(/<g\s+id="walls-layer"[\s\S]*?<\/g>\s*/g,'')
         .replace(/<g\s+id="windows-layer"[\s\S]*?<\/g>\s*/g,'')
         .replace(/<g\s+id="robes-layer"[\s\S]*?<\/g>\s*/g,'')
         .replace(/<g\s+id="kitchen-layer"[\s\S]*?<\/g>\s*/g,'')
         .replace(/<g\s+id="bath-layer"[\s\S]*?<\/g>\s*/g,'');
 
       modifiedSvg=modifiedSvg.replace('</svg>',
-        `<g id="walls-layer">\n${wallsSvg}\n</g>\n`+
         `<g id="windows-layer">\n${windowsSvg}\n</g>\n`+
         `<g id="robes-layer">\n${robesSvg}\n</g>\n`+
         `<g id="kitchen-layer">\n${kitchenSvg}\n</g>\n`+
@@ -904,12 +814,12 @@ export default function SvgEditor({
       const res=await fetch(`${API_URL}/api/v1/plans/${projectId}/plans/${planId}/save-svg`,{
         method:'PUT',
         headers:{'Content-Type':'application/json',...(token&&{Authorization:`Bearer ${token}`})},
-        body:JSON.stringify({svg_content:modifiedSvg,doors:placedDoors,walls:placedWalls,windows:placedWindows,robes:placedRobes,kitchens:placedKitchens,baths:placedBaths}),
+        body:JSON.stringify({svg_content:modifiedSvg,doors:placedDoors,windows:placedWindows,robes:placedRobes,kitchens:placedKitchens,baths:placedBaths}),
       });
       if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(err.detail||'Save failed');}
       const result=await res.json();
       showToast('Floor plan saved!','success');
-      onSave({previewImageUrl:result.preview_image_url,doors:placedDoors,walls:placedWalls,windows:placedWindows,robes:placedRobes,kitchens:placedKitchens,baths:placedBaths,updatedAt:new Date().toISOString()});
+      onSave({previewImageUrl:result.preview_image_url,doors:placedDoors,windows:placedWindows,robes:placedRobes,kitchens:placedKitchens,baths:placedBaths,updatedAt:new Date().toISOString()});
     } catch(err:any) {
       console.error('SvgEditor save failed:',err);
       showToast(err?.message||'Failed to save. Please try again.','error');
@@ -929,18 +839,16 @@ export default function SvgEditor({
   const cursorStyle =
     isPanningRef.current      ? 'grabbing' :
     spaceDown                 ? 'grab' :
-    activeTool==='wall'&&wallEraseMode ? 'none' :
     activeDrag.current        ? 'grabbing' :
     activeTool==='door'||activeTool==='window'||activeTool==='robe'||activeTool==='kitchen' ? 'crosshair' :
-    activeTool==='wall'       ? (wallStart?'crosshair':'cell') : 'default';
 
-  const totalElements=placedDoors.length+placedWalls.length+placedWindows.length+placedRobes.length+placedKitchens.length+placedBaths.length;
+  const totalElements=placedDoors.length+placedWindows.length+placedRobes.length+placedKitchens.length+placedBaths.length;
 
   const toolBtn=(tool:ActiveTool,label:string,Icon:React.ElementType,color:string)=>{
     const active=activeTool===tool;
     return (
       <button key={tool}
-        onClick={()=>{setActiveTool(tool);if(tool!=='wall'){setWallStart(null);setWallEraseMode(false);}if(tool!=='select')setSelectedEl(null);}}
+        onClick={()=>{setActiveTool(tool);if(tool!=='select')setSelectedEl(null);}}
         className={`flex items-center justify-center gap-1.5 p-2.5 rounded-lg text-xs font-medium transition ${active?`${color} text-white`:'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 border border-white/10'}`}>
         <Icon className="w-3.5 h-3.5 flex-shrink-0"/><span>{label}</span>
       </button>
@@ -990,23 +898,6 @@ export default function SvgEditor({
             {/* Original floor plan */}
             <g ref={svgContentGroupRef}/>
 
-            {/* Walls overlay */}
-            <g id="walls-overlay">
-              {placedWalls.map(wall=>{
-                const sel=selectedEl?.kind==='wall'&&selectedEl.id===wall.id;
-                const mx=(wall.x1+wall.x2)/2, my=(wall.y1+wall.y2)/2;
-
-                // Freehand erase stroke (MS Paint)
-                if(wall.erase&&wall.points&&wall.points.length>=2){
-                  const pd=ptsToPath(wall.points);
-                  return (
-                    <g key={wall.id}>
-                      <path d={pd} stroke="rgba(0,0,0,0.001)" strokeWidth={Math.max(eraseSize+14,22)} fill="none" pointerEvents="all"
-                        style={{cursor:activeTool==='wall'&&wallEraseMode?'none':'default'}}
-                        onClick={e=>handleElementClick(e,'wall',wall.id)}/>
-                      <path d={pd} stroke="#FFFFFF" strokeWidth={eraseSize} strokeLinecap="round" strokeLinejoin="round" fill="none" pointerEvents="none"/>
-                      {sel&&<path d={pd} stroke="#3b82f6" strokeWidth={eraseSize+4} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={0.3} pointerEvents="none"/>}
-                    </g>
                   );
                 }
 
@@ -1016,14 +907,10 @@ export default function SvgEditor({
                     <path d={pathD} stroke="rgba(0,0,0,0.001)" strokeWidth={Math.max(wallStroke+16,20)} fill="none" pointerEvents="all"
                       style={{cursor:activeTool==='select'?'grab':'default'}}
                       onClick={e=>handleElementClick(e,'wall',wall.id)}
-                      onMouseDown={e=>{if(activeTool==='select')startDragWallBody(e,wall.id);}}/>
                     <path d={pathD} stroke={sel?'#2563eb':'#1a1a1a'} strokeWidth={wallStroke} strokeLinecap="square" fill="none" pointerEvents="none"/>
                     {sel&&(
                       <>
                         <path d={pathD} stroke="#93c5fd" strokeWidth={wallStroke+4} strokeDasharray="8,4" fill="none" opacity={0.4} pointerEvents="none"/>
-                        <circle cx={wall.x1} cy={wall.y1} r={6} fill="#2563eb" stroke="#fff" strokeWidth={1.5} style={{cursor:'move'}} onMouseDown={e=>startDragWallEp(e,wall.id,'ep1')}/>
-                        <circle cx={wall.x2} cy={wall.y2} r={6} fill="#2563eb" stroke="#fff" strokeWidth={1.5} style={{cursor:'move'}} onMouseDown={e=>startDragWallEp(e,wall.id,'ep2')}/>
-                        <circle cx={wall.curved?wall.cpx:mx} cy={wall.curved?wall.cpy:my} r={5} fill={wall.curved?'#f59e0b':'#fff'} stroke={wall.curved?'#fff':'#2563eb'} strokeWidth={1.5} style={{cursor:'crosshair'}} onMouseDown={e=>startDragWallMid(e,wall.id)}/>
                         {wall.curved&&<line x1={mx} y1={my} x2={wall.cpx} y2={wall.cpy} stroke="#f59e0b" strokeWidth={1} strokeDasharray="3,2" pointerEvents="none"/>}
                       </>
                     )}
@@ -1032,52 +919,6 @@ export default function SvgEditor({
               })}
             </g>
 
-            {/* Live MS Paint erase stroke preview */}
-            {liveErasePts.length>=2&&(
-              <g pointerEvents="none">
-                <path d={ptsToPath(liveErasePts)} stroke="#FFFFFF" strokeWidth={eraseSize} strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                <path d={ptsToPath(liveErasePts)} stroke="#ef4444" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" fill="none" strokeDasharray="6,3" opacity={0.65}/>
-              </g>
-            )}
-
-            {/* Eraser cursor (MS Paint white square with red dashed border) */}
-            {activeTool==='wall'&&wallEraseMode&&(
-              <g pointerEvents="none">
-                <rect x={cursorPos.x-eraseSize/2} y={cursorPos.y-eraseSize/2}
-                  width={eraseSize} height={eraseSize}
-                  fill="white" fillOpacity={0.75} stroke="#ef4444" strokeWidth={0.8} strokeDasharray="3,2"/>
-              </g>
-            )}
-
-            {/* Wall draw preview */}
-            {activeTool==='wall'&&!wallEraseMode&&wallStart&&(
-              <g pointerEvents="none">
-                <line x1={wallStart.x} y1={wallStart.y} x2={cursorPos.x} y2={cursorPos.y}
-                  stroke="#2563eb" strokeWidth={wallStroke} strokeDasharray="8,4" strokeLinecap="square" opacity={0.7}/>
-                <circle cx={wallStart.x} cy={wallStart.y} r={5} fill="#2563eb" stroke="#fff" strokeWidth={1.5}/>
-                <circle cx={cursorPos.x} cy={cursorPos.y} r={4} fill="none" stroke="#2563eb" strokeWidth={1.5} opacity={0.6}/>
-              </g>
-            )}
-
-            {/* Windows overlay */}
-            <g id="windows-overlay">
-              {placedWindows.map(win=>{
-                const w=win.width,wt=wallClearHeight,inset=Math.max(1.5,wt/7);
-                const sel=selectedEl?.kind==='window'&&selectedEl.id===win.id;
-                return (
-                  <g key={win.id} transform={`translate(${win.x},${win.y}) rotate(${win.rotation})`}
-                    onClick={e=>handleElementClick(e,'window',win.id)}
-                    onMouseDown={e=>{if(activeTool==='select')startDragWindow(e,win.id);}}
-                    style={{cursor:sel?'grab':'pointer'}}>
-                    <g transform={win.flipped?'scale(1,-1)':''}>
-                      <rect x={0} y={-wt/2} width={w} height={wt} fill="#FFFFFF" stroke="none"/>
-                      {sel&&<rect x={-4} y={-wt/2-4} width={w+8} height={wt+8} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="5,3" rx={2}/>}
-                      <line x1={0} y1={-wt/2+inset} x2={w} y2={-wt/2+inset} stroke={sel?'#2563eb':'#1a1a1a'} strokeWidth={sel?1.5:wallStroke*0.4}/>
-                      <line x1={0} y1={wt/2-inset}  x2={w} y2={wt/2-inset}  stroke={sel?'#2563eb':'#1a1a1a'} strokeWidth={sel?1.5:wallStroke*0.4}/>
-                    </g>
-                  </g>
-                );
-              })}
             </g>
 
             {/* Robes overlay */}
@@ -1160,25 +1001,19 @@ export default function SvgEditor({
           </svg>
 
           {/* Canvas hints */}
-          {totalElements===0&&!wallStart&&(
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-sm text-white text-xs px-4 py-2 rounded-full pointer-events-none whitespace-nowrap">
               {activeTool==='door'    && 'Click on the plan to place a door'}
-              {activeTool==='wall'    &&!wallEraseMode&&'Click to start a wall segment'}
-              {activeTool==='wall'    && wallEraseMode &&'Click and drag to erase (MS Paint style)'}
               {activeTool==='window'  && 'Click to place a window'}
               {activeTool==='robe'    && 'Click to place a built-in robe'}
               {activeTool==='kitchen' && `Click to place ${kitchenSubtype}`}
               {activeTool==='bath'    && `Click to place ${bathSubtype}`}
             </div>
           )}
-          {activeTool==='wall'&&!wallEraseMode&&wallStart&&(
             <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full pointer-events-none">
               Click to finish · Shift=angle snap · Esc=cancel
             </div>
           )}
-          {activeTool==='wall'&&wallEraseMode&&(
             <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-red-900/80 backdrop-blur-sm text-red-200 text-xs px-3 py-1.5 rounded-full pointer-events-none flex items-center gap-1.5">
-              <Eraser className="w-3 h-3"/>Erase active — click &amp; drag to paint-erase
             </div>
           )}
         </div>
@@ -1239,7 +1074,6 @@ export default function SvgEditor({
             <div className="grid grid-cols-3 gap-2">
               {toolBtn('select','Select',MousePointer,'bg-slate-600')}
               {toolBtn('door','Door',DoorOpen,'bg-blue-600')}
-              {toolBtn('wall','Wall',Minus,'bg-violet-600')}
               {toolBtn('window','Window',Square,'bg-cyan-600')}
               {toolBtn('robe','Robe',Columns,'bg-amber-600')}
               {toolBtn('kitchen','Kitchen',UtensilsCrossed,'bg-orange-600')}
@@ -1247,23 +1081,16 @@ export default function SvgEditor({
             </div>
 
             {/* Wall sub-options: erase mode + size */}
-            {activeTool==='wall'&&(
               <div className="mt-3 pt-3 border-t border-white/10">
                 <div className="flex items-center gap-2">
                   <button
                     onClick={()=>{setWallEraseMode(p=>!p);setWallStart(null);}}
-                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition border ${wallEraseMode?'bg-red-500/20 border-red-500/40 text-red-400':'bg-white/5 border-white/10 text-gray-400 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/30'}`}>
-                    <Eraser className="w-3.5 h-3.5"/>{wallEraseMode?'Erasing…':'Erase Mode'}
                   </button>
                 </div>
-                {wallEraseMode&&(
                   <div className="mt-2 space-y-1">
                     <div className="flex justify-between text-[10px] text-gray-500">
-                      <span>Eraser size</span>
-                      <span className="font-mono text-gray-400">{Math.round(eraseSize/unitsPerMeter*1000)} mm</span>
                     </div>
                     <input type="range" min={Math.round(wallStroke*1.5)} max={Math.round(wallStroke*12)} step={1}
-                      value={eraseSize} onChange={e=>setEraseSize(+e.target.value)}
                       className="w-full accent-red-500"/>
                     <div className="flex justify-between text-[10px] text-gray-500">
                       <span>Small</span><span>Large</span>
@@ -1307,16 +1134,13 @@ export default function SvgEditor({
           {/* Actions */}
           <div className="bg-white/5 rounded-xl p-4 border border-white/10">
             <h4 className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-3">Actions</h4>
-            <div className="grid grid-cols-4 gap-2">
-              <button onClick={handleRotateSelected} disabled={!selectedEl||selectedEl.kind==='wall'}
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={handleRotateSelected} disabled={!selectedEl}
                 className="flex flex-col items-center gap-1.5 p-3 rounded-lg text-sm transition bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-gray-400 hover:text-white"
                 title="Rotate 90° (R)"><RotateCw className="w-4 h-4"/><span className="text-xs">Rotate</span></button>
               <button onClick={handleFlipSelected} disabled={!selectedEl||(selectedEl.kind!=='door'&&selectedEl.kind!=='window')}
                 className="flex flex-col items-center gap-1.5 p-3 rounded-lg text-sm transition bg-white/5 border border-white/10 hover:bg-blue-500/10 hover:border-blue-500/30 disabled:opacity-30 disabled:cursor-not-allowed text-gray-400 hover:text-blue-400"
                 title="Flip (F)"><FlipHorizontal2 className="w-4 h-4"/><span className="text-xs">Flip</span></button>
-              <button onClick={handleCurveSelected} disabled={selectedEl?.kind!=='wall'||!!(selectedEl&&placedWalls.find(w=>w.id===selectedEl.id)?.erase)}
-                className={`flex flex-col items-center gap-1.5 p-3 rounded-lg text-sm transition border disabled:opacity-30 disabled:cursor-not-allowed ${selectedWall?.curved?'bg-amber-500/20 border-amber-500/40 text-amber-400':'bg-white/5 border-white/10 text-gray-400 hover:bg-amber-500/10 hover:border-amber-500/30 hover:text-amber-400'}`}
-                title="Toggle wall curve"><Minus className="w-4 h-4" style={{transform:'rotate(-15deg)'}}/><span className="text-xs">Curve</span></button>
               <button onClick={handleDeleteSelected} disabled={!selectedEl}
                 className="flex flex-col items-center gap-1.5 p-3 rounded-lg text-sm transition bg-white/5 border border-white/10 hover:bg-red-500/10 hover:border-red-500/30 disabled:opacity-30 disabled:cursor-not-allowed text-gray-400 hover:text-red-400"
                 title="Delete (Del)"><Trash2 className="w-4 h-4"/><span className="text-xs">Delete</span></button>
@@ -1370,62 +1194,6 @@ export default function SvgEditor({
                 );
               })()}
 
-              {selectedWall&&(()=>{
-                const wallLenMm = Math.round(Math.hypot(selectedWall.x2-selectedWall.x1,selectedWall.y2-selectedWall.y1)/unitsPerMeter*1000);
-                const wallAngleDeg = Math.round(Math.atan2(selectedWall.y2-selectedWall.y1,selectedWall.x2-selectedWall.x1)*180/Math.PI);
-                const commitLen=(raw:string)=>{
-                  const mm=parseInt(raw,10); if(isNaN(mm)||mm<1) return; pushUndo();
-                  // Keep x1,y1 fixed, move x2,y2 along the same angle
-                  const angle=Math.atan2(selectedWall.y2-selectedWall.y1,selectedWall.x2-selectedWall.x1);
-                  const newLen=mm/1000*unitsPerMeter;
-                  setPlacedWalls(p=>p.map(w=>w.id===selectedWall.id?{...w,
-                    x2:w.x1+Math.cos(angle)*newLen,
-                    y2:w.y1+Math.sin(angle)*newLen,
-                    cpx:(w.x1+w.x1+Math.cos(angle)*newLen)/2,
-                    cpy:(w.y1+w.y1+Math.sin(angle)*newLen)/2,
-                  }:w));
-                };
-                const commitAngle=(raw:string)=>{
-                  const deg=parseInt(raw,10); if(isNaN(deg)) return; pushUndo();
-                  const angle=deg*Math.PI/180;
-                  const len=Math.hypot(selectedWall.x2-selectedWall.x1,selectedWall.y2-selectedWall.y1);
-                  setPlacedWalls(p=>p.map(w=>w.id===selectedWall.id?{...w,
-                    x2:w.x1+Math.cos(angle)*len,
-                    y2:w.y1+Math.sin(angle)*len,
-                    cpx:(w.x1+w.x1+Math.cos(angle)*len)/2,
-                    cpy:(w.y1+w.y1+Math.sin(angle)*len)/2,
-                  }:w));
-                };
-                const inputCls="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-violet-400 focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
-                return (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-gray-400 text-xs w-16 shrink-0">Length</span>
-                      <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={1} defaultValue={wallLenMm} key={`len-${selectedWall.id}-${wallLenMm}`}
-                          onBlur={e=>commitLen(e.target.value)}
-                          onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
-                          className={inputCls}/>
-                        <span className="text-gray-500 text-xs">mm</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-gray-400 text-xs w-16 shrink-0">Angle</span>
-                      <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={1} defaultValue={wallAngleDeg} key={`ang-${selectedWall.id}-${wallAngleDeg}`}
-                          onBlur={e=>commitAngle(e.target.value)}
-                          onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
-                          className={inputCls}/>
-                        <span className="text-gray-500 text-xs">°</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-gray-400">Curved</span>
-                      <span className={`font-mono ${selectedWall.curved?'text-amber-400':'text-gray-500'}`}>{selectedWall.curved?'Yes':'No'}</span>
-                    </div>
-                  </div>
-                );
-              })()}
 
               {selectedWindow&&(()=>{
                 const commit=(field:'width'|'rotation',raw:string)=>{
@@ -1564,9 +1332,8 @@ export default function SvgEditor({
           {/* Elements summary */}
           <div className="bg-white/5 rounded-xl p-4 border border-white/10">
             <h4 className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-3">Placed Elements</h4>
-            <div className="grid grid-cols-6 gap-2">
+            <div className="grid grid-cols-5 gap-2">
               {[{label:'Doors',count:placedDoors.length,color:'text-blue-400',bg:'bg-blue-500/10'},
-                {label:'Walls',count:placedWalls.length,color:'text-violet-400',bg:'bg-violet-500/10'},
                 {label:'Windows',count:placedWindows.length,color:'text-cyan-400',bg:'bg-cyan-500/10'},
                 {label:'Robes',count:placedRobes.length,color:'text-amber-400',bg:'bg-amber-500/10'},
                 {label:'Kitchen',count:placedKitchens.length,color:'text-orange-400',bg:'bg-orange-500/10'},
