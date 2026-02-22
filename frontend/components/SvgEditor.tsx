@@ -128,7 +128,7 @@ export default function SvgEditor({
             setSvgViewBox({ x: vb[0], y: vb[1], w: vb[2], h: vb[3] });
             const svgUnitsPerMeter = vb[2] / envelopeWidth;
             setDoorWidth(Math.round(svgUnitsPerMeter * 0.82));
-            setWallClearHeight(Math.max(4, Math.round(svgUnitsPerMeter * 0.18)));
+            setWallClearHeight(Math.max(10, Math.round(svgUnitsPerMeter * 0.55)));
             nudgeStep.current = Math.max(1, Math.round(svgUnitsPerMeter * 0.05));
           } else {
             const w = parseFloat(svgEl.getAttribute('width') || '800');
@@ -136,7 +136,7 @@ export default function SvgEditor({
             setSvgViewBox({ x: 0, y: 0, w, h });
             const fallbackUnitsPerMeter = w / envelopeWidth;
             setDoorWidth(Math.round(fallbackUnitsPerMeter * 0.82));
-            setWallClearHeight(Math.max(4, Math.round(fallbackUnitsPerMeter * 0.18)));
+            setWallClearHeight(Math.max(10, Math.round(fallbackUnitsPerMeter * 0.55)));
             nudgeStep.current = Math.max(1, Math.round(fallbackUnitsPerMeter * 0.05));
           }
         }
@@ -346,7 +346,7 @@ export default function SvgEditor({
           const wch = wallClearHeight;
           const flipScale = door.flipped ? ' scale(1,-1)' : '';
           return `<g transform="translate(${door.x}, ${door.y}) rotate(${door.rotation})${flipScale}" class="door-element" data-door-id="${door.id}">
-  <rect x="-1" y="${-wch / 2}" width="${w + 2}" height="${wch}" fill="#FFFFFF" stroke="none"/>
+  <rect x="${-wch / 2}" y="${-wch / 2}" width="${w + wch}" height="${wch}" fill="#FFFFFF" stroke="none"/>
   <line x1="0" y1="0" x2="${w}" y2="0" stroke="#000000" stroke-width="2" fill="none"/>
   <path d="M ${w},0 A ${w},${w} 0 0,1 0,${-w}" fill="none" stroke="#000000" stroke-width="1"/>
   <circle cx="0" cy="0" r="2" fill="#000000"/>
@@ -454,8 +454,8 @@ export default function SvgEditor({
                   >
                     {/* White rect to clear the wall underneath */}
                     <rect
-                      x={-1} y={-wch / 2}
-                      width={w + 2} height={wch}
+                      x={-wch / 2} y={-wch / 2}
+                      width={w + wch} height={wch}
                       fill="#FFFFFF" stroke="none"
                     />
                     {/* Selection highlight */}
