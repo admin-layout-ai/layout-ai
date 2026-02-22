@@ -33,6 +33,11 @@ export interface PlacedRobe {
   rotation: number; length: number; width: number;
 }
 export type KitchenSubtype = 'island' | 'bench' | 'fridge' | 'sink' | 'cooktop' | 'dishwasher';
+export type BathSubtype = 'bathtub' | 'shower' | 'vanity' | 'basin' | 'toilet';
+export interface PlacedBath {
+  id: number; x: number; y: number;
+  rotation: number; subtype: BathSubtype; length: number; depth: number;
+}
 export interface PlacedKitchen {
   id: number; x: number; y: number;
   rotation: number; subtype: KitchenSubtype; length: number; depth: number;
@@ -40,13 +45,13 @@ export interface PlacedKitchen {
 export interface SvgEditorSaveResult {
   previewImageUrl: string;
   doors: PlacedDoor[]; walls: PlacedWall[]; windows: PlacedWindow[];
-  robes: PlacedRobe[]; kitchens: PlacedKitchen[]; updatedAt: string;
+  robes: PlacedRobe[]; kitchens: PlacedKitchen[]; baths: PlacedBath[]; baths: PlacedBath[]; updatedAt: string;
 }
 export interface SvgEditorProps {
   svgUrl: string; projectId: number; planId: number;
   existingDoors?: PlacedDoor[]; existingWalls?: PlacedWall[];
   existingWindows?: PlacedWindow[]; existingRobes?: PlacedRobe[];
-  existingKitchens?: PlacedKitchen[]; envelopeWidth?: number;
+  existingKitchens?: PlacedKitchen[]; existingBaths?: PlacedBath[]; envelopeWidth?: number;
   onSave: (result: SvgEditorSaveResult) => void; onCancel: () => void;
 }
 
@@ -60,14 +65,15 @@ type DragTarget =
   | { kind: 'wall-mid'; id: number }
   | { kind: 'window';   id: number; ox: number; oy: number }
   | { kind: 'robe';     id: number; ox: number; oy: number }
-  | { kind: 'kitchen';  id: number; ox: number; oy: number };
+  | { kind: 'kitchen';  id: number; ox: number; oy: number }
+  | { kind: 'bath';     id: number; ox: number; oy: number };
 
 interface Snapshot {
   doors: PlacedDoor[]; walls: PlacedWall[]; windows: PlacedWindow[];
-  robes: PlacedRobe[]; kitchens: PlacedKitchen[];
+  robes: PlacedRobe[]; kitchens: PlacedKitchen[]; baths: PlacedBath[];
 }
-type ActiveTool = 'select' | 'door' | 'wall' | 'window' | 'robe' | 'kitchen';
-type ElementKind = 'door' | 'wall' | 'window' | 'robe' | 'kitchen';
+type ActiveTool = 'select' | 'door' | 'wall' | 'window' | 'robe' | 'kitchen' | 'bath';
+type ElementKind = 'door' | 'wall' | 'window' | 'robe' | 'kitchen' | 'bath';
 type SelectedEl = { kind: ElementKind; id: number } | null;
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
@@ -95,7 +101,7 @@ function PropRow({ label, unit, children }: { label: string; unit: string; child
 function KitchenSymbol({ item, sw, sel }: { item: PlacedKitchen; sw: number; sel: boolean }) {
   const { subtype, length: L, depth: D } = item;
   const stroke = sel ? '#2563eb' : '#1a1a1a';
-  const scale = (subtype==='island'||subtype==='bench') ? 1 : 0.5;
+  const scale = 0.5;
   const thin = sw * 0.35 * scale, thick = sw * 0.55 * scale;
   switch (subtype) {
     case 'island': return (
@@ -133,6 +139,91 @@ function KitchenSymbol({ item, sw, sel }: { item: PlacedKitchen; sw: number; sel
     default: return null;
   }
 }
+
+// ── Bath symbol ────────────────────────────────────────────────────────────────
+
+function BathSymbol({ item, sw, sel }: { item: PlacedBath; sw: number; sel: boolean }) {
+  const { subtype, length: L, depth: D } = item;
+  const stroke = sel ? '#2563eb' : '#1a1a1a';
+  const t = sw * 0.25; // thin line weight for all bath items
+
+  switch (subtype) {
+    case 'bathtub': {
+      // Oval tub inside rectangle shell
+      const pad = Math.min(L, D) * 0.1;
+      const rx = (L - pad * 2) / 2, ry = (D - pad * 2) / 2;
+      const cx = L / 2, cy = D / 2;
+      // Drain circle at foot end
+      const dr = Math.min(rx, ry) * 0.12;
+      return (
+        <>
+          <rect x={0} y={0} width={L} height={D} fill="#FFFFFF" stroke={stroke} strokeWidth={t * 1.5}/>
+          <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none" stroke={stroke} strokeWidth={t}/>
+          <circle cx={L * 0.5} cy={D * 0.82} r={dr} fill="none" stroke={stroke} strokeWidth={t * 0.8}/>
+        </>
+      );
+    }
+    case 'shower': {
+      // Rectangle with diagonal corner arc (shower door) + cross drain
+      const arcR = Math.min(L, D) * 0.45;
+      return (
+        <>
+          <rect x={0} y={0} width={L} height={D} fill="#FFFFFF" stroke={stroke} strokeWidth={t * 1.5}/>
+          {/* Corner shower door arc */}
+          <path d={`M ${L},0 A ${arcR},${arcR} 0 0,1 0,${D}`} fill="none" stroke={stroke} strokeWidth={t * 1.2}/>
+          {/* Cross drain */}
+          <line x1={L*0.5-t*2} y1={D*0.5} x2={L*0.5+t*2} y2={D*0.5} stroke={stroke} strokeWidth={t}/>
+          <line x1={L*0.5} y1={D*0.5-t*2} x2={L*0.5} y2={D*0.5+t*2} stroke={stroke} strokeWidth={t}/>
+          <circle cx={L*0.5} cy={D*0.5} r={t*3} fill="none" stroke={stroke} strokeWidth={t*0.6}/>
+        </>
+      );
+    }
+    case 'vanity': {
+      // Rectangle (cabinet) + inset basin oval
+      const bw = Math.min(L * 0.55, D * 0.75), bh = Math.min(D * 0.65, L * 0.65);
+      const bx = (L - bw) / 2, by = (D - bh) / 2;
+      return (
+        <>
+          <rect x={0} y={0} width={L} height={D} fill="#FFFFFF" stroke={stroke} strokeWidth={t * 1.5}/>
+          <ellipse cx={L/2} cy={D/2} rx={bw/2} ry={bh/2} fill="none" stroke={stroke} strokeWidth={t}/>
+          <circle cx={L/2} cy={D*0.42} r={t * 1.2} fill={stroke}/>
+        </>
+      );
+    }
+    case 'basin': {
+      // Small wall-mounted basin: rectangle + oval bowl + tap
+      const bw = L * 0.72, bh = D * 0.68;
+      return (
+        <>
+          <rect x={0} y={0} width={L} height={D} fill="#FFFFFF" stroke={stroke} strokeWidth={t * 1.5}/>
+          <ellipse cx={L/2} cy={D*0.55} rx={bw/2} ry={bh/2} fill="none" stroke={stroke} strokeWidth={t}/>
+          <circle cx={L/2} cy={D*0.22} r={t*1.2} fill={stroke}/>
+          <line x1={L*0.38} y1={D*0.22} x2={L*0.62} y2={D*0.22} stroke={stroke} strokeWidth={t*1.2} strokeLinecap="round"/>
+        </>
+      );
+    }
+    case 'toilet': {
+      // Cistern rect at back + oval bowl at front
+      const cisH = D * 0.32;
+      const bowlRx = L * 0.4, bowlRy = (D - cisH) * 0.48;
+      const bowlCy = cisH + (D - cisH) * 0.52;
+      return (
+        <>
+          {/* Cistern */}
+          <rect x={0} y={0} width={L} height={cisH} fill="#FFFFFF" stroke={stroke} strokeWidth={t * 1.5}/>
+          {/* Seat oval */}
+          <ellipse cx={L/2} cy={bowlCy} rx={bowlRx} ry={bowlRy} fill="#FFFFFF" stroke={stroke} strokeWidth={t * 1.5}/>
+          {/* Inner bowl */}
+          <ellipse cx={L/2} cy={bowlCy} rx={bowlRx*0.72} ry={bowlRy*0.68} fill="none" stroke={stroke} strokeWidth={t}/>
+          {/* Flush button */}
+          <circle cx={L/2} cy={cisH*0.5} r={t*1.5} fill={stroke}/>
+        </>
+      );
+    }
+    default: return null;
+  }
+}
+
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
@@ -172,6 +263,12 @@ export default function SvgEditor({
     island:{length:96,depth:36},bench:{length:96,depth:24},fridge:{length:28,depth:28},
     sink:{length:36,depth:20},cooktop:{length:24,depth:24},dishwasher:{length:24,depth:24},
   });
+  const [placedBaths,    setPlacedBaths]    = useState<PlacedBath[]>([]);
+  const [bathSubtype,    setBathSubtype]    = useState<BathSubtype>('bathtub');
+  const [bathDefaults,   setBathDefaults]   = useState<Record<BathSubtype,{length:number;depth:number}>>({
+    bathtub:{length:170,depth:70},shower:{length:90,depth:90},
+    vanity:{length:90,depth:50},basin:{length:50,depth:40},toilet:{length:37,depth:60},
+  });
 
   const [activeTool,    setActiveTool]    = useState<ActiveTool>('door');
   const [wallEraseMode, setWallEraseMode] = useState(false);
@@ -207,8 +304,8 @@ export default function SvgEditor({
 
   // Keep stateRef in sync
   useEffect(() => {
-    stateRef.current = { doors:placedDoors, walls:placedWalls, windows:placedWindows, robes:placedRobes, kitchens:placedKitchens };
-  }, [placedDoors, placedWalls, placedWindows, placedRobes, placedKitchens]);
+    stateRef.current = { doors:placedDoors, walls:placedWalls, windows:placedWindows, robes:placedRobes, kitchens:placedKitchens, baths:placedBaths };
+  }, [placedDoors, placedWalls, placedWindows, placedRobes, placedKitchens, placedBaths]);
 
   // Toast auto-dismiss
   useEffect(() => {
@@ -250,7 +347,7 @@ export default function SvgEditor({
     undoStack.current = undoStack.current.slice(0,-1);
     setPlacedDoors(prev.doors); setPlacedWalls(prev.walls);
     setPlacedWindows(prev.windows); setPlacedRobes(prev.robes);
-    setPlacedKitchens(prev.kitchens); setSelectedEl(null);
+    setPlacedKitchens(prev.kitchens); setPlacedBaths((prev as any).baths||[]); setSelectedEl(null);
     setUndoDepth(undoStack.current.length);
   }, []);
 
@@ -337,6 +434,10 @@ export default function SvgEditor({
           setEraseSize(Math.round(ws*4));
           nudgeStep.current=Math.max(1,upm*0.01);
 
+          setBathDefaults({
+            bathtub:{length:1.7*upm,depth:0.75*upm},shower:{length:0.9*upm,depth:0.9*upm},
+            vanity:{length:0.9*upm,depth:0.5*upm},basin:{length:0.5*upm,depth:0.4*upm},toilet:{length:0.37*upm,depth:0.6*upm},
+          });
           setKitchenDefaults({
             island:{length:2.5*upm,depth:0.9*upm},
             bench:{length:2.4*upm,depth:0.6*upm},
@@ -353,6 +454,7 @@ export default function SvgEditor({
         if(existingWindows?.length) {setPlacedWindows(existingWindows);  allIds.push(...existingWindows.map(w=>w.id));}
         if(existingRobes?.length)   {setPlacedRobes(existingRobes);      allIds.push(...existingRobes.map(r=>r.id));}
         if(existingKitchens?.length){setPlacedKitchens(existingKitchens);allIds.push(...existingKitchens.map(k=>k.id));}
+        if((existingBaths as any)?.length){setPlacedBaths(existingBaths as any);allIds.push(...(existingBaths as any).map((b:any)=>b.id));}
         if(allIds.length>0) nextId.current=Math.max(...allIds)+1;
 
       } catch(err) { console.error('SvgEditor: failed to load SVG',err); }
@@ -385,6 +487,7 @@ export default function SvgEditor({
     if(selectedEl.kind==='window')  setPlacedWindows(p  =>p.map(w=>w.id===selectedEl.id?{...w,rotation:(w.rotation+90)%360}:w));
     if(selectedEl.kind==='robe')    setPlacedRobes(p    =>p.map(r=>r.id===selectedEl.id?{...r,rotation:(r.rotation+90)%360}:r));
     if(selectedEl.kind==='kitchen') setPlacedKitchens(p =>p.map(k=>k.id===selectedEl.id?{...k,rotation:(k.rotation+90)%360}:k));
+    if(selectedEl.kind==='bath')    setPlacedBaths(p    =>p.map(b=>b.id===selectedEl.id?{...b,rotation:(b.rotation+90)%360}:b));
   }, [selectedEl, pushUndo]);
 
   const handleFlipSelected = useCallback(() => {
@@ -411,6 +514,7 @@ export default function SvgEditor({
     if(selectedEl.kind==='window')  setPlacedWindows(p  =>p.filter(w=>w.id!==selectedEl.id));
     if(selectedEl.kind==='robe')    setPlacedRobes(p    =>p.filter(r=>r.id!==selectedEl.id));
     if(selectedEl.kind==='kitchen') setPlacedKitchens(p =>p.filter(k=>k.id!==selectedEl.id));
+    if(selectedEl.kind==='bath')    setPlacedBaths(p    =>p.filter(b=>b.id!==selectedEl.id));
     setSelectedEl(null);
   }, [selectedEl, pushUndo]);
 
@@ -466,6 +570,7 @@ export default function SvgEditor({
       if(selectedEl.kind==='window')  setPlacedWindows(p  =>p.map(w=>w.id===selectedEl.id?{...w,x:w.x+dx,y:w.y+dy}:w));
       if(selectedEl.kind==='robe')    setPlacedRobes(p    =>p.map(r=>r.id===selectedEl.id?{...r,x:r.x+dx,y:r.y+dy}:r));
       if(selectedEl.kind==='kitchen') setPlacedKitchens(p =>p.map(k=>k.id===selectedEl.id?{...k,x:k.x+dx,y:k.y+dy}:k));
+      if(selectedEl.kind==='bath')    setPlacedBaths(p    =>p.map(b=>b.id===selectedEl.id?{...b,x:b.x+dx,y:b.y+dy}:b));
     };
     const onKeyUp = (e:KeyboardEvent) => { if(e.code==='Space') setSpaceDown(false); };
     window.addEventListener('keydown',onKeyDown);
@@ -515,7 +620,12 @@ export default function SvgEditor({
       setPlacedKitchens(p=>[...p,{id,x:cx,y:cy,rotation:0,subtype:kitchenSubtype,length:def.length,depth:def.depth}]);
       setSelectedEl({kind:'kitchen',id}); return;
     }
-  }, [activeTool,doorWidth,windowWidth,robeLength,robeFixedW,kitchenSubtype,kitchenDefaults,
+    if(activeTool==='bath'){
+      pushUndo(); const def=bathDefaults[bathSubtype]; const id=nextId.current++;
+      setPlacedBaths(p=>[...p,{id,x:cx,y:cy,rotation:0,subtype:bathSubtype,length:def.length,depth:def.depth}]);
+      setSelectedEl({kind:'bath',id}); return;
+    }
+  }, [activeTool,doorWidth,windowWidth,robeLength,robeFixedW,kitchenSubtype,kitchenDefaults,bathSubtype,bathDefaults,
       wallStart,wallEraseMode,snap,snapToAngle,pushUndo,screenToSvg]);
 
   const handleElementClick = useCallback((e:React.MouseEvent,kind:ElementKind,id:number) => {
@@ -575,6 +685,7 @@ export default function SvgEditor({
     if(drag.kind==='window')  setPlacedWindows(p  =>p.map(w=>w.id===drag.id?{...w,x:snap(cx-drag.ox),y:snap(cy-drag.oy)}:w));
     if(drag.kind==='robe')    setPlacedRobes(p    =>p.map(r=>r.id===drag.id?{...r,x:snap(cx-drag.ox),y:snap(cy-drag.oy)}:r));
     if(drag.kind==='kitchen') setPlacedKitchens(p =>p.map(k=>k.id===drag.id?{...k,x:snap(cx-drag.ox),y:snap(cy-drag.oy)}:k));
+    if(drag.kind==='bath')    setPlacedBaths(p    =>p.map(b=>b.id===drag.id?{...b,x:snap(cx-drag.ox),y:snap(cy-drag.oy)}:b));
     if(drag.kind==='wall-body'){
       const ddx=snap(cx-drag.grabX),ddy=snap(cy-drag.grabY);
       setPlacedWalls(p=>p.map(w=>w.id===drag.id?{...w,x1:drag.startX1+ddx,y1:drag.startY1+ddy,x2:drag.startX2+ddx,y2:drag.startY2+ddy,cpx:drag.startCpx+ddx,cpy:drag.startCpy+ddy}:w));
@@ -634,6 +745,14 @@ export default function SvgEditor({
     activeDrag.current={kind:'kitchen',id,ox:svgPt.x-item.x,oy:svgPt.y-item.y};wasDragged.current=false;
   },[placedKitchens,screenToSvg,pushUndo]);
 
+  const startDragBath = useCallback((e:React.MouseEvent,id:number) => {
+    e.stopPropagation();e.preventDefault();
+    const svgPt=screenToSvg(e.clientX,e.clientY);if(!svgPt)return;
+    const item=placedBaths.find(b=>b.id===id);if(!item)return;
+    pushUndo();setSelectedEl({kind:'bath',id});
+    activeDrag.current={kind:'bath',id,ox:svgPt.x-item.x,oy:svgPt.y-item.y};wasDragged.current=false;
+  },[placedBaths,screenToSvg,pushUndo]);
+
   const startDragWallBody = useCallback((e:React.MouseEvent,id:number) => {
     e.stopPropagation();e.preventDefault();
     const svgPt=screenToSvg(e.clientX,e.clientY);if(!svgPt)return;
@@ -659,6 +778,7 @@ export default function SvgEditor({
   const selectedWindow  = selectedEl?.kind==='window'  ? placedWindows.find(w=>w.id===selectedEl.id)  : null;
   const selectedRobe    = selectedEl?.kind==='robe'    ? placedRobes.find(r=>r.id===selectedEl.id)    : null;
   const selectedKitchen = selectedEl?.kind==='kitchen' ? placedKitchens.find(k=>k.id===selectedEl.id) : null;
+  const selectedBath    = selectedEl?.kind==='bath'    ? placedBaths.find(b=>b.id===selectedEl.id)    : null;
 
   // ── Save ────────────────────────────────────────────────────────────────────
   const handleSave = async () => {
@@ -717,7 +837,7 @@ export default function SvgEditor({
       // Kitchen
       const kitchenSvg=placedKitchens.map(k=>{
         const{subtype,length:L,depth:D}=k;
-        const kscale=(subtype==='island'||subtype==='bench')?1:0.5;
+        const kscale=0.5;
         const thin=sw*0.35*kscale,thick=sw*0.55*kscale;
         let inner='';
         if(subtype==='island'){inner=`<rect x="${D*0.12}" y="${D*0.12}" width="${L-D*0.24}" height="${D-D*0.24}" fill="none" stroke="#1a1a1a" stroke-width="${thin*0.6}" opacity="0.4"/>"`;}
@@ -735,18 +855,48 @@ export default function SvgEditor({
   ${inner}
 </g>`;}).join('\n');
 
+      // Baths
+      const bathSvg=placedBaths.map(b=>{
+        const{subtype,length:L,depth:D}=b;
+        const t=sw*0.25;
+        let inner='';
+        if(subtype==='bathtub'){
+          const pad=Math.min(L,D)*0.1,rx=(L-pad*2)/2,ry=(D-pad*2)/2,dr=Math.min(rx,ry)*0.12;
+          inner=`<ellipse cx="${L/2}" cy="${D/2}" rx="${rx}" ry="${ry}" fill="none" stroke="#1a1a1a" stroke-width="${t}"/><circle cx="${L*0.5}" cy="${D*0.82}" r="${dr}" fill="none" stroke="#1a1a1a" stroke-width="${t*0.8}"/>`;
+        } else if(subtype==='shower'){
+          const arcR=Math.min(L,D)*0.45;
+          inner=`<path d="M ${L},0 A ${arcR},${arcR} 0 0,1 0,${D}" fill="none" stroke="#1a1a1a" stroke-width="${t*1.2}"/><line x1="${L*0.5-t*2}" y1="${D*0.5}" x2="${L*0.5+t*2}" y2="${D*0.5}" stroke="#1a1a1a" stroke-width="${t}"/><line x1="${L*0.5}" y1="${D*0.5-t*2}" x2="${L*0.5}" y2="${D*0.5+t*2}" stroke="#1a1a1a" stroke-width="${t}"/><circle cx="${L*0.5}" cy="${D*0.5}" r="${t*3}" fill="none" stroke="#1a1a1a" stroke-width="${t*0.6}"/>`;
+        } else if(subtype==='vanity'){
+          const bw=Math.min(L*0.55,D*0.75),bh=Math.min(D*0.65,L*0.65);
+          inner=`<ellipse cx="${L/2}" cy="${D/2}" rx="${bw/2}" ry="${bh/2}" fill="none" stroke="#1a1a1a" stroke-width="${t}"/><circle cx="${L/2}" cy="${D*0.42}" r="${t*1.2}" fill="#1a1a1a"/>`;
+        } else if(subtype==='basin'){
+          const bw=L*0.72,bh=D*0.68;
+          inner=`<ellipse cx="${L/2}" cy="${D*0.55}" rx="${bw/2}" ry="${bh/2}" fill="none" stroke="#1a1a1a" stroke-width="${t}"/><circle cx="${L/2}" cy="${D*0.22}" r="${t*1.2}" fill="#1a1a1a"/><line x1="${L*0.38}" y1="${D*0.22}" x2="${L*0.62}" y2="${D*0.22}" stroke="#1a1a1a" stroke-width="${t*1.2}" stroke-linecap="round"/>`;
+        } else if(subtype==='toilet'){
+          const cisH=D*0.32,bowlRx=L*0.4,bowlRy=(D-cisH)*0.48,bowlCy=cisH+(D-cisH)*0.52;
+          inner=`<rect x="0" y="0" width="${L}" height="${cisH}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${t*1.5}"/><ellipse cx="${L/2}" cy="${bowlCy}" rx="${bowlRx}" ry="${bowlRy}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${t*1.5}"/><ellipse cx="${L/2}" cy="${bowlCy}" rx="${bowlRx*0.72}" ry="${bowlRy*0.68}" fill="none" stroke="#1a1a1a" stroke-width="${t}"/><circle cx="${L/2}" cy="${cisH*0.5}" r="${t*1.5}" fill="#1a1a1a"/>`;
+          return `<g transform="translate(${b.x},${b.y}) rotate(${b.rotation})" class="bath-element" data-bath-id="${b.id}" data-subtype="${subtype}">${inner}</g>`;
+        }
+        return `<g transform="translate(${b.x},${b.y}) rotate(${b.rotation})" class="bath-element" data-bath-id="${b.id}" data-subtype="${subtype}">
+  <rect x="0" y="0" width="${L}" height="${D}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${t*1.5}"/>
+  ${inner}
+</g>`;
+      }).join('\n');
+
       let modifiedSvg=svgContent
         .replace(/<g\s+id="doors-layer"[\s\S]*?<\/g>\s*/g,'')
         .replace(/<g\s+id="walls-layer"[\s\S]*?<\/g>\s*/g,'')
         .replace(/<g\s+id="windows-layer"[\s\S]*?<\/g>\s*/g,'')
         .replace(/<g\s+id="robes-layer"[\s\S]*?<\/g>\s*/g,'')
-        .replace(/<g\s+id="kitchen-layer"[\s\S]*?<\/g>\s*/g,'');
+        .replace(/<g\s+id="kitchen-layer"[\s\S]*?<\/g>\s*/g,'')
+        .replace(/<g\s+id="bath-layer"[\s\S]*?<\/g>\s*/g,'');
 
       modifiedSvg=modifiedSvg.replace('</svg>',
         `<g id="walls-layer">\n${wallsSvg}\n</g>\n`+
         `<g id="windows-layer">\n${windowsSvg}\n</g>\n`+
         `<g id="robes-layer">\n${robesSvg}\n</g>\n`+
         `<g id="kitchen-layer">\n${kitchenSvg}\n</g>\n`+
+        `<g id="bath-layer">\n${bathSvg}\n</g>\n`+
         `<g id="doors-layer">\n${doorsSvg}\n</g>\n</svg>`);
 
       const token=localStorage.getItem('auth_token')||localStorage.getItem('access_token');
@@ -754,12 +904,12 @@ export default function SvgEditor({
       const res=await fetch(`${API_URL}/api/v1/plans/${projectId}/plans/${planId}/save-svg`,{
         method:'PUT',
         headers:{'Content-Type':'application/json',...(token&&{Authorization:`Bearer ${token}`})},
-        body:JSON.stringify({svg_content:modifiedSvg,doors:placedDoors,walls:placedWalls,windows:placedWindows,robes:placedRobes,kitchens:placedKitchens}),
+        body:JSON.stringify({svg_content:modifiedSvg,doors:placedDoors,walls:placedWalls,windows:placedWindows,robes:placedRobes,kitchens:placedKitchens,baths:placedBaths}),
       });
       if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(err.detail||'Save failed');}
       const result=await res.json();
       showToast('Floor plan saved!','success');
-      onSave({previewImageUrl:result.preview_image_url,doors:placedDoors,walls:placedWalls,windows:placedWindows,robes:placedRobes,kitchens:placedKitchens,updatedAt:new Date().toISOString()});
+      onSave({previewImageUrl:result.preview_image_url,doors:placedDoors,walls:placedWalls,windows:placedWindows,robes:placedRobes,kitchens:placedKitchens,baths:placedBaths,updatedAt:new Date().toISOString()});
     } catch(err:any) {
       console.error('SvgEditor save failed:',err);
       showToast(err?.message||'Failed to save. Please try again.','error');
@@ -784,7 +934,7 @@ export default function SvgEditor({
     activeTool==='door'||activeTool==='window'||activeTool==='robe'||activeTool==='kitchen' ? 'crosshair' :
     activeTool==='wall'       ? (wallStart?'crosshair':'cell') : 'default';
 
-  const totalElements=placedDoors.length+placedWalls.length+placedWindows.length+placedRobes.length+placedKitchens.length;
+  const totalElements=placedDoors.length+placedWalls.length+placedWindows.length+placedRobes.length+placedKitchens.length+placedBaths.length;
 
   const toolBtn=(tool:ActiveTool,label:string,Icon:React.ElementType,color:string)=>{
     const active=activeTool===tool;
@@ -970,6 +1120,22 @@ export default function SvgEditor({
               })}
             </g>
 
+            {/* Bath overlay */}
+            <g id="bath-overlay">
+              {placedBaths.map(item=>{
+                const sel=selectedEl?.kind==='bath'&&selectedEl.id===item.id;
+                return (
+                  <g key={item.id} transform={`translate(${item.x},${item.y}) rotate(${item.rotation})`}
+                    onClick={e=>handleElementClick(e,'bath',item.id)}
+                    onMouseDown={e=>{if(activeTool==='select')startDragBath(e,item.id);}}
+                    style={{cursor:sel?'grab':'pointer'}}>
+                    {sel&&<rect x={-5} y={-5} width={item.length+10} height={item.depth+10} fill="rgba(59,130,246,0.06)" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="6,3" rx={3}/>}
+                    <BathSymbol item={item} sw={wallStroke} sel={sel}/>
+                  </g>
+                );
+              })}
+            </g>
+
             {/* Doors overlay */}
             <g id="doors-overlay">
               {placedDoors.map(door=>{
@@ -1002,6 +1168,7 @@ export default function SvgEditor({
               {activeTool==='window'  && 'Click to place a window'}
               {activeTool==='robe'    && 'Click to place a built-in robe'}
               {activeTool==='kitchen' && `Click to place ${kitchenSubtype}`}
+              {activeTool==='bath'    && `Click to place ${bathSubtype}`}
             </div>
           )}
           {activeTool==='wall'&&!wallEraseMode&&wallStart&&(
@@ -1076,6 +1243,7 @@ export default function SvgEditor({
               {toolBtn('window','Window',Square,'bg-cyan-600')}
               {toolBtn('robe','Robe',Columns,'bg-amber-600')}
               {toolBtn('kitchen','Kitchen',UtensilsCrossed,'bg-orange-600')}
+              {toolBtn('bath','Bath',Square,'bg-teal-600')}
             </div>
 
             {/* Wall sub-options: erase mode + size */}
@@ -1102,6 +1270,21 @@ export default function SvgEditor({
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Bath sub-palette */}
+            {activeTool==='bath'&&(
+              <div className="mt-3 pt-3 border-t border-white/10">
+                <p className="text-gray-500 text-[10px] mb-2 uppercase tracking-wider">Item to place</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(['bathtub','shower','vanity','basin','toilet'] as BathSubtype[]).map(st=>(
+                    <button key={st} onClick={()=>setBathSubtype(st)}
+                      className={`px-2 py-1.5 rounded-md text-[11px] font-medium capitalize transition border ${bathSubtype===st?'bg-teal-600 border-teal-500 text-white':'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10'}`}>
+                      {st}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -1336,18 +1519,58 @@ export default function SvgEditor({
                   </div>
                 );
               })()}
+              {selectedBath&&(()=>{
+                const mmLen=Math.round(selectedBath.length/unitsPerMeter*1000);
+                const mmDep=Math.round(selectedBath.depth/unitsPerMeter*1000);
+                const commit=(field:'rotation'|'length'|'depth',raw:string)=>{
+                  const v=parseInt(raw,10); if(isNaN(v)) return; pushUndo();
+                  if(field==='rotation') setPlacedBaths(p=>p.map(b=>b.id===selectedBath.id?{...b,rotation:((v%360)+360)%360}:b));
+                  if(field==='length')   setPlacedBaths(p=>p.map(b=>b.id===selectedBath.id?{...b,length:Math.max(0.001,v/1000*unitsPerMeter)}:b));
+                  if(field==='depth')    setPlacedBaths(p=>p.map(b=>b.id===selectedBath.id?{...b,depth:Math.max(0.001,v/1000*unitsPerMeter)}:b));
+                };
+                const kd=(e:React.KeyboardEvent<HTMLInputElement>)=>{ if(e.key==='Enter') e.currentTarget.blur(); };
+                const inputCls="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-teal-400 focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
+                return (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-400">Type</span>
+                      <span className="font-mono text-white capitalize">{selectedBath.subtype}</span>
+                    </div>
+                    <PropRow label="Rotation" unit="°">
+                      <input type="text" inputMode="numeric" defaultValue={selectedBath.rotation}
+                        key={`bath-rot-${selectedBath.id}`}
+                        onBlur={e=>commit('rotation',e.target.value)} onKeyDown={kd}
+                        className={inputCls.replace('w-20','w-16')}/>
+                    </PropRow>
+                    <PropRow label="Length" unit="mm">
+                      <input type="text" inputMode="numeric" defaultValue={mmLen}
+                        key={`bath-len-${selectedBath.id}-${mmLen}`}
+                        onBlur={e=>commit('length',e.target.value)} onKeyDown={kd}
+                        className={inputCls}/>
+                    </PropRow>
+                    <PropRow label="Depth" unit="mm">
+                      <input type="text" inputMode="numeric" defaultValue={mmDep}
+                        key={`bath-dep-${selectedBath.id}-${mmDep}`}
+                        onBlur={e=>commit('depth',e.target.value)} onKeyDown={kd}
+                        className={inputCls}/>
+                    </PropRow>
+                  </div>
+                );
+              })()}
+
             </div>
           )}
 
           {/* Elements summary */}
           <div className="bg-white/5 rounded-xl p-4 border border-white/10">
             <h4 className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-3">Placed Elements</h4>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-6 gap-2">
               {[{label:'Doors',count:placedDoors.length,color:'text-blue-400',bg:'bg-blue-500/10'},
                 {label:'Walls',count:placedWalls.length,color:'text-violet-400',bg:'bg-violet-500/10'},
                 {label:'Windows',count:placedWindows.length,color:'text-cyan-400',bg:'bg-cyan-500/10'},
                 {label:'Robes',count:placedRobes.length,color:'text-amber-400',bg:'bg-amber-500/10'},
                 {label:'Kitchen',count:placedKitchens.length,color:'text-orange-400',bg:'bg-orange-500/10'},
+                {label:'Bath',count:placedBaths.length,color:'text-teal-400',bg:'bg-teal-500/10'},
               ].map(({label,count,color,bg})=>(
                 <div key={label} className={`${bg} rounded-lg p-2 text-center`}>
                   <div className={`text-xl font-bold ${color}`}>{count}</div>
