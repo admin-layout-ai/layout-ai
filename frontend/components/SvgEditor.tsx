@@ -126,19 +126,85 @@ export default function SvgEditor({
           const vb = svgEl.getAttribute('viewBox')?.split(/[\s,]+/).map(Number);
           if (vb && vb.length === 4) {
             setSvgViewBox({ x: vb[0], y: vb[1], w: vb[2], h: vb[3] });
-            const svgUnitsPerMeter = vb[2] / envelopeWidth;
-            setDoorWidth(Math.round(svgUnitsPerMeter * 0.82));
-            setWallClearHeight(Math.max(16, Math.round(svgUnitsPerMeter * 0.35)));
-            nudgeStep.current = Math.max(1, Math.round(svgUnitsPerMeter * 0.05));
           } else {
             const w = parseFloat(svgEl.getAttribute('width') || '800');
             const h = parseFloat(svgEl.getAttribute('height') || '1000');
             setSvgViewBox({ x: 0, y: 0, w, h });
-            const fallbackUnitsPerMeter = w / envelopeWidth;
-            setDoorWidth(Math.round(fallbackUnitsPerMeter * 0.82));
-            setWallClearHeight(Math.max(16, Math.round(fallbackUnitsPerMeter * 0.35)));
-            nudgeStep.current = Math.max(1, Math.round(fallbackUnitsPerMeter * 0.05));
           }
+
+          // ── Detect true scale from SVG content ──────────────────────────
+          // Parse a room dimension label (e.g. "5.3m x 3.6m") and measure
+          // the corresponding room's SVG width from wall rects.
+          let svgUnitsPerMeter = 0;
+
+          // 1) Collect vertical wall rects (narrow width, tall) sorted by x
+          const allRects = Array.from(svgEl.querySelectorAll('rect[fill="#1a1a1a"]'));
+          const verticalWalls = allRects
+            .filter(r => {
+              const rw = parseFloat(r.getAttribute('width') || '0');
+              const rh = parseFloat(r.getAttribute('height') || '0');
+              return rh > rw * 2 && rh > 20; // tall & narrow = vertical wall
+            })
+            .map(r => ({
+              x: parseFloat(r.getAttribute('x') || '0'),
+              w: parseFloat(r.getAttribute('width') || '0'),
+            }));
+
+          // 2) Parse room dimension texts like "5.3m x 3.6m"
+          const dimTexts = Array.from(svgEl.querySelectorAll('text'));
+          const dimRegex = /^(\d+\.?\d*)\s*m\s*x\s*(\d+\.?\d*)\s*m$/i;
+          let roomWidthM = 0;
+          let roomTextX = 0;
+
+          for (const t of dimTexts) {
+            const match = (t.textContent || '').trim().match(dimRegex);
+            if (match) {
+              const rw = parseFloat(match[1]);
+              if (rw > roomWidthM) {
+                roomWidthM = rw;
+                roomTextX = parseFloat(t.getAttribute('x') || '0');
+              }
+            }
+          }
+
+          // 3) Find the pair of vertical walls that bracket this room text
+          if (roomWidthM > 0 && verticalWalls.length >= 2) {
+            const sorted = [...verticalWalls].sort((a, b) => a.x - b.x);
+            let bestLeft: typeof sorted[0] | null = null;
+            let bestRight: typeof sorted[0] | null = null;
+
+            for (const vw of sorted) {
+              if (vw.x + vw.w <= roomTextX) bestLeft = vw;
+            }
+            for (const vw of sorted) {
+              if (vw.x >= roomTextX && !bestRight) bestRight = vw;
+            }
+
+            if (bestLeft && bestRight) {
+              // Inner room width = right wall left edge - left wall right edge
+              const roomSvgWidth = bestRight.x - (bestLeft.x + bestLeft.w);
+              if (roomSvgWidth > 0) {
+                svgUnitsPerMeter = roomSvgWidth / roomWidthM;
+              }
+            }
+          }
+
+          // 4) Fallback: use building outer bounds / envelopeWidth
+          if (svgUnitsPerMeter <= 0) {
+            let minX = Infinity, maxX = -Infinity;
+            allRects.forEach(r => {
+              const rx = parseFloat(r.getAttribute('x') || '0');
+              const rw = parseFloat(r.getAttribute('width') || '0');
+              if (rx < minX) minX = rx;
+              if (rx + rw > maxX) maxX = rx + rw;
+            });
+            const buildingWidth = (maxX > minX) ? (maxX - minX) : (vb ? vb[2] : 800);
+            svgUnitsPerMeter = buildingWidth / envelopeWidth;
+          }
+
+          setDoorWidth(Math.round(svgUnitsPerMeter * 0.82));  // 820mm
+          setWallClearHeight(Math.max(16, Math.round(svgUnitsPerMeter * 0.35)));
+          nudgeStep.current = Math.max(1, Math.round(svgUnitsPerMeter * 0.05));
         }
 
         if (existingDoors && existingDoors.length > 0) {
@@ -347,9 +413,9 @@ export default function SvgEditor({
           const flipScale = door.flipped ? ' scale(1,-1)' : '';
           return `<g transform="translate(${door.x}, ${door.y}) rotate(${door.rotation})${flipScale}" class="door-element" data-door-id="${door.id}">
   <rect x="${-wch}" y="${-wch / 2}" width="${w + 2 * wch}" height="${wch}" fill="#FFFFFF" stroke="none"/>
-  <line x1="0" y1="0" x2="${w}" y2="0" stroke="#000000" stroke-width="2" fill="none"/>
-  <path d="M ${w},0 A ${w},${w} 0 0,1 0,${-w}" fill="none" stroke="#000000" stroke-width="1"/>
-  <circle cx="0" cy="0" r="2" fill="#000000"/>
+  <line x1="0" y1="0" x2="${w}" y2="0" stroke="#000000" stroke-width="1" fill="none"/>
+  <path d="M ${w},0 A ${w},${w} 0 0,1 0,${-w}" fill="none" stroke="#000000" stroke-width="0.5"/>
+  <circle cx="0" cy="0" r="1.5" fill="#000000"/>
 </g>`;
         })
         .join('\n');
@@ -472,20 +538,20 @@ export default function SvgEditor({
                     <line
                       x1="0" y1="0" x2={w} y2="0"
                       stroke={selected ? '#2563eb' : '#000'}
-                      strokeWidth={selected ? 3 : 2}
+                      strokeWidth={selected ? 1.5 : 1}
                     />
                     {/* Swing arc */}
                     <path
                       d={`M ${w},0 A ${w},${w} 0 0,0 0,${-w}`}
                       fill="none"
                       stroke={selected ? '#2563eb' : '#000'}
-                      strokeWidth={selected ? 1.5 : 1}
+                      strokeWidth={selected ? 1 : 0.5}
                       strokeDasharray="4,3"
                     />
                     {/* Hinge */}
                     <circle
                       cx="0" cy="0"
-                      r={selected ? 4 : 3}
+                      r={selected ? 3 : 1.5}
                       fill={selected ? '#2563eb' : '#000'}
                     />
                   </g>
