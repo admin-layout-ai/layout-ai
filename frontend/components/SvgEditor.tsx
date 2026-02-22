@@ -696,11 +696,13 @@ export default function SvgEditor({
       // Windows SVG
       const windowsSvg = placedWindows.map(win => {
         const w = win.width;
+        const wt = wch; // wall thickness
+        const inset = Math.max(1.5, wt / 7);
         const flipScale = win.flipped ? ' scale(1,-1)' : '';
         return `<g transform="translate(${win.x},${win.y}) rotate(${win.rotation})${flipScale}" class="window-element" data-window-id="${win.id}">
-  <rect x="${-wch}" y="${-wch/2}" width="${w+2*wch}" height="${wch}" fill="#FFFFFF" stroke="none"/>
-  <rect x="0" y="${-wch/2}" width="${w}" height="${wch}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${sw}"/>
-  <line x1="0" y1="0" x2="${w}" y2="0" stroke="#1a1a1a" stroke-width="${sw*0.5}"/>
+  <rect x="0" y="${-wt/2}" width="${w}" height="${wt}" fill="#FFFFFF" stroke="none"/>
+  <line x1="0" y1="${-wt/2 + inset}" x2="${w}" y2="${-wt/2 + inset}" stroke="#1a1a1a" stroke-width="${sw * 0.4}"/>
+  <line x1="0" y1="${wt/2 - inset}" x2="${w}" y2="${wt/2 - inset}" stroke="#1a1a1a" stroke-width="${sw * 0.4}"/>
 </g>`;
       }).join('\n');
 
@@ -710,7 +712,7 @@ export default function SvgEditor({
         const rl = robe.length;
         return `<g transform="translate(${robe.x},${robe.y}) rotate(${robe.rotation})" class="robe-element" data-robe-id="${robe.id}">
   <rect x="0" y="0" width="${rl}" height="${rw}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${sw}"/>
-  <line x1="0" y1="${rw/2}" x2="${rl}" y2="${rw/2}" stroke="#1a1a1a" stroke-width="${sw*0.4}"/>
+  <line x1="0" y1="${rw / 3}" x2="${rl}" y2="${rw / 3}" stroke="#1a1a1a" stroke-width="${sw * 0.5}"/>
 </g>`;
       }).join('\n');
 
@@ -882,7 +884,8 @@ export default function SvgEditor({
             <g id="windows-overlay">
               {placedWindows.map(win => {
                 const w = win.width;
-                const wch = wallClearHeight;
+                const wt = wallClearHeight; // wall thickness
+                const inset = Math.max(1.5, wt / 7); // ~2px for 14px wall
                 const sel = selectedEl?.kind === 'window' && selectedEl.id === win.id;
                 const flipScale = win.flipped ? ' scale(1,-1)' : '';
                 return (
@@ -893,20 +896,18 @@ export default function SvgEditor({
                     onMouseDown={e => startDragWindow(e, win.id)}
                     style={{ cursor: sel ? 'grab' : 'pointer' }}
                   >
-                    {/* Clear wall */}
-                    <rect x={-wch} y={-wch/2} width={w + 2*wch} height={wch} fill="#FFFFFF" stroke="none" />
+                    {/* White rect clearing exact wall thickness × window length */}
+                    <rect x={0} y={-wt/2} width={w} height={wt} fill="#FFFFFF" stroke="none" />
                     {/* Selection highlight */}
-                    {sel && <rect x={-4} y={-wch/2 - 4} width={w + 8} height={wch + 8} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="5,3" rx={2} />}
-                    {/* Window frame */}
-                    <rect
-                      x={0} y={-wch/2}
-                      width={w} height={wch}
-                      fill="#e8f4f8"
+                    {sel && <rect x={-4} y={-wt/2 - 4} width={w + 8} height={wt + 8} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="5,3" rx={2} />}
+                    {/* Line 1 – inset from near wall edge */}
+                    <line x1={0} y1={-wt/2 + inset} x2={w} y2={-wt/2 + inset}
                       stroke={sel ? '#2563eb' : '#1a1a1a'}
-                      strokeWidth={sel ? 1.5 : wallStroke}
-                    />
-                    {/* Centre pane line */}
-                    <line x1={0} y1={0} x2={w} y2={0} stroke={sel ? '#2563eb' : '#555'} strokeWidth={wallStroke * 0.5} />
+                      strokeWidth={sel ? 1.5 : wallStroke * 0.4} />
+                    {/* Line 2 – inset from far wall edge */}
+                    <line x1={0} y1={wt/2 - inset} x2={w} y2={wt/2 - inset}
+                      stroke={sel ? '#2563eb' : '#1a1a1a'}
+                      strokeWidth={sel ? 1.5 : wallStroke * 0.4} />
                   </g>
                 );
               })}
@@ -927,10 +928,12 @@ export default function SvgEditor({
                     style={{ cursor: sel ? 'grab' : 'pointer' }}
                   >
                     {sel && <rect x={-4} y={-4} width={rl + 8} height={rw + 8} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="5,3" rx={2} />}
-                    {/* Body – plain white rectangle matching plan style */}
+                    {/* Outer body */}
                     <rect x={0} y={0} width={rl} height={rw} fill="#FFFFFF" stroke={sel ? '#2563eb' : '#1a1a1a'} strokeWidth={sel ? 1.5 : wallStroke} />
-                    {/* Hanging rod – single centre line */}
-                    <line x1={0} y1={rw/2} x2={rl} y2={rw/2} stroke={sel ? '#2563eb' : '#1a1a1a'} strokeWidth={wallStroke * 0.4} />
+                    {/* Sliding door face line – 1/3 depth from front */}
+                    <line x1={0} y1={rw / 3} x2={rl} y2={rw / 3}
+                      stroke={sel ? '#2563eb' : '#1a1a1a'}
+                      strokeWidth={sel ? 1.2 : wallStroke * 0.5} />
                   </g>
                 );
               })}
