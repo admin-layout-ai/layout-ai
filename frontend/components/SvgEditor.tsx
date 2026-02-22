@@ -77,6 +77,19 @@ function ptsToPath(pts: { x: number; y: number }[]): string {
   return `M ${pts[0].x},${pts[0].y} ` + pts.slice(1).map(p => `L ${p.x},${p.y}`).join(' ');
 }
 
+// ── PropRow helper ────────────────────────────────────────────────────────────────
+function PropRow({ label, unit, children }: { label: string; unit: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-gray-400 text-xs w-16 shrink-0">{label}</span>
+      <div className="flex items-center gap-1 ml-auto">
+        {children}
+        <span className="text-gray-500 text-xs">{unit}</span>
+      </div>
+    </div>
+  );
+}
+
 // ── Kitchen symbol ─────────────────────────────────────────────────────────────
 
 function KitchenSymbol({ item, sw, sel }: { item: PlacedKitchen; sw: number; sel: boolean }) {
@@ -423,6 +436,13 @@ export default function SvgEditor({
   // ── Keyboard ────────────────────────────────────────────────────────────────
   useEffect(() => {
     const onKeyDown = (e:KeyboardEvent) => {
+      // Don't intercept when user is typing in an input/textarea
+      const tag=(document.activeElement as HTMLElement)?.tagName;
+      if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT') {
+        // Still allow Escape to blur the field
+        if(e.key==='Escape')(document.activeElement as HTMLElement).blur();
+        return;
+      }
       if(e.code==='Space'&&!e.repeat){e.preventDefault();setSpaceDown(true);return;}
       if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();handleUndo();return;}
       if(e.key==='Escape'){setWallStart(null);setWallEraseMode(false);setSelectedEl(null);return;}
@@ -677,22 +697,18 @@ export default function SvgEditor({
   </g>
 </g>`;}).join('\n');
 
-      // Robes - proper architectural sliding door (2 overlapping panels + directional arrows)
+      // Robes – simple rectangle: 3 sides at full wall stroke, front (bottom) side at 0.25x
       const robesSvg=placedRobes.map(robe=>{
         const rw=robe.width,rl=robe.length;
-        const pw=rl*0.55;          // each panel width (panels overlap in centre)
-        const sw2=sw*0.5;
-        const aw=Math.min(rw*0.22,pw*0.18); // arrowhead size
-        const p1x2=pw;
-        const p2x1=rl-pw;
+        const thick=sw, thin=sw*0.25;
+        // Draw as 4 individual lines so each side can have its own stroke-width.
+        // Top, Left, Right = thick (wall weight). Bottom (front/opening) = thin.
         return `<g transform="translate(${robe.x},${robe.y}) rotate(${robe.rotation})" class="robe-element" data-robe-id="${robe.id}">
-  <rect x="0" y="0" width="${rl}" height="${rw}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${sw2}"/>
-  <rect x="0" y="0" width="${pw}" height="${rw}" fill="none" stroke="#1a1a1a" stroke-width="${sw2*0.7}"/>
-  <line x1="${aw}" y1="${rw*0.25}" x2="${p1x2-aw*0.5}" y2="${rw*0.25}" stroke="#1a1a1a" stroke-width="${sw2*0.6}" stroke-linecap="round"/>
-  <polyline points="${p1x2-aw*0.5-aw},${rw*0.25-aw*0.6} ${p1x2-aw*0.5},${rw*0.25} ${p1x2-aw*0.5-aw},${rw*0.25+aw*0.6}" fill="none" stroke="#1a1a1a" stroke-width="${sw2*0.6}" stroke-linejoin="round" stroke-linecap="round"/>
-  <rect x="${p2x1}" y="0" width="${pw}" height="${rw}" fill="none" stroke="#1a1a1a" stroke-width="${sw2*0.7}"/>
-  <line x1="${rl-aw}" y1="${rw*0.75}" x2="${p2x1+aw*0.5}" y2="${rw*0.75}" stroke="#1a1a1a" stroke-width="${sw2*0.6}" stroke-linecap="round"/>
-  <polyline points="${p2x1+aw*0.5+aw},${rw*0.75-aw*0.6} ${p2x1+aw*0.5},${rw*0.75} ${p2x1+aw*0.5+aw},${rw*0.75+aw*0.6}" fill="none" stroke="#1a1a1a" stroke-width="${sw2*0.6}" stroke-linejoin="round" stroke-linecap="round"/>
+  <rect x="0" y="0" width="${rl}" height="${rw}" fill="#FFFFFF" stroke="none"/>
+  <line x1="0"    y1="0"    x2="${rl}" y2="0"    stroke="#1a1a1a" stroke-width="${thick}" stroke-linecap="square"/>
+  <line x1="0"    y1="0"    x2="0"    y2="${rw}" stroke="#1a1a1a" stroke-width="${thick}" stroke-linecap="square"/>
+  <line x1="${rl}" y1="0"   x2="${rl}" y2="${rw}" stroke="#1a1a1a" stroke-width="${thick}" stroke-linecap="square"/>
+  <line x1="0"    y1="${rw}" x2="${rl}" y2="${rw}" stroke="#1a1a1a" stroke-width="${thin}"  stroke-linecap="square"/>
 </g>`;}).join('\n');
 
       // Kitchen
@@ -914,10 +930,7 @@ export default function SvgEditor({
             <g id="robes-overlay">
               {placedRobes.map(robe=>{
                 const rl=robe.length,rw=robe.width,sel=selectedEl?.kind==='robe'&&selectedEl.id===robe.id;
-                const pw=rl*0.55;
-                const sw2=wallStroke*0.5;
-                const aw=Math.min(rw*0.22,pw*0.18);
-                const p1x2=pw, p2x1=rl-pw;
+                const thick=sel?1.5:wallStroke, thin=sel?0.5:wallStroke*0.25;
                 const sc=sel?'#2563eb':'#1a1a1a';
                 return (
                   <g key={robe.id} transform={`translate(${robe.x},${robe.y}) rotate(${robe.rotation})`}
@@ -925,16 +938,13 @@ export default function SvgEditor({
                     onMouseDown={e=>{if(activeTool==='select')startDragRobe(e,robe.id);}}
                     style={{cursor:sel?'grab':'pointer'}}>
                     {sel&&<rect x={-4} y={-4} width={rl+8} height={rw+8} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="5,3" rx={2}/>}
-                    {/* Outer carcass */}
-                    <rect x={0} y={0} width={rl} height={rw} fill="#FFFFFF" stroke={sc} strokeWidth={sel?1.5:sw2}/>
-                    {/* Panel 1 – slides right */}
-                    <rect x={0} y={0} width={pw} height={rw} fill="none" stroke={sc} strokeWidth={sw2*0.7}/>
-                    <line x1={aw} y1={rw*0.25} x2={p1x2-aw*0.5} y2={rw*0.25} stroke={sc} strokeWidth={sw2*0.6} strokeLinecap="round"/>
-                    <polyline points={`${p1x2-aw*0.5-aw},${rw*0.25-aw*0.6} ${p1x2-aw*0.5},${rw*0.25} ${p1x2-aw*0.5-aw},${rw*0.25+aw*0.6}`} fill="none" stroke={sc} strokeWidth={sw2*0.6} strokeLinejoin="round" strokeLinecap="round"/>
-                    {/* Panel 2 – slides left */}
-                    <rect x={p2x1} y={0} width={pw} height={rw} fill="none" stroke={sc} strokeWidth={sw2*0.7}/>
-                    <line x1={rl-aw} y1={rw*0.75} x2={p2x1+aw*0.5} y2={rw*0.75} stroke={sc} strokeWidth={sw2*0.6} strokeLinecap="round"/>
-                    <polyline points={`${p2x1+aw*0.5+aw},${rw*0.75-aw*0.6} ${p2x1+aw*0.5},${rw*0.75} ${p2x1+aw*0.5+aw},${rw*0.75+aw*0.6}`} fill="none" stroke={sc} strokeWidth={sw2*0.6} strokeLinejoin="round" strokeLinecap="round"/>
+                    <rect x={0} y={0} width={rl} height={rw} fill="#FFFFFF" stroke="none"/>
+                    {/* Top, Left, Right = full wall weight */}
+                    <line x1={0}  y1={0}  x2={rl} y2={0}  stroke={sc} strokeWidth={thick} strokeLinecap="square"/>
+                    <line x1={0}  y1={0}  x2={0}  y2={rw} stroke={sc} strokeWidth={thick} strokeLinecap="square"/>
+                    <line x1={rl} y1={0}  x2={rl} y2={rw} stroke={sc} strokeWidth={thick} strokeLinecap="square"/>
+                    {/* Bottom (front/opening) = 0.25x */}
+                    <line x1={0}  y1={rw} x2={rl} y2={rw} stroke={sc} strokeWidth={thin}  strokeLinecap="square"/>
                   </g>
                 );
               })}
@@ -1106,45 +1116,29 @@ export default function SvgEditor({
             <div className="bg-white/5 rounded-xl p-4 border border-white/10">
               <h4 className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-3">Properties</h4>
 
-              {/* ── Reusable inline editable row ──
-                  Shows: label | [  value  ] mm
-                  Slider below for quick drag adjustment.
-                  On blur / Enter the value is committed. */}
+              {/* Inputs are UNCONTROLLED. key resets field when selection changes.
+                  Commits only on blur or Enter — user can type freely. */}
               {selectedDoor&&(()=>{
-                const mmVal = Math.round(selectedDoor.width/unitsPerMeter*1000);
-                const setWidth=(mm:number)=>{
-                  pushUndo();
-                  setPlacedDoors(p=>p.map(d=>d.id===selectedDoor.id?{...d,width:Math.round(mm/1000*unitsPerMeter)}:d));
+                const commit=(field:'width'|'rotation',raw:string)=>{
+                  const v=parseInt(raw,10); if(isNaN(v)) return; pushUndo();
+                  if(field==='rotation') setPlacedDoors(p=>p.map(d=>d.id===selectedDoor.id?{...d,rotation:((v%360)+360)%360}:d));
+                  if(field==='width')    setPlacedDoors(p=>p.map(d=>d.id===selectedDoor.id?{...d,width:Math.max(0.001, v/1000*unitsPerMeter)}:d));
                 };
-                const setRot=(deg:number)=>{pushUndo();setPlacedDoors(p=>p.map(d=>d.id===selectedDoor.id?{...d,rotation:((Math.round(deg)%360)+360)%360}:d));};
+                const kd=(e:React.KeyboardEvent<HTMLInputElement>)=>{ if(e.key==='Enter') e.currentTarget.blur(); };
                 return (
                   <div className="space-y-2">
-                    {/* Rotation */}
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-gray-400 text-xs w-16 shrink-0">Rotation</span>
-                      <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={1}
-                          value={selectedDoor.rotation}
-                          onChange={e=>setRot(+e.target.value)}
-                          onBlur={e=>setRot(+e.target.value)}
-                          className="w-16 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-blue-400 focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
-                        <span className="text-gray-500 text-xs">°</span>
-                      </div>
-                    </div>
-                    {/* Width */}
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-gray-400 text-xs w-16 shrink-0">Width</span>
-                      <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={1}
-                          value={mmVal}
-                          onChange={e=>setWidth(+e.target.value)}
-                          onBlur={e=>setWidth(+e.target.value)}
-                          onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
-                          className="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-blue-400 focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
-                        <span className="text-gray-500 text-xs">mm</span>
-                      </div>
-                    </div>
-                    {/* Flipped badge */}
+                    <PropRow label="Rotation" unit="°">
+                      <input type="text" inputMode="numeric" defaultValue={selectedDoor.rotation}
+                        key={`door-rot-${selectedDoor.id}`}
+                        onBlur={e=>commit('rotation',e.target.value)} onKeyDown={kd}
+                        className="w-16 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
+                    </PropRow>
+                    <PropRow label="Width" unit="mm">
+                      <input type="text" inputMode="numeric" defaultValue={Math.round(selectedDoor.width/unitsPerMeter*1000)}
+                        key={`door-w-${selectedDoor.id}`}
+                        onBlur={e=>commit('width',e.target.value)} onKeyDown={kd}
+                        className="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
+                    </PropRow>
                     <div className="flex items-center justify-between text-xs pt-0.5">
                       <span className="text-gray-400">Flipped</span>
                       <span className={`font-mono ${selectedDoor.flipped?'text-blue-400':'text-gray-500'}`}>{selectedDoor.flipped?'Yes':'No'}</span>
@@ -1172,148 +1166,94 @@ export default function SvgEditor({
               )}
 
               {selectedWindow&&(()=>{
-                const mmVal=Math.round(selectedWindow.width/unitsPerMeter*1000);
-                const setWidth=(mm:number)=>{
-                  pushUndo();
-                  setPlacedWindows(p=>p.map(w=>w.id===selectedWindow.id?{...w,width:Math.round(mm/1000*unitsPerMeter)}:w));
+                const commit=(field:'width'|'rotation',raw:string)=>{
+                  const v=parseInt(raw,10); if(isNaN(v)) return; pushUndo();
+                  if(field==='rotation') setPlacedWindows(p=>p.map(w=>w.id===selectedWindow.id?{...w,rotation:((v%360)+360)%360}:w));
+                  if(field==='width')    setPlacedWindows(p=>p.map(w=>w.id===selectedWindow.id?{...w,width:Math.max(0.001, v/1000*unitsPerMeter)}:w));
                 };
-                const setRot=(deg:number)=>{pushUndo();setPlacedWindows(p=>p.map(w=>w.id===selectedWindow.id?{...w,rotation:((Math.round(deg)%360)+360)%360}:w));};
+                const kd=(e:React.KeyboardEvent<HTMLInputElement>)=>{ if(e.key==='Enter') e.currentTarget.blur(); };
                 return (
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-gray-400 text-xs w-16 shrink-0">Rotation</span>
-                      <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={1}
-                          value={selectedWindow.rotation}
-                          onChange={e=>setRot(+e.target.value)}
-                          onBlur={e=>setRot(+e.target.value)}
-                          className="w-16 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-cyan-400 focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
-                        <span className="text-gray-500 text-xs">°</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-gray-400 text-xs w-16 shrink-0">Width</span>
-                      <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={1}
-                          value={mmVal}
-                          onChange={e=>setWidth(+e.target.value)}
-                          onBlur={e=>setWidth(+e.target.value)}
-                          onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
-                          className="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-cyan-400 focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
-                        <span className="text-gray-500 text-xs">mm</span>
-                      </div>
-                    </div>
+                    <PropRow label="Rotation" unit="°">
+                      <input type="text" inputMode="numeric" defaultValue={selectedWindow.rotation}
+                        key={`win-rot-${selectedWindow.id}`}
+                        onBlur={e=>commit('rotation',e.target.value)} onKeyDown={kd}
+                        className="w-16 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
+                    </PropRow>
+                    <PropRow label="Width" unit="mm">
+                      <input type="text" inputMode="numeric" defaultValue={Math.round(selectedWindow.width/unitsPerMeter*1000)}
+                        key={`win-w-${selectedWindow.id}`}
+                        onBlur={e=>commit('width',e.target.value)} onKeyDown={kd}
+                        className="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
+                    </PropRow>
                   </div>
                 );
               })()}
 
               {selectedRobe&&(()=>{
-                const mmLen=Math.round(selectedRobe.length/unitsPerMeter*1000);
-                const mmWid=Math.round(selectedRobe.width/unitsPerMeter*1000);
-                const setLen=(mm:number)=>{
-                  pushUndo();
-                  setPlacedRobes(p=>p.map(r=>r.id===selectedRobe.id?{...r,length:Math.round(mm/1000*unitsPerMeter)}:r));
+                const commit=(field:'length'|'width'|'rotation',raw:string)=>{
+                  const v=parseInt(raw,10); if(isNaN(v)) return; pushUndo();
+                  if(field==='rotation') setPlacedRobes(p=>p.map(r=>r.id===selectedRobe.id?{...r,rotation:((v%360)+360)%360}:r));
+                  if(field==='length')   setPlacedRobes(p=>p.map(r=>r.id===selectedRobe.id?{...r,length:Math.max(0.001, v/1000*unitsPerMeter)}:r));
+                  if(field==='width')    setPlacedRobes(p=>p.map(r=>r.id===selectedRobe.id?{...r,width:Math.max(0.001, v/1000*unitsPerMeter)}:r));
                 };
-                const setWid=(mm:number)=>{
-                  pushUndo();
-                  setPlacedRobes(p=>p.map(r=>r.id===selectedRobe.id?{...r,width:Math.round(mm/1000*unitsPerMeter)}:r));
-                };
-                const setRot=(deg:number)=>{pushUndo();setPlacedRobes(p=>p.map(r=>r.id===selectedRobe.id?{...r,rotation:((Math.round(deg)%360)+360)%360}:r));};
+                const kd=(e:React.KeyboardEvent<HTMLInputElement>)=>{ if(e.key==='Enter') e.currentTarget.blur(); };
                 return (
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-gray-400 text-xs w-16 shrink-0">Rotation</span>
-                      <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={1}
-                          value={selectedRobe.rotation}
-                          onChange={e=>setRot(+e.target.value)}
-                          onBlur={e=>setRot(+e.target.value)}
-                          className="w-16 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-amber-400 focus:bg-white/15"/>
-                        <span className="text-gray-500 text-xs">°</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-gray-400 text-xs w-16 shrink-0">Length</span>
-                      <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={1}
-                          value={mmLen}
-                          onChange={e=>setLen(+e.target.value)}
-                          onBlur={e=>setLen(+e.target.value)}
-                          onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
-                          className="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-amber-400 focus:bg-white/15"/>
-                        <span className="text-gray-500 text-xs">mm</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between gap-2 pt-1">
-                      <span className="text-gray-400 text-xs w-16 shrink-0">Width</span>
-                      <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={1}
-                          value={mmWid}
-                          onChange={e=>setWid(+e.target.value)}
-                          onBlur={e=>setWid(+e.target.value)}
-                          onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
-                          className="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:border-amber-400 focus:bg-white/15"/>
-                        <span className="text-gray-500 text-xs">mm</span>
-                      </div>
-                    </div>
+                    <PropRow label="Rotation" unit="°">
+                      <input type="text" inputMode="numeric" defaultValue={selectedRobe.rotation}
+                        key={`robe-rot-${selectedRobe.id}`}
+                        onBlur={e=>commit('rotation',e.target.value)} onKeyDown={kd}
+                        className="w-16 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
+                    </PropRow>
+                    <PropRow label="Length" unit="mm">
+                      <input type="text" inputMode="numeric" defaultValue={Math.round(selectedRobe.length/unitsPerMeter*1000)}
+                        key={`robe-len-${selectedRobe.id}`}
+                        onBlur={e=>commit('length',e.target.value)} onKeyDown={kd}
+                        className="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
+                    </PropRow>
+                    <PropRow label="Width" unit="mm">
+                      <input type="text" inputMode="numeric" defaultValue={Math.round(selectedRobe.width/unitsPerMeter*1000)}
+                        key={`robe-wid-${selectedRobe.id}`}
+                        onBlur={e=>commit('width',e.target.value)} onKeyDown={kd}
+                        className="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
+                    </PropRow>
                   </div>
                 );
               })()}
 
               {selectedKitchen&&(()=>{
-                const mmLen=Math.round(selectedKitchen.length/unitsPerMeter*1000);
-                const mmDep=Math.round(selectedKitchen.depth/unitsPerMeter*1000);
-                const setLen=(mm:number)=>{
-                  pushUndo();
-                  setPlacedKitchens(p=>p.map(k=>k.id===selectedKitchen.id?{...k,length:Math.round(mm/1000*unitsPerMeter)}:k));
+                const commit=(field:'length'|'depth'|'rotation',raw:string)=>{
+                  const v=parseInt(raw,10); if(isNaN(v)) return; pushUndo();
+                  if(field==='rotation') setPlacedKitchens(p=>p.map(k=>k.id===selectedKitchen.id?{...k,rotation:((v%360)+360)%360}:k));
+                  if(field==='length')   setPlacedKitchens(p=>p.map(k=>k.id===selectedKitchen.id?{...k,length:Math.max(0.001, v/1000*unitsPerMeter)}:k));
+                  if(field==='depth')    setPlacedKitchens(p=>p.map(k=>k.id===selectedKitchen.id?{...k,depth:Math.max(0.001, v/1000*unitsPerMeter)}:k));
                 };
-                const setDep=(mm:number)=>{
-                  pushUndo();
-                  setPlacedKitchens(p=>p.map(k=>k.id===selectedKitchen.id?{...k,depth:Math.round(mm/1000*unitsPerMeter)}:k));
-                };
-                const setRot=(deg:number)=>{pushUndo();setPlacedKitchens(p=>p.map(k=>k.id===selectedKitchen.id?{...k,rotation:((Math.round(deg)%360)+360)%360}:k));};
-                const accentCls='focus:border-orange-400';
+                const kd=(e:React.KeyboardEvent<HTMLInputElement>)=>{ if(e.key==='Enter') e.currentTarget.blur(); };
                 return (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-gray-400">Type</span>
                       <span className="font-mono text-white capitalize">{selectedKitchen.subtype}</span>
                     </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-gray-400 text-xs w-16 shrink-0">Rotation</span>
-                      <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={1}
-                          value={selectedKitchen.rotation}
-                          onChange={e=>setRot(+e.target.value)}
-                          onBlur={e=>setRot(+e.target.value)}
-                          className={`w-16 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none ${accentCls} focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}/>
-                        <span className="text-gray-500 text-xs">°</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-gray-400 text-xs w-16 shrink-0">Length</span>
-                      <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={1}
-                          value={mmLen}
-                          onChange={e=>setLen(+e.target.value)}
-                          onBlur={e=>setLen(+e.target.value)}
-                          onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
-                          className={`w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none ${accentCls} focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}/>
-                        <span className="text-gray-500 text-xs">mm</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between gap-2 pt-1">
-                      <span className="text-gray-400 text-xs w-16 shrink-0">Depth</span>
-                      <div className="flex items-center gap-1 ml-auto">
-                        <input type="number" step={1}
-                          value={mmDep}
-                          onChange={e=>setDep(+e.target.value)}
-                          onBlur={e=>setDep(+e.target.value)}
-                          onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur();}}
-                          className={`w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none ${accentCls} focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}/>
-                        <span className="text-gray-500 text-xs">mm</span>
-                      </div>
-                    </div>
+                    <PropRow label="Rotation" unit="°">
+                      <input type="text" inputMode="numeric" defaultValue={selectedKitchen.rotation}
+                        key={`kit-rot-${selectedKitchen.id}`}
+                        onBlur={e=>commit('rotation',e.target.value)} onKeyDown={kd}
+                        className="w-16 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
+                    </PropRow>
+                    <PropRow label="Length" unit="mm">
+                      <input type="text" inputMode="numeric" defaultValue={Math.round(selectedKitchen.length/unitsPerMeter*1000)}
+                        key={`kit-len-${selectedKitchen.id}`}
+                        onBlur={e=>commit('length',e.target.value)} onKeyDown={kd}
+                        className="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
+                    </PropRow>
+                    <PropRow label="Depth" unit="mm">
+                      <input type="text" inputMode="numeric" defaultValue={Math.round(selectedKitchen.depth/unitsPerMeter*1000)}
+                        key={`kit-dep-${selectedKitchen.id}`}
+                        onBlur={e=>commit('depth',e.target.value)} onKeyDown={kd}
+                        className="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
+                    </PropRow>
                   </div>
                 );
               })()}
