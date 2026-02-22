@@ -547,43 +547,42 @@ export default function SvgEditor({
     }
 
     if (activeTool === 'wall') {
-      if (!wallStart) {
-        setWallStart({ x: cx, y: cy });
+      if (wallEraseMode) {
+        if (!eraseStart) {
+          setEraseStart({ x: cx, y: cy });
+        } else {
+          const newEraseWall: PlacedWall = {
+            id: nextWallId,
+            x1: eraseStart.x, y1: eraseStart.y,
+            x2: cx, y2: cy,
+            curved: false,
+            cpx: (eraseStart.x + cx) / 2,
+            cpy: (eraseStart.y + cy) / 2,
+            erase: true,
+          };
+          setPlacedWalls(prev => [...prev, newEraseWall]);
+          setNextWallId(p => p + 1);
+          setAddHistory(prev => [...prev, { type: 'wall', element: newEraseWall }]);
+          setEraseStart(null);
+        }
       } else {
-        const newWall: PlacedWall = {
-          id: nextWallId,
-          x1: wallStart.x, y1: wallStart.y,
-          x2: cx, y2: cy,
-          curved: false,
-          cpx: (wallStart.x + cx) / 2,
-          cpy: (wallStart.y + cy) / 2,
-        };
-        setPlacedWalls(prev => [...prev, newWall]);
-        setNextWallId(p => p + 1);
-        setSelectedEl({ kind: 'wall', id: newWall.id });
-        setAddHistory(prev => [...prev, { type: 'wall', element: newWall }]);
-        setWallStart(null); // end this segment; start next from same point if shift held
-      }
-      return;
-    }
-
-    if (activeTool === 'wall' && wallEraseMode) {
-      if (!eraseStart) {
-        setEraseStart({ x: cx, y: cy });
-      } else {
-        const newEraseWall: PlacedWall = {
-          id: nextWallId,
-          x1: eraseStart.x, y1: eraseStart.y,
-          x2: cx, y2: cy,
-          curved: false,
-          cpx: (eraseStart.x + cx) / 2,
-          cpy: (eraseStart.y + cy) / 2,
-          erase: true,
-        };
-        setPlacedWalls(prev => [...prev, newEraseWall]);
-        setNextWallId(p => p + 1);
-        setAddHistory(prev => [...prev, { type: 'wall', element: newEraseWall }]);
-        setEraseStart(null);
+        if (!wallStart) {
+          setWallStart({ x: cx, y: cy });
+        } else {
+          const newWall: PlacedWall = {
+            id: nextWallId,
+            x1: wallStart.x, y1: wallStart.y,
+            x2: cx, y2: cy,
+            curved: false,
+            cpx: (wallStart.x + cx) / 2,
+            cpy: (wallStart.y + cy) / 2,
+          };
+          setPlacedWalls(prev => [...prev, newWall]);
+          setNextWallId(p => p + 1);
+          setSelectedEl({ kind: 'wall', id: newWall.id });
+          setAddHistory(prev => [...prev, { type: 'wall', element: newWall }]);
+          setWallStart(null);
+        }
       }
       return;
     }
