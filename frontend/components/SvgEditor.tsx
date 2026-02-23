@@ -28,9 +28,10 @@ export interface PlacedWindow {
   id: number; x: number; y: number;
   rotation: number; width: number; flipped: boolean;
 }
+export type RobeSubtype = 'straight' | 'lshape' | 'ushape';
 export interface PlacedRobe {
   id: number; x: number; y: number;
-  rotation: number; length: number; width: number;
+  rotation: number; length: number; width: number; subtype: RobeSubtype;
 }
 export type KitchenSubtype = 'island' | 'bench' | 'fridge' | 'sink' | 'cooktop' | 'dishwasher';
 export type BathSubtype = 'bathtub' | 'shower' | 'vanity' | 'basin' | 'toilet';
@@ -246,6 +247,7 @@ export default function SvgEditor({
   const [windowWidth,  setWindowWidth]  = useState(50);
   const [robeFixedW,   setRobeFixedW]   = useState(30);
   const [robeLength,   setRobeLength]   = useState(80);
+  const [robeSubtype,  setRobeSubtype]  = useState<RobeSubtype>('straight');
   const [kitchenSubtype, setKitchenSubtype] = useState<KitchenSubtype>('island');
   const [kitchenDefaults, setKitchenDefaults] = useState<Record<KitchenSubtype,{length:number;depth:number}>>({
     island:{length:96,depth:36},bench:{length:96,depth:24},fridge:{length:28,depth:28},
@@ -571,7 +573,7 @@ export default function SvgEditor({
     }
     if(activeTool==='robe'){
       pushUndo(); const id=nextId.current++;
-      setPlacedRobes(p=>[...p,{id,x:cx,y:cy,rotation:0,length:robeLength,width:robeFixedW}]);
+      setPlacedRobes(p=>[...p,{id,x:cx,y:cy,rotation:0,length:robeLength,width:robeFixedW,subtype:robeSubtype}]);
       setSelectedEl({kind:'robe',id}); return;
     }
     if(activeTool==='kitchen'){
@@ -584,7 +586,7 @@ export default function SvgEditor({
       setPlacedBaths(p=>[...p,{id,x:cx,y:cy,rotation:0,subtype:bathSubtype,length:def.length,depth:def.depth}]);
       setSelectedEl({kind:'bath',id}); return;
     }
-  }, [activeTool,doorWidth,doorSubtype,windowWidth,robeLength,robeFixedW,kitchenSubtype,kitchenDefaults,bathSubtype,bathDefaults,snap,snapToAngle,pushUndo,screenToSvg,unitsPerMeter]);
+  }, [activeTool,doorWidth,doorSubtype,windowWidth,robeLength,robeFixedW,robeSubtype,kitchenSubtype,kitchenDefaults,bathSubtype,bathDefaults,snap,snapToAngle,pushUndo,screenToSvg,unitsPerMeter]);
 
   const handleElementClick = useCallback((e:React.MouseEvent,kind:ElementKind,id:number) => {
     e.stopPropagation();
@@ -701,11 +703,18 @@ export default function SvgEditor({
     <path d="M ${w},0 A ${w},${w} 0 0,1 0,${-w}" fill="none" stroke="#000000" stroke-width="${sw*0.5}"/>
     <circle cx="0" cy="0" r="${sw}" fill="#000000"/>`;
         } else if(st==='sliding'){
-          const panelW=w*0.55, frameT=sw*0.6;
-          inner=`<line x1="0" y1="${-wch*0.18}" x2="${w}" y2="${-wch*0.18}" stroke="#000000" stroke-width="${frameT*0.4}"/>
-    <line x1="0" y1="${wch*0.18}" x2="${w}" y2="${wch*0.18}" stroke="#000000" stroke-width="${frameT*0.4}"/>
-    <rect x="0" y="${-wch*0.35}" width="${panelW}" height="${wch*0.7}" fill="#FFFFFF" stroke="#000000" stroke-width="${frameT}" rx="${frameT*0.3}"/>
-    <rect x="${w-panelW}" y="${-wch*0.35}" width="${panelW}" height="${wch*0.7}" fill="#FFFFFF" stroke="#000000" stroke-width="${frameT}" rx="${frameT*0.3}"/>`;
+          const pocketW=wch*1.2, panelT=wch*0.55;
+          const flip=door.flipped;
+          const pocketX=flip?w-pocketW:0;
+          const panelX=flip?w-pocketW*0.6-(w-pocketW):pocketW*0.4;
+          const ah=Math.min(w*0.18,wch*1.2);
+          const arrowX1=flip?w*0.4:w*0.6, arrowX2=flip?w*0.15:w*0.85;
+          const arrowPts=flip?`${w*0.15+ah},${-ah*0.5} ${w*0.15},0 ${w*0.15+ah},${ah*0.5}`:`${w*0.85-ah},${-ah*0.5} ${w*0.85},0 ${w*0.85-ah},${ah*0.5}`;
+          inner=`<line x1="${pocketX}" y1="${-wch*0.5}" x2="${pocketX}" y2="${wch*0.5}" stroke="#000000" stroke-width="${sw*0.5}" stroke-linecap="square"/>
+    <line x1="${pocketX+pocketW}" y1="${-wch*0.5}" x2="${pocketX+pocketW}" y2="${wch*0.5}" stroke="#000000" stroke-width="${sw*0.5}" stroke-linecap="square"/>
+    <rect x="${panelX}" y="${-panelT/2}" width="${w-pocketW*0.6}" height="${panelT}" fill="#FFFFFF" stroke="#000000" stroke-width="${sw*0.35}"/>
+    <line x1="${arrowX1}" y1="0" x2="${arrowX2}" y2="0" stroke="#000000" stroke-width="${sw*0.5}" stroke-linecap="round"/>
+    <polyline points="${arrowPts}" fill="none" stroke="#000000" stroke-width="${sw*0.5}" stroke-linecap="round" stroke-linejoin="round"/>`;
         } else {
           // entry – two dotted jamb lines
           inner=`<line x1="0" y1="${-wch*0.35}" x2="0" y2="${wch*0.35}" stroke="#000000" stroke-width="${sw*0.9}" stroke-dasharray="4,3" stroke-linecap="round"/>
@@ -741,17 +750,43 @@ export default function SvgEditor({
 
       // Robes – simple rectangle: 3 sides at full wall stroke, front (bottom) side at 0.25x
       const robesSvg=placedRobes.map(robe=>{
-        const rw=robe.width,rl=robe.length;
-        const thick=sw, thin=sw*0.25;
-        // Draw as 4 individual lines so each side can have its own stroke-width.
-        // Top, Left, Right = thick (wall weight). Bottom (front/opening) = thin.
+        const rw=robe.width,rl=robe.length,st=robe.subtype||'straight';
+        const tk=sw*0.5, tn=sw*0.12;
+        let body='';
+        if(st==='straight'){
+          body=`<rect x="0" y="0" width="${rl}" height="${rw}" fill="#FFFFFF" stroke="none"/>
+  <line x1="0" y1="0" x2="${rl}" y2="0" stroke="#1a1a1a" stroke-width="${tk}" stroke-linecap="square"/>
+  <line x1="0" y1="0" x2="0" y2="${rw}" stroke="#1a1a1a" stroke-width="${tk}" stroke-linecap="square"/>
+  <line x1="${rl}" y1="0" x2="${rl}" y2="${rw}" stroke="#1a1a1a" stroke-width="${tk}" stroke-linecap="square"/>
+  <line x1="0" y1="${rw}" x2="${rl}" y2="${rw}" stroke="#1a1a1a" stroke-width="${tn}" stroke-linecap="square"/>`;
+        } else if(st==='lshape'){
+          const bw=rl,bh=rw,sw2=rw,sh2=rl*0.5;
+          body=`<rect x="0" y="0" width="${bw}" height="${bh}" fill="#FFFFFF" stroke="none"/>
+  <rect x="${bw-sw2}" y="${bh}" width="${sw2}" height="${sh2}" fill="#FFFFFF" stroke="none"/>
+  <line x1="0" y1="0" x2="${bw}" y2="0" stroke="#1a1a1a" stroke-width="${tk}" stroke-linecap="square"/>
+  <line x1="0" y1="0" x2="0" y2="${bh}" stroke="#1a1a1a" stroke-width="${tk}" stroke-linecap="square"/>
+  <line x1="0" y1="${bh}" x2="${bw-sw2}" y2="${bh}" stroke="#1a1a1a" stroke-width="${tn}" stroke-linecap="square"/>
+  <line x1="${bw-sw2}" y1="${bh}" x2="${bw-sw2}" y2="${bh+sh2}" stroke="#1a1a1a" stroke-width="${tk}" stroke-linecap="square"/>
+  <line x1="${bw-sw2}" y1="${bh+sh2}" x2="${bw}" y2="${bh+sh2}" stroke="#1a1a1a" stroke-width="${tn}" stroke-linecap="square"/>
+  <line x1="${bw}" y1="0" x2="${bw}" y2="${bh+sh2}" stroke="#1a1a1a" stroke-width="${tk}" stroke-linecap="square"/>`;
+        } else {
+          const bw=rl,bh=rw,legL=rl*0.45;
+          body=`<rect x="0" y="0" width="${bw}" height="${bh}" fill="#FFFFFF" stroke="none"/>
+  <rect x="0" y="${bh}" width="${bh}" height="${legL}" fill="#FFFFFF" stroke="none"/>
+  <rect x="${bw-bh}" y="${bh}" width="${bh}" height="${legL}" fill="#FFFFFF" stroke="none"/>
+  <line x1="0" y1="0" x2="${bw}" y2="0" stroke="#1a1a1a" stroke-width="${tk}" stroke-linecap="square"/>
+  <line x1="0" y1="0" x2="0" y2="${bh+legL}" stroke="#1a1a1a" stroke-width="${tk}" stroke-linecap="square"/>
+  <line x1="0" y1="${bh+legL}" x2="${bh}" y2="${bh+legL}" stroke="#1a1a1a" stroke-width="${tn}" stroke-linecap="square"/>
+  <line x1="${bh}" y1="${bh}" x2="${bh}" y2="${bh+legL}" stroke="#1a1a1a" stroke-width="${tk}" stroke-linecap="square"/>
+  <line x1="${bh}" y1="${bh}" x2="${bw-bh}" y2="${bh}" stroke="#1a1a1a" stroke-width="${tn}" stroke-linecap="square"/>
+  <line x1="${bw-bh}" y1="${bh}" x2="${bw-bh}" y2="${bh+legL}" stroke="#1a1a1a" stroke-width="${tk}" stroke-linecap="square"/>
+  <line x1="${bw-bh}" y1="${bh+legL}" x2="${bw}" y2="${bh+legL}" stroke="#1a1a1a" stroke-width="${tn}" stroke-linecap="square"/>
+  <line x1="${bw}" y1="0" x2="${bw}" y2="${bh+legL}" stroke="#1a1a1a" stroke-width="${tk}" stroke-linecap="square"/>`;
+        }
         return `<g transform="translate(${robe.x},${robe.y}) rotate(${robe.rotation})" class="robe-element" data-robe-id="${robe.id}">
-  <rect x="0" y="0" width="${rl}" height="${rw}" fill="#FFFFFF" stroke="none"/>
-  <line x1="0"    y1="0"    x2="${rl}" y2="0"    stroke="#1a1a1a" stroke-width="${thick}" stroke-linecap="square"/>
-  <line x1="0"    y1="0"    x2="0"    y2="${rw}" stroke="#1a1a1a" stroke-width="${thick}" stroke-linecap="square"/>
-  <line x1="${rl}" y1="0"   x2="${rl}" y2="${rw}" stroke="#1a1a1a" stroke-width="${thick}" stroke-linecap="square"/>
-  <line x1="0"    y1="${rw}" x2="${rl}" y2="${rw}" stroke="#1a1a1a" stroke-width="${thin}"  stroke-linecap="square"/>
-</g>`;}).join('\n');
+  ${body}
+</g>`;
+      }).join('\n');
 
       // Kitchen
       const kitchenSvg=placedKitchens.map(k=>{
@@ -909,21 +944,78 @@ export default function SvgEditor({
             <g id="robes-overlay">
               {placedRobes.map(robe=>{
                 const rl=robe.length,rw=robe.width,sel=selectedEl?.kind==='robe'&&selectedEl.id===robe.id;
-                const thick=sel?1.5:wallStroke, thin=sel?0.5:wallStroke*0.25;
+                const st=robe.subtype||'straight';
+                const tk=sel?1.5:wallStroke*0.5, tn=sel?0.4:wallStroke*0.12;
                 const sc=sel?'#2563eb':'#1a1a1a';
+                // arm2 = perpendicular arm depth for L/U shapes
+                const arm=rw; // same depth as main width
+                const arm2L=rl*0.5; // L side arm length
                 return (
                   <g key={robe.id} transform={`translate(${robe.x},${robe.y}) rotate(${robe.rotation})`}
                     onClick={e=>handleElementClick(e,'robe',robe.id)}
                     onMouseDown={e=>{if(activeTool==='select')startDragRobe(e,robe.id);}}
                     style={{cursor:sel?'grab':'pointer'}}>
+
+                  {st==='straight'&&<>
                     {sel&&<rect x={-4} y={-4} width={rl+8} height={rw+8} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="5,3" rx={2}/>}
                     <rect x={0} y={0} width={rl} height={rw} fill="#FFFFFF" stroke="none"/>
-                    {/* Top, Left, Right = full wall weight */}
-                    <line x1={0}  y1={0}  x2={rl} y2={0}  stroke={sc} strokeWidth={thick} strokeLinecap="square"/>
-                    <line x1={0}  y1={0}  x2={0}  y2={rw} stroke={sc} strokeWidth={thick} strokeLinecap="square"/>
-                    <line x1={rl} y1={0}  x2={rl} y2={rw} stroke={sc} strokeWidth={thick} strokeLinecap="square"/>
-                    {/* Bottom (front/opening) = 0.25x */}
-                    <line x1={0}  y1={rw} x2={rl} y2={rw} stroke={sc} strokeWidth={thin}  strokeLinecap="square"/>
+                    <line x1={0}  y1={0}  x2={rl} y2={0}  stroke={sc} strokeWidth={tk} strokeLinecap="square"/>
+                    <line x1={0}  y1={0}  x2={0}  y2={rw} stroke={sc} strokeWidth={tk} strokeLinecap="square"/>
+                    <line x1={rl} y1={0}  x2={rl} y2={rw} stroke={sc} strokeWidth={tk} strokeLinecap="square"/>
+                    <line x1={0}  y1={rw} x2={rl} y2={rw} stroke={sc} strokeWidth={tn} strokeLinecap="square"/>
+                  </>}
+
+                  {st==='lshape'&&(()=>{
+                    // Main arm: top (rl × rw). Side arm: right side going down (rw × arm2L)
+                    const bw=rl, bh=rw, sw2=rw, sh2=arm2L;
+                    return (<>
+                      {sel&&<rect x={-4} y={-4} width={bw+8} height={bh+sh2+8} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="5,3" rx={2}/>}
+                      {/* White fill for both arms */}
+                      <rect x={0}      y={0}   width={bw}  height={bh}  fill="#FFFFFF" stroke="none"/>
+                      <rect x={bw-sw2} y={bh}  width={sw2} height={sh2} fill="#FFFFFF" stroke="none"/>
+                      {/* Outline – L-shape path, opening at bottom of main arm and bottom of side arm */}
+                      {/* top rail */}
+                      <line x1={0} y1={0} x2={bw} y2={0} stroke={sc} strokeWidth={tk} strokeLinecap="square"/>
+                      {/* left side – full height of main arm */}
+                      <line x1={0} y1={0} x2={0} y2={bh} stroke={sc} strokeWidth={tk} strokeLinecap="square"/>
+                      {/* bottom of main arm – up to side arm */}
+                      <line x1={0} y1={bh} x2={bw-sw2} y2={bh} stroke={sc} strokeWidth={tn} strokeLinecap="square"/>
+                      {/* inner vertical – left side of side arm */}
+                      <line x1={bw-sw2} y1={bh} x2={bw-sw2} y2={bh+sh2} stroke={sc} strokeWidth={tk} strokeLinecap="square"/>
+                      {/* bottom of side arm – opening */}
+                      <line x1={bw-sw2} y1={bh+sh2} x2={bw} y2={bh+sh2} stroke={sc} strokeWidth={tn} strokeLinecap="square"/>
+                      {/* right side – full height */}
+                      <line x1={bw} y1={0} x2={bw} y2={bh+sh2} stroke={sc} strokeWidth={tk} strokeLinecap="square"/>
+                    </>);
+                  })()}
+
+                  {st==='ushape'&&(()=>{
+                    // U: back rail (top, rl wide), two side arms going down (rw wide × rl*0.45 long)
+                    const bw=rl, bh=rw, legL=rl*0.45, gap=bw-2*bh;
+                    return (<>
+                      {sel&&<rect x={-4} y={-4} width={bw+8} height={bh+legL+8} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="5,3" rx={2}/>}
+                      {/* White fills */}
+                      <rect x={0}      y={0}    width={bw} height={bh}   fill="#FFFFFF" stroke="none"/>
+                      <rect x={0}      y={bh}   width={bh} height={legL} fill="#FFFFFF" stroke="none"/>
+                      <rect x={bw-bh}  y={bh}   width={bh} height={legL} fill="#FFFFFF" stroke="none"/>
+                      {/* Back rail top */}
+                      <line x1={0}    y1={0}       x2={bw}    y2={0}       stroke={sc} strokeWidth={tk} strokeLinecap="square"/>
+                      {/* Left outer */}
+                      <line x1={0}    y1={0}       x2={0}     y2={bh+legL} stroke={sc} strokeWidth={tk} strokeLinecap="square"/>
+                      {/* Left leg bottom – opening */}
+                      <line x1={0}    y1={bh+legL} x2={bh}    y2={bh+legL} stroke={sc} strokeWidth={tn} strokeLinecap="square"/>
+                      {/* Left inner */}
+                      <line x1={bh}   y1={bh}      x2={bh}    y2={bh+legL} stroke={sc} strokeWidth={tk} strokeLinecap="square"/>
+                      {/* Opening between legs (bottom of back) */}
+                      <line x1={bh}   y1={bh}      x2={bw-bh} y2={bh}      stroke={sc} strokeWidth={tn} strokeLinecap="square"/>
+                      {/* Right inner */}
+                      <line x1={bw-bh} y1={bh}     x2={bw-bh} y2={bh+legL} stroke={sc} strokeWidth={tk} strokeLinecap="square"/>
+                      {/* Right leg bottom – opening */}
+                      <line x1={bw-bh} y1={bh+legL} x2={bw}  y2={bh+legL} stroke={sc} strokeWidth={tn} strokeLinecap="square"/>
+                      {/* Right outer */}
+                      <line x1={bw}   y1={0}       x2={bw}    y2={bh+legL} stroke={sc} strokeWidth={tk} strokeLinecap="square"/>
+                    </>);
+                  })()}
                   </g>
                 );
               })}
@@ -982,18 +1074,29 @@ export default function SvgEditor({
                         <circle cx={0} cy={0} r={sel?3:1.5} fill={sc}/>
                       </>}
                       {st==='sliding' && (()=>{
-                        const panelW=w*0.55, overlap=w*0.15, frameT=wallStroke*0.6;
+                        // Single panel shown partially slid into cavity at left end
+                        // Cavity pocket = double parallel lines on left; panel rect; direction arrow
+                        const pocketW = wch * 1.2;   // pocket depth (wall thickness)
+                        const panelT  = wch * 0.55;  // door panel thickness
+                        const arrowX  = w * 0.65;    // arrow position x
+                        const ah      = Math.min(w * 0.18, wch * 1.2); // arrow head size
+                        const flip    = door.flipped; // pocket on right if flipped
+                        const pocketX = flip ? w - pocketW : 0;
+                        const panelX  = flip ? w - pocketW * 0.6 - (w - pocketW) : pocketW * 0.4;
                         return (<>
                           {sel&&<rect x={-6} y={-wch/2-6} width={w+12} height={wch+12} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={2} strokeDasharray="6,3" rx={3}/>}
-                          {/* Track lines */}
-                          <line x1={0} y1={-wch*0.18} x2={w} y2={-wch*0.18} stroke={sc} strokeWidth={frameT*0.4}/>
-                          <line x1={0} y1={ wch*0.18} x2={w} y2={ wch*0.18} stroke={sc} strokeWidth={frameT*0.4}/>
-                          {/* Panel 1 – left-aligned */}
-                          <rect x={0} y={-wch*0.35} width={panelW} height={wch*0.7} fill="rgba(255,255,255,0.6)" stroke={sc} strokeWidth={frameT} rx={frameT*0.3}/>
-                          {/* Panel 2 – right-aligned, overlapping */}
-                          <rect x={w-panelW} y={-wch*0.35} width={panelW} height={wch*0.7} fill="rgba(255,255,255,0.6)" stroke={sc} strokeWidth={frameT} rx={frameT*0.3}/>
-                          {/* Centre overlap hatching */}
-                          <line x1={w-panelW} y1={-wch*0.35} x2={overlap+w-panelW} y2={wch*0.35} stroke={sc} strokeWidth={frameT*0.35} opacity={0.4}/>
+                          {/* Cavity pocket: two parallel lines */}
+                          <line x1={pocketX}          y1={-wch*0.5} x2={pocketX}          y2={wch*0.5} stroke={sc} strokeWidth={wallStroke*0.5} strokeLinecap="square"/>
+                          <line x1={pocketX+pocketW}  y1={-wch*0.5} x2={pocketX+pocketW}  y2={wch*0.5} stroke={sc} strokeWidth={wallStroke*0.5} strokeLinecap="square"/>
+                          {/* Door panel — rectangle spanning full opening width */}
+                          <rect x={panelX} y={-panelT/2} width={w - pocketW*0.6} height={panelT}
+                            fill="#FFFFFF" stroke={sc} strokeWidth={wallStroke*0.35}/>
+                          {/* Direction arrow */}
+                          <line x1={flip?w*0.4:w*0.6} y1={0} x2={flip?w*0.15:w*0.85} y2={0} stroke={sc} strokeWidth={wallStroke*0.5} strokeLinecap="round"/>
+                          <polyline points={flip
+                            ? `${w*0.15+ah},${-ah*0.5} ${w*0.15},0 ${w*0.15+ah},${ah*0.5}`
+                            : `${w*0.85-ah},${-ah*0.5} ${w*0.85},0 ${w*0.85-ah},${ah*0.5}`}
+                            fill="none" stroke={sc} strokeWidth={wallStroke*0.5} strokeLinecap="round" strokeLinejoin="round"/>
                         </>);
                       })()}
                       {st==='entry' && (()=>{
@@ -1109,6 +1212,21 @@ export default function SvgEditor({
                     <button key={st} onClick={()=>setBathSubtype(st)}
                       className={`px-2 py-1.5 rounded-md text-[11px] font-medium capitalize transition border ${bathSubtype===st?'bg-teal-600 border-teal-500 text-white':'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10'}`}>
                       {st}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Robe sub-palette */}
+            {activeTool==='robe'&&(
+              <div className="mt-3 pt-3 border-t border-white/10">
+                <p className="text-gray-500 text-[10px] mb-2 uppercase tracking-wider">Shape</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(['straight','lshape','ushape'] as RobeSubtype[]).map(st=>(
+                    <button key={st} onClick={()=>setRobeSubtype(st)}
+                      className={`px-2 py-1.5 rounded-md text-[11px] font-medium transition border ${robeSubtype===st?'bg-amber-600 border-amber-500 text-white':'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10'}`}>
+                      {st==='straight'?'Straight':st==='lshape'?'L-Shape':'U-Shape'}
                     </button>
                   ))}
                 </div>
@@ -1241,6 +1359,17 @@ export default function SvgEditor({
                 const kd=(e:React.KeyboardEvent<HTMLInputElement>)=>{ if(e.key==='Enter') e.currentTarget.blur(); };
                 return (
                   <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs pb-1">
+                      <span className="text-gray-400">Shape</span>
+                      <div className="flex gap-1">
+                        {(['straight','lshape','ushape'] as RobeSubtype[]).map(st=>(
+                          <button key={st} onClick={()=>{pushUndo();setPlacedRobes(p=>p.map(r=>r.id===selectedRobe.id?{...r,subtype:st}:r));}}
+                            className={`px-1.5 py-0.5 rounded text-[10px] border transition ${(selectedRobe.subtype||'straight')===st?'bg-amber-600 border-amber-500 text-white':'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}>
+                            {st==='straight'?'S':st==='lshape'?'L':'U'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <PropRow label="Rotation" unit="°">
                       <input type="text" inputMode="numeric" defaultValue={selectedRobe.rotation}
                         key={`robe-rot-${selectedRobe.id}`}
