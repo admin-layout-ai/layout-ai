@@ -145,28 +145,21 @@ function BathSymbol({ item, sw, sel }: { item: PlacedBath; sw: number; sel: bool
 
   switch (subtype) {
     case 'bathtub': {
-      // Oval tub inside rectangle shell
-      const pad = Math.min(L, D) * 0.1;
-      const rx = (L - pad * 2) / 2, ry = (D - pad * 2) / 2;
-      const cx = L / 2, cy = D / 2;
-      // Drain circle at foot end
-      const dr = Math.min(rx, ry) * 0.12;
+      // Outer rounded rect + inset inner rounded rect (pill shape)
+      const r = Math.min(L, D) * 0.5; // outer corner radius — full pill
+      const pad = Math.min(L, D) * 0.08;
+      const ri = Math.min(L - pad * 2, D - pad * 2) * 0.5; // inner corner radius
       return (
         <>
-          <rect x={0} y={0} width={L} height={D} fill="#FFFFFF" stroke={stroke} strokeWidth={t * 1.5}/>
-          <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="none" stroke={stroke} strokeWidth={t}/>
-          <circle cx={L * 0.5} cy={D * 0.82} r={dr} fill="none" stroke={stroke} strokeWidth={t * 0.8}/>
+          <rect x={0} y={0} width={L} height={D} rx={r} ry={r} fill="#FFFFFF" stroke={stroke} strokeWidth={t * 1.5}/>
+          <rect x={pad} y={pad} width={L - pad * 2} height={D - pad * 2} rx={ri} ry={ri} fill="none" stroke={stroke} strokeWidth={t}/>
         </>
       );
     }
     case 'shower': {
-      // Rectangle with diagonal corner arc (shower door) + cross drain
-      const arcR = Math.min(L, D) * 0.45;
       return (
         <>
           <rect x={0} y={0} width={L} height={D} fill="#FFFFFF" stroke={stroke} strokeWidth={t * 1.5}/>
-          {/* Corner shower door arc */}
-          <path d={`M ${L},0 A ${arcR},${arcR} 0 0,1 0,${D}`} fill="none" stroke={stroke} strokeWidth={t * 1.2}/>
           {/* Cross drain */}
           <line x1={L*0.5-t*2} y1={D*0.5} x2={L*0.5+t*2} y2={D*0.5} stroke={stroke} strokeWidth={t}/>
           <line x1={L*0.5} y1={D*0.5-t*2} x2={L*0.5} y2={D*0.5+t*2} stroke={stroke} strokeWidth={t}/>
@@ -199,20 +192,19 @@ function BathSymbol({ item, sw, sel }: { item: PlacedBath; sw: number; sel: bool
       );
     }
     case 'toilet': {
-      // Cistern rect at back + oval bowl at front
-      const cisH = D * 0.32;
-      const bowlRx = L * 0.4, bowlRy = (D - cisH) * 0.48;
-      const bowlCy = cisH + (D - cisH) * 0.52;
+      // Square cistern at top + rounded-rect bowl below
+      const cisH = D * 0.3;
+      const bowlY = cisH;
+      const bowlH = D - cisH;
+      const bowlR = Math.min(L, bowlH) * 0.48; // pill corners
       return (
         <>
-          {/* Cistern */}
+          {/* Cistern — square */}
           <rect x={0} y={0} width={L} height={cisH} fill="#FFFFFF" stroke={stroke} strokeWidth={t * 1.5}/>
-          {/* Seat oval */}
-          <ellipse cx={L/2} cy={bowlCy} rx={bowlRx} ry={bowlRy} fill="#FFFFFF" stroke={stroke} strokeWidth={t * 1.5}/>
-          {/* Inner bowl */}
-          <ellipse cx={L/2} cy={bowlCy} rx={bowlRx*0.72} ry={bowlRy*0.68} fill="none" stroke={stroke} strokeWidth={t}/>
-          {/* Flush button */}
-          <circle cx={L/2} cy={cisH*0.5} r={t*1.5} fill={stroke}/>
+          {/* Bowl — rounded rect (pill) */}
+          <rect x={0} y={bowlY} width={L} height={bowlH} rx={bowlR} ry={bowlR} fill="#FFFFFF" stroke={stroke} strokeWidth={t * 1.5}/>
+          {/* Flush button on cistern */}
+          <circle cx={L/2} cy={cisH*0.5} r={t*1.8} fill={stroke}/>
         </>
       );
     }
@@ -773,11 +765,10 @@ export default function SvgEditor({
         const t=sw*0.25;
         let inner='';
         if(subtype==='bathtub'){
-          const pad=Math.min(L,D)*0.1,rx=(L-pad*2)/2,ry=(D-pad*2)/2,dr=Math.min(rx,ry)*0.12;
-          inner=`<ellipse cx="${L/2}" cy="${D/2}" rx="${rx}" ry="${ry}" fill="none" stroke="#1a1a1a" stroke-width="${t}"/><circle cx="${L*0.5}" cy="${D*0.82}" r="${dr}" fill="none" stroke="#1a1a1a" stroke-width="${t*0.8}"/>`;
+          const r=Math.min(L,D)*0.5,pad=Math.min(L,D)*0.08,ri=Math.min(L-pad*2,D-pad*2)*0.5;
+          inner=`<rect x="${pad}" y="${pad}" width="${L-pad*2}" height="${D-pad*2}" rx="${ri}" ry="${ri}" fill="none" stroke="#1a1a1a" stroke-width="${t}"/>`;
         } else if(subtype==='shower'){
-          const arcR=Math.min(L,D)*0.45;
-          inner=`<path d="M ${L},0 A ${arcR},${arcR} 0 0,1 0,${D}" fill="none" stroke="#1a1a1a" stroke-width="${t*1.2}"/><line x1="${L*0.5-t*2}" y1="${D*0.5}" x2="${L*0.5+t*2}" y2="${D*0.5}" stroke="#1a1a1a" stroke-width="${t}"/><line x1="${L*0.5}" y1="${D*0.5-t*2}" x2="${L*0.5}" y2="${D*0.5+t*2}" stroke="#1a1a1a" stroke-width="${t}"/><circle cx="${L*0.5}" cy="${D*0.5}" r="${t*3}" fill="none" stroke="#1a1a1a" stroke-width="${t*0.6}"/>`;
+          inner=`<line x1="${L*0.5-t*2}" y1="${D*0.5}" x2="${L*0.5+t*2}" y2="${D*0.5}" stroke="#1a1a1a" stroke-width="${t}"/><line x1="${L*0.5}" y1="${D*0.5-t*2}" x2="${L*0.5}" y2="${D*0.5+t*2}" stroke="#1a1a1a" stroke-width="${t}"/><circle cx="${L*0.5}" cy="${D*0.5}" r="${t*3}" fill="none" stroke="#1a1a1a" stroke-width="${t*0.6}"/>`;
         } else if(subtype==='vanity'){
           const bw=Math.min(L*0.55,D*0.75),bh=Math.min(D*0.65,L*0.65);
           inner=`<ellipse cx="${L/2}" cy="${D/2}" rx="${bw/2}" ry="${bh/2}" fill="none" stroke="#1a1a1a" stroke-width="${t}"/><circle cx="${L/2}" cy="${D*0.42}" r="${t*1.2}" fill="#1a1a1a"/>`;
@@ -785,12 +776,12 @@ export default function SvgEditor({
           const bw=L*0.72,bh=D*0.68;
           inner=`<ellipse cx="${L/2}" cy="${D*0.55}" rx="${bw/2}" ry="${bh/2}" fill="none" stroke="#1a1a1a" stroke-width="${t}"/><circle cx="${L/2}" cy="${D*0.22}" r="${t*1.2}" fill="#1a1a1a"/><line x1="${L*0.38}" y1="${D*0.22}" x2="${L*0.62}" y2="${D*0.22}" stroke="#1a1a1a" stroke-width="${t*1.2}" stroke-linecap="round"/>`;
         } else if(subtype==='toilet'){
-          const cisH=D*0.32,bowlRx=L*0.4,bowlRy=(D-cisH)*0.48,bowlCy=cisH+(D-cisH)*0.52;
-          inner=`<rect x="0" y="0" width="${L}" height="${cisH}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${t*1.5}"/><ellipse cx="${L/2}" cy="${bowlCy}" rx="${bowlRx}" ry="${bowlRy}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${t*1.5}"/><ellipse cx="${L/2}" cy="${bowlCy}" rx="${bowlRx*0.72}" ry="${bowlRy*0.68}" fill="none" stroke="#1a1a1a" stroke-width="${t}"/><circle cx="${L/2}" cy="${cisH*0.5}" r="${t*1.5}" fill="#1a1a1a"/>`;
+          const cisH=D*0.3,bowlH=D-cisH,bowlR=Math.min(L,bowlH)*0.48;
+          inner=`<rect x="0" y="0" width="${L}" height="${cisH}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${t*1.5}"/><rect x="0" y="${cisH}" width="${L}" height="${bowlH}" rx="${bowlR}" ry="${bowlR}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${t*1.5}"/><circle cx="${L/2}" cy="${cisH*0.5}" r="${t*1.8}" fill="#1a1a1a"/>`;
           return `<g transform="translate(${b.x},${b.y}) rotate(${b.rotation})" class="bath-element" data-bath-id="${b.id}" data-subtype="${subtype}">${inner}</g>`;
         }
         return `<g transform="translate(${b.x},${b.y}) rotate(${b.rotation})" class="bath-element" data-bath-id="${b.id}" data-subtype="${subtype}">
-  <rect x="0" y="0" width="${L}" height="${D}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${t*1.5}"/>
+  <rect x="0" y="0" width="${L}" height="${D}" rx="${subtype==='bathtub'?Math.min(L,D)*0.5:0}" ry="${subtype==='bathtub'?Math.min(L,D)*0.5:0}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${t*1.5}"/>
   ${inner}
 </g>`;
       }).join('\n');
