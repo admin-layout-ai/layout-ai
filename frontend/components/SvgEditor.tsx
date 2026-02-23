@@ -33,7 +33,7 @@ export interface PlacedRobe {
   id: number; x: number; y: number;
   rotation: number; length: number; width: number; subtype: RobeSubtype;
 }
-export type KitchenSubtype = 'island' | 'bench' | 'fridge' | 'sink' | 'cooktop' | 'dishwasher';
+export type KitchenSubtype = 'island' | 'bench' | 'fridge' | 'sink' | 'cooktop' | 'dishwasher' | 'washer';
 export type BathSubtype = 'bathtub' | 'shower' | 'vanity' | 'basin' | 'toilet';
 export interface PlacedBath {
   id: number; x: number; y: number;
@@ -109,11 +109,11 @@ function KitchenSymbol({ item, sw, sel }: { item: PlacedKitchen; sw: number; sel
     case 'bench': return (
       <rect x={0} y={0} width={L} height={D} fill="#FFFFFF" stroke={stroke} strokeWidth={thick} />
     );
-    case 'fridge': { const r=Math.min(L,D)*0.08; return (
+    case 'fridge': { const r=Math.min(L,D)*0.08; const fs=Math.min(L,D)*0.38; return (
       <><rect x={0} y={0} width={L} height={D} fill="#FFFFFF" stroke={stroke} strokeWidth={thick} rx={r}/>
-        <line x1={L*0.2} y1={D*0.08} x2={L*0.8} y2={D*0.08} stroke={stroke} strokeWidth={thin*1.2} strokeLinecap="round"/>
-        <circle cx={L*0.08} cy={D*0.5} r={thin} fill={stroke}/>
-        <line x1={L*0.06} y1={D*0.15} x2={L*0.94} y2={D*0.15} stroke={stroke} strokeWidth={thin*0.5} strokeDasharray={`${thin*2},${thin}`}/></>); }
+        <text x={L*0.5} y={D*0.5} textAnchor="middle" dominantBaseline="central"
+          fontSize={fs} fontFamily="Arial, sans-serif" fontWeight="600" fill={stroke} letterSpacing="0.05em">FR</text>
+      </>); }
     case 'sink': { const dbl=L>D*1.5,bw=dbl?L*0.42:L*0.72,bh=D*0.68,by=D*0.16; return (
       <><rect x={0} y={0} width={L} height={D} fill="#FFFFFF" stroke={stroke} strokeWidth={thick}/>
         {dbl?<><rect x={L*0.04} y={by} width={bw} height={bh} fill="none" stroke={stroke} strokeWidth={thin} rx={thin}/>
@@ -128,11 +128,16 @@ function KitchenSymbol({ item, sw, sel }: { item: PlacedKitchen; sw: number; sel
         {bx.map((bxi,i)=><g key={i}><circle cx={bxi} cy={by2[i]} r={r1} fill="none" stroke={stroke} strokeWidth={thin}/>
           <circle cx={bxi} cy={by2[i]} r={r2} fill="none" stroke={stroke} strokeWidth={thin*0.6}/>
           <circle cx={bxi} cy={by2[i]} r={thin*0.9} fill={stroke}/></g>)}</> ); }
-    case 'dishwasher': return (
+    case 'dishwasher': { const fs=Math.min(L,D)*0.38; return (
       <><rect x={0} y={0} width={L} height={D} fill="#FFFFFF" stroke={stroke} strokeWidth={thick}/>
-        <rect x={0} y={0} width={L} height={D*0.12} fill={sel?'rgba(37,99,235,0.08)':'rgba(0,0,0,0.04)'} stroke={stroke} strokeWidth={thin*0.5}/>
-        {[0.3,0.5,0.7,0.88].map((t,i)=><line key={i} x1={L*0.08} y1={D*t} x2={L*0.92} y2={D*t} stroke={stroke} strokeWidth={thin*0.5} strokeDasharray={`${thin*3},${thin*1.5}`}/>)}
-        <line x1={L*0.25} y1={D*0.06} x2={L*0.75} y2={D*0.06} stroke={stroke} strokeWidth={thin*1.2} strokeLinecap="round"/></>);
+        <text x={L*0.5} y={D*0.5} textAnchor="middle" dominantBaseline="central"
+          fontSize={fs} fontFamily="Arial, sans-serif" fontWeight="600" fill={stroke} letterSpacing="0.05em">DW</text>
+      </>); }
+    case 'washer': { const fs=Math.min(L,D)*0.38; return (
+      <><rect x={0} y={0} width={L} height={D} fill="#FFFFFF" stroke={stroke} strokeWidth={thick}/>
+        <text x={L*0.5} y={D*0.5} textAnchor="middle" dominantBaseline="central"
+          fontSize={fs} fontFamily="Arial, sans-serif" fontWeight="600" fill={stroke} letterSpacing="0.05em">WR</text>
+      </>); }
     default: return null;
   }
 }
@@ -251,7 +256,7 @@ export default function SvgEditor({
   const [kitchenSubtype, setKitchenSubtype] = useState<KitchenSubtype>('island');
   const [kitchenDefaults, setKitchenDefaults] = useState<Record<KitchenSubtype,{length:number;depth:number}>>({
     island:{length:96,depth:36},bench:{length:96,depth:24},fridge:{length:28,depth:28},
-    sink:{length:36,depth:20},cooktop:{length:24,depth:24},dishwasher:{length:24,depth:24},
+    sink:{length:36,depth:20},cooktop:{length:24,depth:24},dishwasher:{length:24,depth:24},washer:{length:24,depth:24},
   });
   const [placedBaths,    setPlacedBaths]    = useState<PlacedBath[]>([]);
   const [bathSubtype,    setBathSubtype]    = useState<BathSubtype>('bathtub');
@@ -429,7 +434,7 @@ export default function SvgEditor({
             fridge:{length:Math.round(upm*0.7),depth:Math.round(upm*0.7)},
             sink:{length:0.8*upm,depth:0.4*upm},
             cooktop:{length:0.8*upm,depth:0.4*upm},
-            dishwasher:{length:0.6*upm,depth:0.6*upm},
+            dishwasher:{length:0.6*upm,depth:0.6*upm},washer:{length:0.6*upm,depth:0.6*upm},
           });
         }
 
@@ -703,22 +708,16 @@ export default function SvgEditor({
     <path d="M ${w},0 A ${w},${w} 0 0,1 0,${-w}" fill="none" stroke="#000000" stroke-width="${sw*0.5}"/>
     <circle cx="0" cy="0" r="${sw}" fill="#000000"/>`;
         } else if(st==='sliding'){
-          const pocketW=wch*1.2, panelT=wch*0.55;
+          const blockW=wch, panelH=wch*0.35, panelW=w-blockW*0.4;
           const flip=door.flipped;
-          const pocketX=flip?w-pocketW:0;
-          const panelX=flip?w-pocketW*0.6-(w-pocketW):pocketW*0.4;
-          const ah=Math.min(w*0.18,wch*1.2);
-          const arrowX1=flip?w*0.4:w*0.6, arrowX2=flip?w*0.15:w*0.85;
-          const arrowPts=flip?`${w*0.15+ah},${-ah*0.5} ${w*0.15},0 ${w*0.15+ah},${ah*0.5}`:`${w*0.85-ah},${-ah*0.5} ${w*0.85},0 ${w*0.85-ah},${ah*0.5}`;
-          inner=`<line x1="${pocketX}" y1="${-wch*0.5}" x2="${pocketX}" y2="${wch*0.5}" stroke="#000000" stroke-width="${sw*0.5}" stroke-linecap="square"/>
-    <line x1="${pocketX+pocketW}" y1="${-wch*0.5}" x2="${pocketX+pocketW}" y2="${wch*0.5}" stroke="#000000" stroke-width="${sw*0.5}" stroke-linecap="square"/>
-    <rect x="${panelX}" y="${-panelT/2}" width="${w-pocketW*0.6}" height="${panelT}" fill="#FFFFFF" stroke="#000000" stroke-width="${sw*0.35}"/>
-    <line x1="${arrowX1}" y1="0" x2="${arrowX2}" y2="0" stroke="#000000" stroke-width="${sw*0.5}" stroke-linecap="round"/>
-    <polyline points="${arrowPts}" fill="none" stroke="#000000" stroke-width="${sw*0.5}" stroke-linecap="round" stroke-linejoin="round"/>`;
+          const panelX=flip?blockW*0.4:-blockW*0.4;
+          inner=`<rect x="0" y="${-wch/2}" width="${blockW}" height="${wch}" fill="#1a1a1a"/>
+    <rect x="${w-blockW}" y="${-wch/2}" width="${blockW}" height="${wch}" fill="#1a1a1a"/>
+    <rect x="${panelX}" y="${-panelH/2}" width="${panelW}" height="${panelH}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${sw*0.35}"/>`;
         } else {
-          // entry – two dotted jamb lines
-          inner=`<line x1="0" y1="${-wch*0.35}" x2="0" y2="${wch*0.35}" stroke="#000000" stroke-width="${sw*0.9}" stroke-dasharray="4,3" stroke-linecap="round"/>
-    <line x1="${w}" y1="${-wch*0.35}" x2="${w}" y2="${wch*0.35}" stroke="#000000" stroke-width="${sw*0.9}" stroke-dasharray="4,3" stroke-linecap="round"/>`;
+          // entry – two solid jamb lines, wall thickness tall
+          inner=`<line x1="0" y1="${-wch/2}" x2="0" y2="${wch/2}" stroke="#000000" stroke-width="${sw*0.9}" stroke-linecap="square"/>
+    <line x1="${w}" y1="${-wch/2}" x2="${w}" y2="${wch/2}" stroke="#000000" stroke-width="${sw*0.9}" stroke-linecap="square"/>`;
         }
         return `<g transform="translate(${door.x},${door.y}) rotate(${door.rotation})" class="door-element" data-door-id="${door.id}">
   <g transform="${door.flipped?'scale(1,-1)':'scale(1,1)'}">
@@ -796,14 +795,15 @@ export default function SvgEditor({
         let inner='';
         if(subtype==='island'){inner=`<rect x="${D*0.12}" y="${D*0.12}" width="${L-D*0.24}" height="${D-D*0.24}" fill="none" stroke="#1a1a1a" stroke-width="${thin*0.6}" opacity="0.4"/>"`;}
         else if(subtype==='bench'){inner='';}
-        else if(subtype==='fridge'){const r=Math.min(L,D)*0.08;inner=`<rect x="0" y="0" width="${L}" height="${D}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${thick}" rx="${r}"/><line x1="${L*0.2}" y1="${D*0.08}" x2="${L*0.8}" y2="${D*0.08}" stroke="#1a1a1a" stroke-width="${thin*1.2}" stroke-linecap="round"/><circle cx="${L*0.08}" cy="${D*0.5}" r="${thin}" fill="#1a1a1a"/>`;}
+        else if(subtype==='fridge'){const r=Math.min(L,D)*0.08,fs=Math.min(L,D)*0.38;inner=`<rect x="0" y="0" width="${L}" height="${D}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${thick}" rx="${r}"/><text x="${L*0.5}" y="${D*0.5}" text-anchor="middle" dominant-baseline="central" font-size="${fs}" font-family="Arial, sans-serif" font-weight="600" fill="#1a1a1a" letter-spacing="0.05em">FR</text>`;}
         else if(subtype==='sink'){const dbl=L>D*1.5,bw=dbl?L*0.42:L*0.72,bh=D*0.68,by2=D*0.16;
           inner=dbl?`<rect x="${L*0.04}" y="${by2}" width="${bw}" height="${bh}" fill="none" stroke="#1a1a1a" stroke-width="${thin}" rx="${thin}"/><rect x="${L*0.54}" y="${by2}" width="${bw}" height="${bh}" fill="none" stroke="#1a1a1a" stroke-width="${thin}" rx="${thin}"/><circle cx="${L*0.25}" cy="${D*0.5}" r="${thin*1.5}" fill="#1a1a1a"/><circle cx="${L*0.75}" cy="${D*0.5}" r="${thin*1.5}" fill="#1a1a1a"/>`:
             `<rect x="${(L-bw)/2}" y="${by2}" width="${bw}" height="${bh}" fill="none" stroke="#1a1a1a" stroke-width="${thin}" rx="${thin}"/><circle cx="${L/2}" cy="${D*0.5}" r="${thin*1.5}" fill="#1a1a1a"/>`;
           inner+=`<line x1="${L*0.45}" y1="${D*0.05}" x2="${L*0.55}" y2="${D*0.05}" stroke="#1a1a1a" stroke-width="${thin*1.2}" stroke-linecap="round"/><line x1="${L*0.5}" y1="${D*0.05}" x2="${L*0.5}" y2="${D*0.16}" stroke="#1a1a1a" stroke-width="${thin*0.8}"/>`;}
         else if(subtype==='cooktop'){const bxs=[L*0.25,L*0.75,L*0.25,L*0.75],bys=[D*0.28,D*0.28,D*0.72,D*0.72],r1=Math.min(L,D)*0.18,r2=r1*0.55;
           inner=bxs.map((bx,i)=>`<circle cx="${bx}" cy="${bys[i]}" r="${r1}" fill="none" stroke="#1a1a1a" stroke-width="${thin}"/><circle cx="${bx}" cy="${bys[i]}" r="${r2}" fill="none" stroke="#1a1a1a" stroke-width="${thin*0.6}"/><circle cx="${bx}" cy="${bys[i]}" r="${thin*0.9}" fill="#1a1a1a"/>`).join('');}
-        else if(subtype==='dishwasher'){inner=`<rect x="0" y="0" width="${L}" height="${D*0.12}" fill="rgba(0,0,0,0.04)" stroke="#1a1a1a" stroke-width="${thin*0.5}"/>${[0.3,0.5,0.7,0.88].map(t=>`<line x1="${L*0.08}" y1="${D*t}" x2="${L*0.92}" y2="${D*t}" stroke="#1a1a1a" stroke-width="${thin*0.5}" stroke-dasharray="${thin*3},${thin*1.5}"/>`).join('')}<line x1="${L*0.25}" y1="${D*0.06}" x2="${L*0.75}" y2="${D*0.06}" stroke="#1a1a1a" stroke-width="${thin*1.2}" stroke-linecap="round"/>`;}
+        else if(subtype==='dishwasher'){const fs=Math.min(L,D)*0.38;inner=`<text x="${L*0.5}" y="${D*0.5}" text-anchor="middle" dominant-baseline="central" font-size="${fs}" font-family="Arial, sans-serif" font-weight="600" fill="#1a1a1a" letter-spacing="0.05em">DW</text>`;}
+        else if(subtype==='washer'){const fs=Math.min(L,D)*0.38;inner=`<text x="${L*0.5}" y="${D*0.5}" text-anchor="middle" dominant-baseline="central" font-size="${fs}" font-family="Arial, sans-serif" font-weight="600" fill="#1a1a1a" letter-spacing="0.05em">WR</text>`;}
         return `<g transform="translate(${k.x},${k.y}) rotate(${k.rotation})" class="kitchen-element" data-kitchen-id="${k.id}" data-subtype="${subtype}">
   <rect x="0" y="0" width="${L}" height="${D}" fill="#FFFFFF" stroke="#1a1a1a" stroke-width="${thick}"/>
   ${inner}
@@ -1074,38 +1074,28 @@ export default function SvgEditor({
                         <circle cx={0} cy={0} r={sel?3:1.5} fill={sc}/>
                       </>}
                       {st==='sliding' && (()=>{
-                        // Single panel shown partially slid into cavity at left end
-                        // Cavity pocket = double parallel lines on left; panel rect; direction arrow
-                        const pocketW = wch * 1.2;   // pocket depth (wall thickness)
-                        const panelT  = wch * 0.55;  // door panel thickness
-                        const arrowX  = w * 0.65;    // arrow position x
-                        const ah      = Math.min(w * 0.18, wch * 1.2); // arrow head size
-                        const flip    = door.flipped; // pocket on right if flipped
-                        const pocketX = flip ? w - pocketW : 0;
-                        const panelX  = flip ? w - pocketW * 0.6 - (w - pocketW) : pocketW * 0.4;
+                        const blockW=wch;
+                        const panelH=wch*0.35;
+                        const panelW=w-blockW*0.4;
+                        const flip=door.flipped;
+                        const panelX=flip ? blockW*0.4 : -blockW*0.4;
                         return (<>
                           {sel&&<rect x={-6} y={-wch/2-6} width={w+12} height={wch+12} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={2} strokeDasharray="6,3" rx={3}/>}
-                          {/* Cavity pocket: two parallel lines */}
-                          <line x1={pocketX}          y1={-wch*0.5} x2={pocketX}          y2={wch*0.5} stroke={sc} strokeWidth={wallStroke*0.5} strokeLinecap="square"/>
-                          <line x1={pocketX+pocketW}  y1={-wch*0.5} x2={pocketX+pocketW}  y2={wch*0.5} stroke={sc} strokeWidth={wallStroke*0.5} strokeLinecap="square"/>
-                          {/* Door panel — rectangle spanning full opening width */}
-                          <rect x={panelX} y={-panelT/2} width={w - pocketW*0.6} height={panelT}
+                          {/* Left wall block */}
+                          <rect x={0} y={-wch/2} width={blockW} height={wch} fill={sc}/>
+                          {/* Right wall block */}
+                          <rect x={w-blockW} y={-wch/2} width={blockW} height={wch} fill={sc}/>
+                          {/* Door panel — thin, slid to one side */}
+                          <rect x={panelX} y={-panelH/2} width={panelW} height={panelH}
                             fill="#FFFFFF" stroke={sc} strokeWidth={wallStroke*0.35}/>
-                          {/* Direction arrow */}
-                          <line x1={flip?w*0.4:w*0.6} y1={0} x2={flip?w*0.15:w*0.85} y2={0} stroke={sc} strokeWidth={wallStroke*0.5} strokeLinecap="round"/>
-                          <polyline points={flip
-                            ? `${w*0.15+ah},${-ah*0.5} ${w*0.15},0 ${w*0.15+ah},${ah*0.5}`
-                            : `${w*0.85-ah},${-ah*0.5} ${w*0.85},0 ${w*0.85-ah},${ah*0.5}`}
-                            fill="none" stroke={sc} strokeWidth={wallStroke*0.5} strokeLinecap="round" strokeLinejoin="round"/>
                         </>);
                       })()}
                       {st==='entry' && (()=>{
-                        const lineLen=w;
                         return (<>
                           {sel&&<rect x={-6} y={-wch/2-6} width={w+12} height={wch+12} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={2} strokeDasharray="6,3" rx={3}/>}
-                          {/* Two dotted jamb lines */}
-                          <line x1={0} y1={-wch*0.35} x2={0} y2={wch*0.35} stroke={sc} strokeWidth={wallStroke*0.9} strokeDasharray="4,3" strokeLinecap="round"/>
-                          <line x1={lineLen} y1={-wch*0.35} x2={lineLen} y2={wch*0.35} stroke={sc} strokeWidth={wallStroke*0.9} strokeDasharray="4,3" strokeLinecap="round"/>
+                          {/* Two solid jamb lines — wall thickness tall */}
+                          <line x1={0} y1={-wch/2} x2={0} y2={wch/2} stroke={sc} strokeWidth={wallStroke*0.9} strokeLinecap="square"/>
+                          <line x1={w} y1={-wch/2} x2={w} y2={wch/2} stroke={sc} strokeWidth={wallStroke*0.9} strokeLinecap="square"/>
                         </>);
                       })()}
                     </g>
@@ -1238,7 +1228,7 @@ export default function SvgEditor({
               <div className="mt-3 pt-3 border-t border-white/10">
                 <p className="text-gray-500 text-[10px] mb-2 uppercase tracking-wider">Item to place</p>
                 <div className="grid grid-cols-3 gap-1.5">
-                  {(['island','bench','fridge','sink','cooktop','dishwasher'] as KitchenSubtype[]).map(st=>(
+                  {(['island','bench','fridge','sink','cooktop','dishwasher','washer'] as KitchenSubtype[]).map(st=>(
                     <button key={st} onClick={()=>setKitchenSubtype(st)}
                       className={`px-2 py-1.5 rounded-md text-[11px] font-medium capitalize transition border ${kitchenSubtype===st?'bg-orange-600 border-orange-500 text-white':'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10'}`}>
                       {st}
