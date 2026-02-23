@@ -44,7 +44,7 @@ export interface PlacedKitchen {
 }
 export interface SvgEditorSaveResult {
   previewImageUrl: string;
-  doors: PlacedDoor[]; walls: PlacedWall[]; windows: PlacedWindow[];
+  doors: PlacedDoor[]; windows: PlacedWindow[];
   robes: PlacedRobe[]; kitchens: PlacedKitchen[]; baths: PlacedBath[]; updatedAt: string;
 }
 export interface SvgEditorProps {
@@ -65,7 +65,7 @@ type DragTarget =
   | { kind: 'bath';     id: number; ox: number; oy: number };
 
 interface Snapshot {
-  doors: PlacedDoor[]; walls: PlacedWall[]; windows: PlacedWindow[];
+  doors: PlacedDoor[]; windows: PlacedWindow[];
   robes: PlacedRobe[]; kitchens: PlacedKitchen[]; baths: PlacedBath[];
 }
 type ActiveTool = 'select' | 'door' | 'window' | 'robe' | 'kitchen' | 'bath';
@@ -225,7 +225,7 @@ function BathSymbol({ item, sw, sel }: { item: PlacedBath; sw: number; sel: bool
 
 export default function SvgEditor({
   svgUrl, projectId, planId,
-  existingDoors, existingWalls, existingWindows, existingRobes, existingKitchens,
+  existingDoors, existingWalls, existingWindows, existingRobes, existingKitchens, existingBaths,
   envelopeWidth = 12, onSave, onCancel,
 }: SvgEditorProps) {
 
@@ -286,7 +286,7 @@ export default function SvgEditor({
   // Full undo stack
   const undoStack   = useRef<Snapshot[]>([]);
   const [undoDepth, setUndoDepth] = useState(0);
-  const stateRef    = useRef<Snapshot>({doors:[],walls:[],windows:[],robes:[],kitchens:[],baths:[]});
+  const stateRef    = useRef<Snapshot>({doors:[],windows:[],robes:[],kitchens:[],baths:[]});
 
   const svgRef             = useRef<SVGSVGElement>(null);
   const svgContentGroupRef = useRef<SVGGElement>(null);
@@ -295,8 +295,8 @@ export default function SvgEditor({
 
   // Keep stateRef in sync
   useEffect(() => {
-    stateRef.current = { doors:placedDoors, walls:placedWalls, windows:placedWindows, robes:placedRobes, kitchens:placedKitchens, baths:placedBaths };
-  }, [placedDoors, placedWalls, placedWindows, placedRobes, placedKitchens, placedBaths]);
+    stateRef.current = { doors:placedDoors, windows:placedWindows, robes:placedRobes, kitchens:placedKitchens, baths:placedBaths };
+  }, [placedDoors, placedWindows, placedRobes, placedKitchens, placedBaths]);
 
   // Toast auto-dismiss
   useEffect(() => {
@@ -327,7 +327,7 @@ export default function SvgEditor({
     const s = stateRef.current;
     undoStack.current = [
       ...undoStack.current.slice(-49),
-      {doors:[...s.doors],walls:[...s.walls],windows:[...s.windows],robes:[...s.robes],kitchens:[...s.kitchens]},
+      {doors:[...s.doors],windows:[...s.windows],robes:[...s.robes],kitchens:[...s.kitchens],baths:[...(s.baths||[])]},
     ];
     setUndoDepth(undoStack.current.length);
   }, []);
@@ -336,7 +336,7 @@ export default function SvgEditor({
     if (!undoStack.current.length) return;
     const prev = undoStack.current[undoStack.current.length-1];
     undoStack.current = undoStack.current.slice(0,-1);
-    setPlacedDoors(prev.doors); setPlacedWalls(prev.walls);
+    setPlacedDoors(prev.doors); 
     setPlacedWindows(prev.windows); setPlacedRobes(prev.robes);
     setPlacedKitchens(prev.kitchens); setPlacedBaths((prev as any).baths||[]); setSelectedEl(null);
     setUndoDepth(undoStack.current.length);
@@ -422,7 +422,6 @@ export default function SvgEditor({
           let ws=Math.max(2,Math.round(upm*0.12));
           if(thinDims.length>0){thinDims.sort((a,b)=>a-b);const med=thinDims[Math.floor(thinDims.length/2)];const lo=thinDims.filter(d=>d<=med);ws=Math.max(2,lo[Math.floor(lo.length/2)]);}
           setWallStroke(ws);
-          setEraseSize(Math.round(ws*4));
           nudgeStep.current=Math.max(1,upm*0.01);
 
           setBathDefaults({
@@ -445,7 +444,7 @@ export default function SvgEditor({
         if(existingWindows?.length) {setPlacedWindows(existingWindows);  allIds.push(...existingWindows.map(w=>w.id));}
         if(existingRobes?.length)   {setPlacedRobes(existingRobes);      allIds.push(...existingRobes.map(r=>r.id));}
         if(existingKitchens?.length){setPlacedKitchens(existingKitchens);allIds.push(...existingKitchens.map(k=>k.id));}
-        if((existingBaths as any)?.length){setPlacedBaths(existingBaths as any);allIds.push(...(existingBaths as any).map((b:any)=>b.id));}
+        if(existingBaths?.length){setPlacedBaths(existingBaths);allIds.push(...existingBaths.map((b:PlacedBath)=>b.id));}
         if(allIds.length>0) nextId.current=Math.max(...allIds)+1;
 
       } catch(err) { console.error('SvgEditor: failed to load SVG',err); }
