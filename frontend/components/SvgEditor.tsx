@@ -705,7 +705,7 @@ export default function SvgEditor({
         const w=door.width;
         return `<g transform="translate(${door.x},${door.y}) rotate(${door.rotation})" class="door-element" data-door-id="${door.id}">
   <g transform="${door.flipped?'scale(1,-1)':'scale(1,1)'}">
-    <rect x="${-wch}" y="${-wch/2}" width="${w+2*wch}" height="${wch}" fill="#FFFFFF" stroke="none"/>
+    <rect x="0" y="${-wch/2}" width="${w}" height="${wch}" fill="#FFFFFF" stroke="none"/>
     <line x1="0" y1="0" x2="${w}" y2="0" stroke="#000000" stroke-width="${sw}"/>
     <path d="M ${w},0 A ${w},${w} 0 0,1 0,${-w}" fill="none" stroke="#000000" stroke-width="${sw*0.5}"/>
     <circle cx="0" cy="0" r="${sw}" fill="#000000"/>
@@ -841,7 +841,8 @@ export default function SvgEditor({
     isPanningRef.current      ? 'grabbing' :
     spaceDown                 ? 'grab' :
     activeDrag.current        ? 'grabbing' :
-    activeTool==='door'||activeTool==='window'||activeTool==='robe'||activeTool==='kitchen' ? 'crosshair' :
+    activeTool==='door'||activeTool==='window'||activeTool==='robe'||activeTool==='kitchen'||activeTool==='bath' ? 'crosshair' :
+    'default';
 
   const totalElements=placedDoors.length+placedWindows.length+placedRobes.length+placedKitchens.length+placedBaths.length;
 
@@ -989,7 +990,7 @@ export default function SvgEditor({
                     style={{cursor:sel?'grab':'pointer'}}>
                     {/* Flip in nested g – correct transform order */}
                     <g transform={door.flipped?'scale(1,-1)':''}>
-                      <rect x={-wch} y={-wch/2} width={w+2*wch} height={wch} fill="#FFFFFF" stroke="none"/>
+                      <rect x={0} y={-wch/2} width={w} height={wch} fill="#FFFFFF" stroke="none"/>
                       {sel&&<rect x={-6} y={-w-6} width={w+12} height={w+12} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={2} strokeDasharray="6,3" rx={3}/>}
                       <line x1={0} y1={0} x2={w} y2={0} stroke={sel?'#2563eb':'#000'} strokeWidth={sel?1.5:1}/>
                       <path d={`M ${w},0 A ${w},${w} 0 0,0 0,${-w}`} fill="none" stroke={sel?'#2563eb':'#000'} strokeWidth={sel?1:0.5} strokeDasharray="4,3"/>
