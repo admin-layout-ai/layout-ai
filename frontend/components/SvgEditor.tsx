@@ -286,7 +286,7 @@ export default function SvgEditor({
   // Full undo stack
   const undoStack   = useRef<Snapshot[]>([]);
   const [undoDepth, setUndoDepth] = useState(0);
-  const stateRef    = useRef<Snapshot>({doors:[],walls:[],windows:[],robes:[],kitchens:[]});
+  const stateRef    = useRef<Snapshot>({doors:[],walls:[],windows:[],robes:[],kitchens:[],baths:[]});
 
   const svgRef             = useRef<SVGSVGElement>(null);
   const svgContentGroupRef = useRef<SVGGElement>(null);
