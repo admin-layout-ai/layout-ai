@@ -987,14 +987,6 @@ export default function SvgEditor({
               {activeTool==='kitchen' && `Click to place ${kitchenSubtype}`}
               {activeTool==='bath'    && `Click to place ${bathSubtype}`}
             </div>
-          )}
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/70 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full pointer-events-none">
-              Click to finish · Shift=angle snap · Esc=cancel
-            </div>
-          )}
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-red-900/80 backdrop-blur-sm text-red-200 text-xs px-3 py-1.5 rounded-full pointer-events-none flex items-center gap-1.5">
-            </div>
-          )}
         </div>
 
         {/* Horizontal scrollbar – visible only when zoomed in */}
@@ -1059,25 +1051,6 @@ export default function SvgEditor({
               {toolBtn('bath','Bath',Square,'bg-teal-600')}
             </div>
 
-            {/* Wall sub-options: erase mode + size */}
-              <div className="mt-3 pt-3 border-t border-white/10">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={()=>{setWallEraseMode(p=>!p);setWallStart(null);}}
-                  </button>
-                </div>
-                  <div className="mt-2 space-y-1">
-                    <div className="flex justify-between text-[10px] text-gray-500">
-                    </div>
-                    <input type="range" min={Math.round(wallStroke*1.5)} max={Math.round(wallStroke*12)} step={1}
-                      className="w-full accent-red-500"/>
-                    <div className="flex justify-between text-[10px] text-gray-500">
-                      <span>Small</span><span>Large</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* Bath sub-palette */}
             {activeTool==='bath'&&(
