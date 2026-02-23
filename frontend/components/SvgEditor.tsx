@@ -15,7 +15,7 @@ import {
 
 export interface PlacedDoor {
   id: number; x: number; y: number;
-  rotation: number; width: number; flipped: boolean;
+  rotation: number; width: number; flipped: boolean; subtype: 'swing' | 'sliding' | 'entry';
 }
 export interface PlacedWall {
   id: number; x1: number; y1: number; x2: number; y2: number;
@@ -242,6 +242,7 @@ export default function SvgEditor({
   const nextId = useRef(1); // unified ID counter
 
   const [doorWidth,    setDoorWidth]    = useState(40);
+  const [doorSubtype,  setDoorSubtype]  = useState<'swing'|'sliding'|'entry'>('swing');
   const [windowWidth,  setWindowWidth]  = useState(50);
   const [robeFixedW,   setRobeFixedW]   = useState(30);
   const [robeLength,   setRobeLength]   = useState(80);
@@ -560,7 +561,7 @@ export default function SvgEditor({
 
     if(activeTool==='door'){
       pushUndo(); const id=nextId.current++;
-      setPlacedDoors(p=>[...p,{id,x:cx,y:cy,rotation:0,width:doorWidth,flipped:false}]);
+      setPlacedDoors(p=>[...p,{id,x:cx,y:cy,rotation:0,width:doorWidth,flipped:false,subtype:doorSubtype}]);
       setSelectedEl({kind:'door',id}); return;
     }
     if(activeTool==='window'){
@@ -583,7 +584,7 @@ export default function SvgEditor({
       setPlacedBaths(p=>[...p,{id,x:cx,y:cy,rotation:0,subtype:bathSubtype,length:def.length,depth:def.depth}]);
       setSelectedEl({kind:'bath',id}); return;
     }
-  }, [activeTool,doorWidth,windowWidth,robeLength,robeFixedW,kitchenSubtype,kitchenDefaults,bathSubtype,bathDefaults,snap,snapToAngle,pushUndo,screenToSvg,unitsPerMeter]);
+  }, [activeTool,doorWidth,doorSubtype,windowWidth,robeLength,robeFixedW,kitchenSubtype,kitchenDefaults,bathSubtype,bathDefaults,snap,snapToAngle,pushUndo,screenToSvg,unitsPerMeter]);
 
   const handleElementClick = useCallback((e:React.MouseEvent,kind:ElementKind,id:number) => {
     e.stopPropagation();
@@ -691,15 +692,29 @@ export default function SvgEditor({
     try {
       const wch=wallClearHeight, sw=wallStroke;
 
-      // Doors – flip in nested <g> (correct transform order)
+      // Doors – swing or sliding cavity
       const doorsSvg=placedDoors.map(door=>{
-        const w=door.width;
+        const w=door.width, st=door.subtype||'swing';
+        let inner='';
+        if(st==='swing'){
+          inner=`<line x1="0" y1="0" x2="${w}" y2="0" stroke="#000000" stroke-width="${sw}"/>
+    <path d="M ${w},0 A ${w},${w} 0 0,1 0,${-w}" fill="none" stroke="#000000" stroke-width="${sw*0.5}"/>
+    <circle cx="0" cy="0" r="${sw}" fill="#000000"/>`;
+        } else if(st==='sliding'){
+          const panelW=w*0.55, frameT=sw*0.6;
+          inner=`<line x1="0" y1="${-wch*0.18}" x2="${w}" y2="${-wch*0.18}" stroke="#000000" stroke-width="${frameT*0.4}"/>
+    <line x1="0" y1="${wch*0.18}" x2="${w}" y2="${wch*0.18}" stroke="#000000" stroke-width="${frameT*0.4}"/>
+    <rect x="0" y="${-wch*0.35}" width="${panelW}" height="${wch*0.7}" fill="#FFFFFF" stroke="#000000" stroke-width="${frameT}" rx="${frameT*0.3}"/>
+    <rect x="${w-panelW}" y="${-wch*0.35}" width="${panelW}" height="${wch*0.7}" fill="#FFFFFF" stroke="#000000" stroke-width="${frameT}" rx="${frameT*0.3}"/>`;
+        } else {
+          // entry – two dotted jamb lines
+          inner=`<line x1="0" y1="${-wch*0.35}" x2="0" y2="${wch*0.35}" stroke="#000000" stroke-width="${sw*0.9}" stroke-dasharray="4,3" stroke-linecap="round"/>
+    <line x1="${w}" y1="${-wch*0.35}" x2="${w}" y2="${wch*0.35}" stroke="#000000" stroke-width="${sw*0.9}" stroke-dasharray="4,3" stroke-linecap="round"/>`;
+        }
         return `<g transform="translate(${door.x},${door.y}) rotate(${door.rotation})" class="door-element" data-door-id="${door.id}">
   <g transform="${door.flipped?'scale(1,-1)':'scale(1,1)'}">
     <rect x="0" y="${-wch/2}" width="${w}" height="${wch}" fill="#FFFFFF" stroke="none"/>
-    <line x1="0" y1="0" x2="${w}" y2="0" stroke="#000000" stroke-width="${sw}"/>
-    <path d="M ${w},0 A ${w},${w} 0 0,1 0,${-w}" fill="none" stroke="#000000" stroke-width="${sw*0.5}"/>
-    <circle cx="0" cy="0" r="${sw}" fill="#000000"/>
+    ${inner}
   </g>
 </g>`;}).join('\n');
 
@@ -950,18 +965,46 @@ export default function SvgEditor({
             <g id="doors-overlay">
               {placedDoors.map(door=>{
                 const w=door.width,wch=wallClearHeight,sel=selectedEl?.kind==='door'&&selectedEl.id===door.id;
+                const st=door.subtype||'swing';
+                const sc=sel?'#2563eb':'#000';
                 return (
                   <g key={door.id} transform={`translate(${door.x},${door.y}) rotate(${door.rotation})`}
                     onClick={e=>handleElementClick(e,'door',door.id)}
                     onMouseDown={e=>{if(activeTool==='select')startDragDoor(e,door.id);}}
                     style={{cursor:sel?'grab':'pointer'}}>
-                    {/* Flip in nested g – correct transform order */}
                     <g transform={door.flipped?'scale(1,-1)':''}>
+                      {/* Wall clear */}
                       <rect x={0} y={-wch/2} width={w} height={wch} fill="#FFFFFF" stroke="none"/>
-                      {sel&&<rect x={-6} y={-w-6} width={w+12} height={w+12} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={2} strokeDasharray="6,3" rx={3}/>}
-                      <line x1={0} y1={0} x2={w} y2={0} stroke={sel?'#2563eb':'#000'} strokeWidth={sel?1.5:1}/>
-                      <path d={`M ${w},0 A ${w},${w} 0 0,0 0,${-w}`} fill="none" stroke={sel?'#2563eb':'#000'} strokeWidth={sel?1:0.5} strokeDasharray="4,3"/>
-                      <circle cx={0} cy={0} r={sel?3:1.5} fill={sel?'#2563eb':'#000'}/>
+                      {st==='swing' && <>
+                        {sel&&<rect x={-6} y={-w-6} width={w+12} height={w+12} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={2} strokeDasharray="6,3" rx={3}/>}
+                        <line x1={0} y1={0} x2={w} y2={0} stroke={sc} strokeWidth={sel?1.5:1}/>
+                        <path d={`M ${w},0 A ${w},${w} 0 0,0 0,${-w}`} fill="none" stroke={sc} strokeWidth={sel?1:0.5} strokeDasharray="4,3"/>
+                        <circle cx={0} cy={0} r={sel?3:1.5} fill={sc}/>
+                      </>}
+                      {st==='sliding' && (()=>{
+                        const panelW=w*0.55, overlap=w*0.15, frameT=wallStroke*0.6;
+                        return (<>
+                          {sel&&<rect x={-6} y={-wch/2-6} width={w+12} height={wch+12} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={2} strokeDasharray="6,3" rx={3}/>}
+                          {/* Track lines */}
+                          <line x1={0} y1={-wch*0.18} x2={w} y2={-wch*0.18} stroke={sc} strokeWidth={frameT*0.4}/>
+                          <line x1={0} y1={ wch*0.18} x2={w} y2={ wch*0.18} stroke={sc} strokeWidth={frameT*0.4}/>
+                          {/* Panel 1 – left-aligned */}
+                          <rect x={0} y={-wch*0.35} width={panelW} height={wch*0.7} fill="rgba(255,255,255,0.6)" stroke={sc} strokeWidth={frameT} rx={frameT*0.3}/>
+                          {/* Panel 2 – right-aligned, overlapping */}
+                          <rect x={w-panelW} y={-wch*0.35} width={panelW} height={wch*0.7} fill="rgba(255,255,255,0.6)" stroke={sc} strokeWidth={frameT} rx={frameT*0.3}/>
+                          {/* Centre overlap hatching */}
+                          <line x1={w-panelW} y1={-wch*0.35} x2={overlap+w-panelW} y2={wch*0.35} stroke={sc} strokeWidth={frameT*0.35} opacity={0.4}/>
+                        </>);
+                      })()}
+                      {st==='entry' && (()=>{
+                        const lineLen=w;
+                        return (<>
+                          {sel&&<rect x={-6} y={-wch/2-6} width={w+12} height={wch+12} fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth={2} strokeDasharray="6,3" rx={3}/>}
+                          {/* Two dotted jamb lines */}
+                          <line x1={0} y1={-wch*0.35} x2={0} y2={wch*0.35} stroke={sc} strokeWidth={wallStroke*0.9} strokeDasharray="4,3" strokeLinecap="round"/>
+                          <line x1={lineLen} y1={-wch*0.35} x2={lineLen} y2={wch*0.35} stroke={sc} strokeWidth={wallStroke*0.9} strokeDasharray="4,3" strokeLinecap="round"/>
+                        </>);
+                      })()}
                     </g>
                   </g>
                 );
@@ -1041,6 +1084,21 @@ export default function SvgEditor({
               {toolBtn('bath','Bath',Square,'bg-teal-600')}
             </div>
 
+
+            {/* Door sub-palette */}
+            {activeTool==='door'&&(
+              <div className="mt-3 pt-3 border-t border-white/10">
+                <p className="text-gray-500 text-[10px] mb-2 uppercase tracking-wider">Door type</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(['swing','sliding','entry'] as const).map(st=>(
+                    <button key={st} onClick={()=>setDoorSubtype(st)}
+                      className={`px-2 py-1.5 rounded-md text-[11px] font-medium capitalize transition border ${doorSubtype===st?'bg-blue-600 border-blue-500 text-white':'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10'}`}>
+                      {st==='swing'?'Swing':st==='sliding'?'Sliding Cavity':'Open Entry'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Bath sub-palette */}
             {activeTool==='bath'&&(
@@ -1128,6 +1186,17 @@ export default function SvgEditor({
                         onBlur={e=>commit('width',e.target.value)} onKeyDown={kd}
                         className="w-20 bg-white/10 border border-white/20 rounded-md px-2 py-1 text-xs text-white font-mono text-right focus:outline-none focus:bg-white/15 [appearance:none] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
                     </PropRow>
+                    <div className="flex items-center justify-between text-xs pt-0.5">
+                      <span className="text-gray-400">Type</span>
+                      <div className="flex gap-1">
+                        {(['swing','sliding','entry'] as const).map(st=>(
+                          <button key={st} onClick={()=>{pushUndo();setPlacedDoors(p=>p.map(d=>d.id===selectedDoor.id?{...d,subtype:st}:d));}}
+                            className={`px-1.5 py-0.5 rounded text-[10px] capitalize border transition ${(selectedDoor.subtype||'swing')===st?'bg-blue-600 border-blue-500 text-white':'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}>
+                            {st==='swing'?'Swing':st==='sliding'?'Cavity':'Entry'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <div className="flex items-center justify-between text-xs pt-0.5">
                       <span className="text-gray-400">Flipped</span>
                       <span className={`font-mono ${selectedDoor.flipped?'text-blue-400':'text-gray-500'}`}>{selectedDoor.flipped?'Yes':'No'}</span>
