@@ -900,29 +900,6 @@ export default function SvgEditor({
             {/* Original floor plan */}
             <g ref={svgContentGroupRef}/>
 
-                  );
-                }
-
-                const pathD=wall.curved?`M ${wall.x1},${wall.y1} Q ${wall.cpx},${wall.cpy} ${wall.x2},${wall.y2}`:`M ${wall.x1},${wall.y1} L ${wall.x2},${wall.y2}`;
-                return (
-                  <g key={wall.id}>
-                    <path d={pathD} stroke="rgba(0,0,0,0.001)" strokeWidth={Math.max(wallStroke+16,20)} fill="none" pointerEvents="all"
-                      style={{cursor:activeTool==='select'?'grab':'default'}}
-                      onClick={e=>handleElementClick(e,'wall',wall.id)}
-                    <path d={pathD} stroke={sel?'#2563eb':'#1a1a1a'} strokeWidth={wallStroke} strokeLinecap="square" fill="none" pointerEvents="none"/>
-                    {sel&&(
-                      <>
-                        <path d={pathD} stroke="#93c5fd" strokeWidth={wallStroke+4} strokeDasharray="8,4" fill="none" opacity={0.4} pointerEvents="none"/>
-                        {wall.curved&&<line x1={mx} y1={my} x2={wall.cpx} y2={wall.cpy} stroke="#f59e0b" strokeWidth={1} strokeDasharray="3,2" pointerEvents="none"/>}
-                      </>
-                    )}
-                  </g>
-                );
-              })}
-            </g>
-
-            </g>
-
             {/* Robes overlay */}
             <g id="robes-overlay">
               {placedRobes.map(robe=>{
